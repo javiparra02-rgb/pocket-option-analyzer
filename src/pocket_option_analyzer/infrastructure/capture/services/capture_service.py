@@ -37,6 +37,15 @@ class CaptureService:
         Captura un único fotograma.
         """
         window = self._locator.find(self._window_title)
+        print("\n========== WINDOW SELECTED ==========")
+        print(f"Title : {window.title if window else None}")
+
+        if window:
+            print(f"Left  : {window.left}")
+            print(f"Top   : {window.top}")
+            print(f"Width : {window.width}")
+            print(f"Height: {window.height}")
+        print("=====================================\n")
 
         if window is None:
             return None

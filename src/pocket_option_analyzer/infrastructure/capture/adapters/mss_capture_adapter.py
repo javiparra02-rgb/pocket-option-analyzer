@@ -36,6 +36,9 @@ class MSSCaptureAdapter:
         }
 
         with mss.MSS() as sct:
+            print("========== MSS REGION ==========")
+            print(monitor)
+            print("===============================\n")
             image = sct.grab(monitor)
 
         return np.asarray(image)

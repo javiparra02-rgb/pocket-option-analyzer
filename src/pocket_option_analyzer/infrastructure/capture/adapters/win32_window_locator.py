@@ -1,43 +1,57 @@
 from __future__ import annotations
 
-from typing import Optional
-
-import pygetwindow as gw
+from typing import Iterable
 
 from pocket_option_analyzer.infrastructure.capture.models import WindowInfo
+
+from .window_enumerator import WindowEnumerator
 
 
 class Win32WindowLocator:
     """
-    Localiza la ventana de Pocket Option utilizando la API de Windows
-    a través de pygetwindow.
+    Localiza una ventana utilizando coincidencias parciales
+    sobre las ventanas visibles del sistema.
     """
 
-    def find(self, window_title: str) -> Optional[WindowInfo]:
+    def __init__(
+        self,
+        enumerator: WindowEnumerator | None = None,
+    ) -> None:
+        self._enumerator = enumerator or WindowEnumerator()
+
+    def find(self, window_title: str) -> WindowInfo | None:
         """
-        Busca una ventana cuyo título contenga el texto indicado.
+        Busca la mejor coincidencia.
 
         Parameters
         ----------
         window_title:
-            Texto que debe contener el título de la ventana.
+            Texto a buscar.
 
         Returns
         -------
         WindowInfo | None
         """
 
-        windows = gw.getWindowsWithTitle(window_title)
+        candidates = list(self._enumerator.enumerate())
 
-        if not windows:
+        if not candidates:
             return None
 
-        window = windows[0]
+        search = window_title.lower()
 
-        return WindowInfo(
-            title=window.title,
-            left=window.left,
-            top=window.top,
-            width=window.width,
-            height=window.height,
+        matches = [
+            window
+            for window in candidates
+            if search in window.title.lower()
+        ]
+
+        if not matches:
+            return None
+
+        matches.sort(
+            key=lambda window: window.width * window.height,
+            reverse=True,
         )
+
+        return matches[0]
