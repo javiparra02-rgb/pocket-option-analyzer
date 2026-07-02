@@ -1,14 +1,13 @@
 """
 Infraestructura de captura.
-
-Expone los contratos, modelos y adaptadores
-del sistema de captura.
 """
 
-from .contracts.window_locator import WindowLocator
-from .models import WindowInfo
+from .contracts import ScreenCapture, WindowLocator
+from .models import Frame, WindowInfo
 
 __all__ = [
-    "WindowLocator",
+    "Frame",
+    "ScreenCapture",
     "WindowInfo",
+    "WindowLocator",
 ]

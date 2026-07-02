@@ -9,15 +9,25 @@ from pocket_option_analyzer.infrastructure.capture.models import WindowInfo
 class MSSCaptureAdapter:
     """
     Adaptador para capturar una región de pantalla utilizando MSS.
-    """
 
-    def __init__(self) -> None:
-        self._sct = mss.MSS()
+    Esta clase es stateless: no mantiene recursos abiertos entre llamadas.
+    """
 
     def capture(self, window: WindowInfo) -> np.ndarray:
         """
-        Captura la región correspondiente a la ventana indicada.
+        Captura la región indicada por WindowInfo.
+
+        Parameters
+        ----------
+        window:
+            Región de la ventana.
+
+        Returns
+        -------
+        numpy.ndarray
+            Imagen capturada en formato BGRA.
         """
+
         monitor = {
             "left": window.left,
             "top": window.top,
@@ -25,6 +35,7 @@ class MSSCaptureAdapter:
             "height": window.height,
         }
 
-        image = self._sct.grab(monitor)
+        with mss.MSS() as sct:
+            image = sct.grab(monitor)
 
-        return np.array(image)
+        return np.asarray(image)
