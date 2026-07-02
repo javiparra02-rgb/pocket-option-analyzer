@@ -1,3 +1,3 @@
 """
-Package initialization.
+Motor de visión por computador.
 """
