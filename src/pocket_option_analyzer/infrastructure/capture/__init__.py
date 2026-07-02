@@ -1,12 +1,14 @@
 """
-Infrastructure capture package.
+Infraestructura de captura.
 
-Contiene los componentes responsables de localizar y capturar
-la ventana de Pocket Option.
+Expone los contratos, modelos y adaptadores
+del sistema de captura.
 """
 
-from .window_locator import WindowLocator
+from .contracts.window_locator import WindowLocator
+from .models import WindowInfo
 
 __all__ = [
     "WindowLocator",
+    "WindowInfo",
 ]
