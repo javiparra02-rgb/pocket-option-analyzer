@@ -6,13 +6,10 @@ from dataclasses import dataclass
 @dataclass(slots=True, frozen=True)
 class WindowInfo:
     """
-    Información completa de una ventana de Windows.
+    Información de una ventana.
 
-    Este modelo es independiente de la tecnología utilizada para
-    localizar o capturar la ventana.
+    Este modelo representa una región rectangular de la pantalla.
     """
-
-    hwnd: int
 
     title: str
 
@@ -22,12 +19,16 @@ class WindowInfo:
     width: int
     height: int
 
-    client_left: int
-    client_top: int
+    @property
+    def right(self) -> int:
+        """
+        Coordenada derecha.
+        """
+        return self.left + self.width
 
-    client_width: int
-    client_height: int
-
-    visible: bool
-
-    minimized: bool
+    @property
+    def bottom(self) -> int:
+        """
+        Coordenada inferior.
+        """
+        return self.top + self.height
