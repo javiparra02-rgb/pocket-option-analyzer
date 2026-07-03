@@ -1,8 +1,8 @@
-from pocket_option_analyzer.infrastructure.windows.services import (
-    WindowEnumerator,
-)
 from pocket_option_analyzer.infrastructure.windows.native import (
     User32,
+)
+from pocket_option_analyzer.infrastructure.windows.services import (
+    WindowEnumerator,
 )
 
 

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pocket_option_analyzer.infrastructure.logging import LoggingManager
-
 from .context import ApplicationContext
 from .state import RuntimeStatus
 from .ticker import Ticker

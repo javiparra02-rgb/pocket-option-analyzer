@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from abc import ABC
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 from pocket_option_analyzer.infrastructure.windows.models.win32_window_info import (
     Win32WindowInfo,

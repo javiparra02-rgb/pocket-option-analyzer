@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Iterable
-
 from pocket_option_analyzer.infrastructure.capture.models import WindowInfo
 
 from .window_enumerator import WindowEnumerator
