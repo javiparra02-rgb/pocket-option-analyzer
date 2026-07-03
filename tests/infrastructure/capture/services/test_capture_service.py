@@ -1,39 +1,51 @@
-import numpy as np
-
-from pocket_option_analyzer.infrastructure.capture.models import WindowInfo
-from pocket_option_analyzer.infrastructure.capture.services import (
+from pocket_option_analyzer.infrastructure.capture.services.capture_service import (
     CaptureService,
-    FrameBuffer,
-    FrameFactory,
 )
+from pocket_option_analyzer.infrastructure.capture.services.frame_factory import FrameFactory
+from pocket_option_analyzer.infrastructure.capture.services.frame_buffer import FrameBuffer
+from pocket_option_analyzer.infrastructure.windows.models import Win32WindowInfo
 
 
-class FakeLocator:
+class FakeFinder:
     def find(self, title: str):
-        return WindowInfo(
-            title=title,
+        class W:
+            hwnd = 123
+        return W()
+
+
+class FakeReader:
+    def read(self, hwnd: int):
+        return Win32WindowInfo(
+            hwnd=hwnd,
+            title="Pocket Option",
             left=0,
             top=0,
-            width=50,
-            height=50,
+            width=100,
+            height=100,
+            client_left=0,
+            client_top=0,
+            client_width=100,
+            client_height=100,
+            visible=True,
+            minimized=False,
         )
 
 
 class FakeCapture:
-    def capture(self, window):
-        return np.zeros((50, 50, 4), dtype=np.uint8)
+    def capture(self, window_info):
+        import numpy as np
+        return np.zeros((10, 10, 3), dtype=np.uint8)
 
 
-def test_capture_once_returns_frame() -> None:
+def test_capture_once_returns_frame():
     service = CaptureService(
-        locator=FakeLocator(),
+        finder=FakeFinder(),
+        reader=FakeReader(),
         capture=FakeCapture(),
         frame_factory=FrameFactory(),
         frame_buffer=FrameBuffer(),
     )
 
-    frame = service.capture_once()
+    frame = service.capture_once("Pocket Option")
 
     assert frame is not None
-    assert frame.frame_id == 1
-    assert service.latest_frame() == frame

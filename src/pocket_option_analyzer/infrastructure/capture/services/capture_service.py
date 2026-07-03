@@ -1,56 +1,47 @@
 from __future__ import annotations
 
-from pocket_option_analyzer.infrastructure.capture.contracts import (
-    ScreenCapture,
-    WindowLocator,
-)
 from pocket_option_analyzer.infrastructure.capture.models import Frame
-from pocket_option_analyzer.infrastructure.capture.services.frame_buffer import (
-    FrameBuffer,
-)
-from pocket_option_analyzer.infrastructure.capture.services.frame_factory import (
-    FrameFactory,
-)
+from pocket_option_analyzer.infrastructure.capture.services.frame_buffer import FrameBuffer
+from pocket_option_analyzer.infrastructure.capture.services.frame_factory import FrameFactory
+
+from pocket_option_analyzer.infrastructure.windows.services.window_finder import WindowFinder
+from pocket_option_analyzer.infrastructure.windows.services.window_reader import WindowReader
+
+from pocket_option_analyzer.infrastructure.capture.contracts import ScreenCapture
 
 
 class CaptureService:
     """
-    Servicio responsable de capturar fotogramas desde una ventana.
+    Servicio responsable de capturar frames desde una ventana real.
     """
 
     def __init__(
         self,
-        locator: WindowLocator,
+        finder: WindowFinder,
+        reader: WindowReader,
         capture: ScreenCapture,
         frame_factory: FrameFactory,
         frame_buffer: FrameBuffer,
-        window_title: str = "Pocket Option",
     ) -> None:
-        self._locator = locator
+        self._finder = finder
+        self._reader = reader
         self._capture = capture
         self._frame_factory = frame_factory
         self._frame_buffer = frame_buffer
-        self._window_title = window_title
 
-    def capture_once(self) -> Frame | None:
+    def capture_once(self, title: str) -> Frame | None:
         """
-        Captura un único fotograma.
+        Captura un frame de la ventana cuyo título coincide.
         """
-        window = self._locator.find(self._window_title)
-        print("\n========== WINDOW SELECTED ==========")
-        print(f"Title : {window.title if window else None}")
 
-        if window:
-            print(f"Left  : {window.left}")
-            print(f"Top   : {window.top}")
-            print(f"Width : {window.width}")
-            print(f"Height: {window.height}")
-        print("=====================================\n")
+        window = self._finder.find(title)
 
         if window is None:
             return None
 
-        image = self._capture.capture(window)
+        window_info = self._reader.read(window.hwnd)
+
+        image = self._capture.capture(window_info)
 
         frame = self._frame_factory.create(image)
 
@@ -59,13 +50,7 @@ class CaptureService:
         return frame
 
     def latest_frame(self) -> Frame | None:
-        """
-        Devuelve el último fotograma capturado.
-        """
         return self._frame_buffer.latest()
 
     def clear_buffer(self) -> None:
-        """
-        Vacía el búfer.
-        """
         self._frame_buffer.clear()
