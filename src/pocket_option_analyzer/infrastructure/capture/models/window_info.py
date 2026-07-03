@@ -3,22 +3,31 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True, frozen=True)
 class WindowInfo:
     """
-    Representa la información de una ventana del sistema.
+    Información completa de una ventana de Windows.
+
+    Este modelo es independiente de la tecnología utilizada para
+    localizar o capturar la ventana.
     """
 
+    hwnd: int
+
     title: str
+
     left: int
     top: int
+
     width: int
     height: int
 
-    @property
-    def right(self) -> int:
-        return self.left + self.width
+    client_left: int
+    client_top: int
 
-    @property
-    def bottom(self) -> int:
-        return self.top + self.height
+    client_width: int
+    client_height: int
+
+    visible: bool
+
+    minimized: bool
