@@ -1,37 +1,22 @@
 import numpy as np
 
-from pocket_option_analyzer.infrastructure.capture.services.capture_service import (
+from pocket_option_analyzer.infrastructure.capture.services import (
     CaptureService,
-)
-from pocket_option_analyzer.infrastructure.capture.services.frame_buffer import (
     FrameBuffer,
-)
-from pocket_option_analyzer.infrastructure.capture.services.frame_factory import (
     FrameFactory,
 )
 from pocket_option_analyzer.infrastructure.windows.models import (
     Win32WindowInfo,
 )
-from pocket_option_analyzer.vision.models import (
-    ChartRegion,
-)
+from pocket_option_analyzer.vision.models import ChartRegion
 
 
 class FakeFinder:
 
-    def find(self, title: str):
-        class W:
-            hwnd = 123
-
-        return W()
-
-
-class FakeReader:
-
-    def read(self, hwnd: int):
+    def find(self, title):
         return Win32WindowInfo(
-            hwnd=hwnd,
-            title="Pocket Option",
+            hwnd=1,
+            title=title,
             left=0,
             top=0,
             width=200,
@@ -45,16 +30,19 @@ class FakeReader:
         )
 
 
+class FakeReader:
+
+    def read(self, hwnd):
+        return FakeFinder().find("Pocket Option")
+
+
 class FakeCapture:
 
     def capture(self, window):
-        return np.zeros(
-            (200, 200, 3),
-            dtype=np.uint8,
-        )
+        return np.zeros((200, 200, 3), dtype=np.uint8)
 
 
-class FakeRegionExtractor:
+class FakeExtractor:
 
     def extract(self, image):
         return ChartRegion(
@@ -65,17 +53,29 @@ class FakeRegionExtractor:
         )
 
 
-def test_capture_once_returns_frame():
+class FakeDataset:
+
+    def __init__(self):
+        self.called = False
+
+    def save(self, image):
+        self.called = True
+
+
+def test_dataset_service_is_called():
+
+    dataset = FakeDataset()
 
     service = CaptureService(
         finder=FakeFinder(),
         reader=FakeReader(),
         capture=FakeCapture(),
-        region_extractor=FakeRegionExtractor(),
+        region_extractor=FakeExtractor(),
         frame_factory=FrameFactory(),
         frame_buffer=FrameBuffer(),
+        dataset_capture=dataset,
     )
 
-    frame = service.capture_once()
+    service.capture_once()
 
-    assert frame is not None
+    assert dataset.called

@@ -1,55 +1,78 @@
 from __future__ import annotations
 
+from pocket_option_analyzer.infrastructure.capture.contracts import (
+    ScreenCapture,
+)
 from pocket_option_analyzer.infrastructure.capture.models import Frame
-from pocket_option_analyzer.infrastructure.capture.services.frame_buffer import FrameBuffer
-from pocket_option_analyzer.infrastructure.capture.services.frame_factory import FrameFactory
 
-from pocket_option_analyzer.infrastructure.windows.services.window_finder import WindowFinder
-from pocket_option_analyzer.infrastructure.windows.services.window_reader import WindowReader
+from pocket_option_analyzer.infrastructure.capture.services.frame_buffer import (
+    FrameBuffer,
+)
+from pocket_option_analyzer.infrastructure.capture.services.frame_factory import (
+    FrameFactory,
+)
 
-from pocket_option_analyzer.vision.services.chart_region_extractor import ChartRegionExtractor
+from pocket_option_analyzer.infrastructure.windows.services import (
+    WindowFinder,
+    WindowReader,
+)
 
-from pocket_option_analyzer.infrastructure.capture.contracts import ScreenCapture
+from pocket_option_analyzer.vision.services import (
+    ChartRegionExtractor,
+    DatasetCaptureService,
+)
 
 
 class CaptureService:
     """
-    Servicio responsable de capturar SOLO el área del gráfico.
+    Servicio principal encargado de capturar el gráfico.
     """
 
     def __init__(
         self,
         finder: WindowFinder,
         reader: WindowReader,
-        region_extractor: ChartRegionExtractor,
         capture: ScreenCapture,
+        region_extractor: ChartRegionExtractor,
         frame_factory: FrameFactory,
         frame_buffer: FrameBuffer,
+        dataset_capture: DatasetCaptureService | None = None,
+        window_title: str = "Pocket Option",
     ) -> None:
         self._finder = finder
         self._reader = reader
-        self._region_extractor = region_extractor
         self._capture = capture
+        self._region_extractor = region_extractor
         self._frame_factory = frame_factory
         self._frame_buffer = frame_buffer
+        self._dataset_capture = dataset_capture
+        self._window_title = window_title
 
-    def capture_once(self, title: str) -> Frame | None:
+    def capture_once(self) -> Frame | None:
         """
-        Captura SOLO el chart ROI.
+        Captura un único fotograma del gráfico.
         """
 
-        window = self._finder.find(title)
+        window = self._finder.find(self._window_title)
 
         if window is None:
             return None
 
-        window_info = self._reader.read(window.hwnd)
+        window = self._reader.read(window.hwnd)
 
-        region = self._region_extractor.extract(window_info)
+        image = self._capture.capture(window)
 
-        image = self._capture.capture(region)
+        region = self._region_extractor.extract(image)
 
-        frame = self._frame_factory.create(image)
+        roi = image[
+            region.y : region.y + region.height,
+            region.x : region.x + region.width,
+        ]
+
+        if self._dataset_capture is not None:
+            self._dataset_capture.save(roi)
+
+        frame = self._frame_factory.create(roi)
 
         self._frame_buffer.append(frame)
 
