@@ -13,7 +13,7 @@ class MSSCaptureAdapter:
     Esta clase es stateless: no mantiene recursos abiertos entre llamadas.
     """
 
-    def capture(self, window: WindowInfo) -> np.ndarray:
+    def capture(self, region: ChartRegion) -> np.ndarray:
         """
         Captura la región indicada por WindowInfo.
 
@@ -29,11 +29,11 @@ class MSSCaptureAdapter:
         """
 
         monitor = {
-            "left": window.left,
-            "top": window.top,
-            "width": window.width,
-            "height": window.height,
-        }
+          "left": region.left,
+          "top": region.top,
+          "width": region.width,
+         "height": region.height,
+}
 
         with mss.MSS() as sct:
             print("========== MSS REGION ==========")
