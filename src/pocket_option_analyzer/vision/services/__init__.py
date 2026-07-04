@@ -3,6 +3,7 @@ from .chart_region_extractor import ChartRegionExtractor
 from .debug_image_saver import DebugImageSaver
 from .roi_debug_renderer import RoiDebugRenderer
 from .vision_pipeline import VisionPipeline
+from .debug_capture_service import DebugCaptureService
 
 __all__ = [
     "ChartLocator",
@@ -10,4 +11,5 @@ __all__ = [
     "DebugImageSaver",
     "RoiDebugRenderer",
     "VisionPipeline",
+    "DebugCaptureService",
 ]
