@@ -5,6 +5,9 @@ from pocket_option_analyzer.domain.signals import (
     SignalRecord,
     SignalStrength,
 )
+from pocket_option_analyzer.domain.strategy import (
+    StrategyProfile,
+)
 
 __all__ = [
     "MarketSignal",
@@ -12,4 +15,5 @@ __all__ = [
     "SignalHistory",
     "SignalRecord",
     "SignalStrength",
+    "StrategyProfile",
 ]
