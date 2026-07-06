@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .candle_color import CandleColor
+
 
 @dataclass(frozen=True, slots=True)
 class CandleCandidate:
@@ -16,3 +18,5 @@ class CandleCandidate:
     height: int
 
     area: int
+
+    color: CandleColor = CandleColor.UNKNOWN

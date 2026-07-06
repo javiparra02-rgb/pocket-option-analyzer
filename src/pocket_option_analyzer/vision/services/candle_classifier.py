@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pocket_option_analyzer.vision.models import (
     CandleCandidate,
+    CandleColor,
     CandleType,
     ClassifiedCandle,
 )
@@ -9,10 +10,7 @@ from pocket_option_analyzer.vision.models import (
 
 class CandleClassifier:
     """
-    Clasificador básico de velas.
-
-    En esta primera versión únicamente devuelve UNKNOWN.
-    La lógica de clasificación se implementará en los siguientes sprints.
+    Clasificador básico de velas según su color detectado.
     """
 
     def classify(
@@ -20,7 +18,16 @@ class CandleClassifier:
         candle: CandleCandidate,
     ) -> ClassifiedCandle:
 
+        if candle.color is CandleColor.GREEN:
+            candle_type = CandleType.BULLISH
+
+        elif candle.color is CandleColor.RED:
+            candle_type = CandleType.BEARISH
+
+        else:
+            candle_type = CandleType.UNKNOWN
+
         return ClassifiedCandle(
             candidate=candle,
-            candle_type=CandleType.UNKNOWN,
+            candle_type=candle_type,
         )
