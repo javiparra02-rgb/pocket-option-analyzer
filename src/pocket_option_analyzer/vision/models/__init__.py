@@ -6,6 +6,7 @@ from .candle_series import CandleSeries
 from .candle_type import CandleType
 from .chart_region import ChartRegion
 from .classified_candle import ClassifiedCandle
+from .trend_direction import TrendDirection
 
 __all__ = [
     "CandleCandidate",
@@ -16,4 +17,5 @@ __all__ = [
     "CandleType",
     "ChartRegion",
     "ClassifiedCandle",
+    "TrendDirection",
 ]
