@@ -12,4 +12,6 @@ class CandleColor(str, Enum):
 
     RED = "red"
 
+    WHITE = "white"
+
     UNKNOWN = "unknown"
