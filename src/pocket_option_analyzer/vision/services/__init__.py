@@ -1,4 +1,6 @@
 from .binary_mask_builder import BinaryMaskBuilder
+from .candle_analysis_pipeline import CandleAnalysisPipeline
+from .candle_classification_pipeline import CandleClassificationPipeline
 from .candle_classifier import CandleClassifier
 from .candle_color_detector import CandleColorDetector
 from .candle_detection_pipeline import CandleDetectionPipeline
@@ -17,6 +19,8 @@ from .vision_pipeline import VisionPipeline
 
 __all__ = [
     "BinaryMaskBuilder",
+    "CandleAnalysisPipeline",
+    "CandleClassificationPipeline",
     "CandleClassifier",
     "CandleColorDetector",
     "CandleDetectionPipeline",
