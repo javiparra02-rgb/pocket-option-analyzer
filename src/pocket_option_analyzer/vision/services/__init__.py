@@ -15,6 +15,7 @@ from .dataset_directory_manager import DatasetDirectoryManager
 from .dataset_filename_generator import DatasetFilenameGenerator
 from .debug_capture_service import DebugCaptureService
 from .debug_image_saver import DebugImageSaver
+from .market_analysis_pipeline import MarketAnalysisPipeline
 from .roi_debug_renderer import RoiDebugRenderer
 from .trend_detector import TrendDetector
 from .vision_pipeline import VisionPipeline
@@ -37,6 +38,7 @@ __all__ = [
     "DatasetFilenameGenerator",
     "DebugCaptureService",
     "DebugImageSaver",
+    "MarketAnalysisPipeline",
     "RoiDebugRenderer",
     "TrendDetector",
     "VisionPipeline",
