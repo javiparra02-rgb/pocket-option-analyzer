@@ -1,0 +1,93 @@
+import json
+
+import numpy as np
+
+from pocket_option_analyzer.domain.indicators import (
+    EmaSnapshot,
+    IndicatorSnapshot,
+    RsiSnapshot,
+    StochasticSnapshot,
+)
+from pocket_option_analyzer.domain.signals import (
+    SignalDirection,
+    SignalHistory,
+)
+from pocket_option_analyzer.infrastructure.bootstrap import (
+    SignalPipelineFactory,
+)
+
+
+def _indicators() -> IndicatorSnapshot:
+
+    return IndicatorSnapshot(
+        ema=EmaSnapshot(
+            fast_value=105.0,
+            slow_value=100.0,
+            separation_candles=3,
+        ),
+        rsi=RsiSnapshot(
+            value=57.0,
+        ),
+        stochastic=StochasticSnapshot(
+            k_previous=18.0,
+            d_previous=20.0,
+            k_value=24.0,
+            d_value=21.0,
+        ),
+    )
+
+
+def test_factory_creates_pipeline_that_records_in_memory() -> None:
+
+    history = SignalHistory()
+
+    pipeline = SignalPipelineFactory.create_signal_recording_pipeline(
+        signal_history=history,
+    )
+
+    record = pipeline.analyze_and_record(
+        image=np.zeros(
+            (100, 100, 3),
+            dtype=np.uint8,
+        ),
+        indicators=_indicators(),
+    )
+
+    assert history.latest() is record
+    assert record.signal.direction is SignalDirection.NONE
+
+
+def test_factory_creates_pipeline_that_writes_jsonl_file(
+    tmp_path,
+) -> None:
+
+    history = SignalHistory()
+    file_path = tmp_path / "signals" / "signals.jsonl"
+
+    pipeline = SignalPipelineFactory.create_signal_recording_pipeline(
+        signal_history=history,
+        signal_file_path=file_path,
+    )
+
+    record = pipeline.analyze_and_record(
+        image=np.zeros(
+            (100, 100, 3),
+            dtype=np.uint8,
+        ),
+        indicators=_indicators(),
+    )
+
+    assert history.latest() is record
+    assert file_path.exists()
+
+    lines = file_path.read_text(
+        encoding="utf-8",
+    ).splitlines()
+
+    assert len(lines) == 1
+
+    data = json.loads(lines[0])
+
+    assert data["direction"] == "none"
+    assert data["strength"] == "none"
+    assert data["is_actionable"] is False
