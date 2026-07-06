@@ -1,3 +1,4 @@
+from .contracts import SignalRecordWriter
 from .signal_analysis_pipeline import SignalAnalysisPipeline
 from .signal_recorder import SignalRecorder
 from .signal_recording_pipeline import SignalRecordingPipeline
@@ -9,6 +10,7 @@ __all__ = [
     "SignalAnalysisPipeline",
     "SignalRecorder",
     "SignalRecordingPipeline",
+    "SignalRecordWriter",
     "StrategySignalAnalysisPipeline",
     "StrategySignalGenerator",
     "TrendSignalGenerator",

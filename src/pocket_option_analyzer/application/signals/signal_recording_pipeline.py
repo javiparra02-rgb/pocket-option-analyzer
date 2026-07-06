@@ -4,6 +4,9 @@ from datetime import datetime
 
 import numpy as np
 
+from pocket_option_analyzer.application.signals.contracts import (
+    SignalRecordWriter,
+)
 from pocket_option_analyzer.application.signals.signal_recorder import (
     SignalRecorder,
 )
@@ -16,8 +19,8 @@ from pocket_option_analyzer.domain.signals import SignalRecord
 
 class SignalRecordingPipeline:
     """
-    Pipeline de aplicación que analiza el gráfico, genera una señal
-    y la registra en el historial.
+    Pipeline de aplicación que analiza el gráfico, genera una señal,
+    la registra en memoria y opcionalmente la persiste en disco.
 
     No ejecuta operaciones.
     No interactúa con Pocket Option.
@@ -28,9 +31,11 @@ class SignalRecordingPipeline:
         self,
         analysis_pipeline: StrategySignalAnalysisPipeline,
         recorder: SignalRecorder,
+        record_writer: SignalRecordWriter | None = None,
     ) -> None:
         self._analysis_pipeline = analysis_pipeline
         self._recorder = recorder
+        self._record_writer = record_writer
 
     def analyze_and_record(
         self,
@@ -40,7 +45,8 @@ class SignalRecordingPipeline:
         source: str = "strategy_signal_analysis",
     ) -> SignalRecord:
         """
-        Analiza imagen + indicadores, genera una señal y la registra.
+        Analiza imagen + indicadores, genera una señal,
+        la registra en memoria y, si existe writer, la persiste.
         """
 
         signal = self._analysis_pipeline.analyze(
@@ -48,8 +54,13 @@ class SignalRecordingPipeline:
             indicators=indicators,
         )
 
-        return self._recorder.record(
+        record = self._recorder.record(
             signal=signal,
             created_at=created_at,
             source=source,
         )
+
+        if self._record_writer is not None:
+            self._record_writer.write(record)
+
+        return record

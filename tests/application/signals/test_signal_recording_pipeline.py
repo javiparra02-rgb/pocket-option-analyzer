@@ -16,6 +16,7 @@ from pocket_option_analyzer.domain.signals import (
     MarketSignal,
     SignalDirection,
     SignalHistory,
+    SignalRecord,
     SignalStrength,
 )
 
@@ -28,6 +29,18 @@ class FakeStrategySignalAnalysisPipeline:
             strength=SignalStrength.HIGH,
             reason="Strategy conditions confirmed.",
         )
+
+
+class FakeSignalRecordWriter:
+
+    def __init__(self) -> None:
+        self.records: list[SignalRecord] = []
+
+    def write(
+        self,
+        record: SignalRecord,
+    ) -> None:
+        self.records.append(record)
 
 
 def _indicators() -> IndicatorSnapshot:
@@ -80,3 +93,28 @@ def test_analyze_and_record_adds_generated_signal_to_history() -> None:
     assert record.signal.strength is SignalStrength.HIGH
     assert record.created_at is created_at
     assert record.source == "strategy_signal_analysis"
+
+
+def test_analyze_and_record_writes_record_when_writer_is_configured() -> None:
+
+    history = SignalHistory()
+    writer = FakeSignalRecordWriter()
+
+    pipeline = SignalRecordingPipeline(
+        analysis_pipeline=FakeStrategySignalAnalysisPipeline(),
+        recorder=SignalRecorder(history),
+        record_writer=writer,
+    )
+
+    record = pipeline.analyze_and_record(
+        image=np.zeros(
+            (100, 100, 3),
+            dtype=np.uint8,
+        ),
+        indicators=_indicators(),
+    )
+
+    assert history.latest() is record
+    assert writer.records == [
+        record,
+    ]
