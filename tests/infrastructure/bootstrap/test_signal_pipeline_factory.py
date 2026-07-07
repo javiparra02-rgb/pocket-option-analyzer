@@ -91,3 +91,59 @@ def test_factory_creates_pipeline_that_writes_jsonl_file(
     assert data["direction"] == "none"
     assert data["strength"] == "none"
     assert data["is_actionable"] is False
+
+
+def test_factory_creates_visual_pipeline_that_records_in_memory() -> None:
+
+    history = SignalHistory()
+
+    pipeline = SignalPipelineFactory.create_visual_signal_recording_pipeline(
+        signal_history=history,
+    )
+
+    record = pipeline.analyze_and_record(
+        image=np.zeros(
+            (100, 100, 3),
+            dtype=np.uint8,
+        ),
+    )
+
+    assert history.latest() is record
+    assert record.signal.direction is SignalDirection.NONE
+    assert record.source == "visual_strategy_signal_analysis"
+
+
+def test_factory_creates_visual_pipeline_that_writes_jsonl_file(
+    tmp_path,
+) -> None:
+
+    history = SignalHistory()
+    file_path = tmp_path / "signals" / "visual_signals.jsonl"
+
+    pipeline = SignalPipelineFactory.create_visual_signal_recording_pipeline(
+        signal_history=history,
+        signal_file_path=file_path,
+    )
+
+    record = pipeline.analyze_and_record(
+        image=np.zeros(
+            (100, 100, 3),
+            dtype=np.uint8,
+        ),
+    )
+
+    assert history.latest() is record
+    assert file_path.exists()
+
+    lines = file_path.read_text(
+        encoding="utf-8",
+    ).splitlines()
+
+    assert len(lines) == 1
+
+    data = json.loads(lines[0])
+
+    assert data["direction"] == "none"
+    assert data["strength"] == "none"
+    assert data["source"] == "visual_strategy_signal_analysis"
+    assert data["is_actionable"] is False
