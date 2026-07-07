@@ -29,6 +29,23 @@ class FakeFrame:
     captured_at: datetime
 
 
+class FakeCaptureService:
+
+    def __init__(
+        self,
+        frames,
+    ) -> None:
+        self._frames = list(frames)
+
+    def capture_once(
+        self,
+    ):
+        if not self._frames:
+            return None
+
+        return self._frames.pop(0)
+
+
 def _indicators() -> IndicatorSnapshot:
 
     return IndicatorSnapshot(
@@ -213,6 +230,69 @@ def test_factory_creates_captured_frame_use_case_that_writes_jsonl_file(
         frame=_frame(),
     )
 
+    assert history.latest() is record
+    assert file_path.exists()
+
+    lines = file_path.read_text(
+        encoding="utf-8",
+    ).splitlines()
+
+    assert len(lines) == 1
+
+    data = json.loads(lines[0])
+
+    assert data["direction"] == "none"
+    assert data["strength"] == "none"
+    assert data["source"] == "captured_frame_visual_analysis"
+    assert data["is_actionable"] is False
+
+
+def test_factory_creates_frame_analysis_loop_service() -> None:
+
+    history = SignalHistory()
+    frame = _frame()
+
+    loop_service = SignalPipelineFactory.create_frame_analysis_loop_service(
+        capture_service=FakeCaptureService(
+            frames=[
+                frame,
+            ],
+        ),
+        signal_history=history,
+        interval_seconds=0.0,
+    )
+
+    record = loop_service.run_once()
+
+    assert record is not None
+    assert history.latest() is record
+    assert record.signal.direction is SignalDirection.NONE
+    assert record.created_at is frame.captured_at
+    assert record.source == "captured_frame_visual_analysis"
+
+
+def test_factory_creates_frame_analysis_loop_service_that_writes_jsonl_file(
+    tmp_path,
+) -> None:
+
+    history = SignalHistory()
+    frame = _frame()
+    file_path = tmp_path / "signals" / "loop_signals.jsonl"
+
+    loop_service = SignalPipelineFactory.create_frame_analysis_loop_service(
+        capture_service=FakeCaptureService(
+            frames=[
+                frame,
+            ],
+        ),
+        signal_history=history,
+        signal_file_path=file_path,
+        interval_seconds=0.0,
+    )
+
+    record = loop_service.run_once()
+
+    assert record is not None
     assert history.latest() is record
     assert file_path.exists()
 

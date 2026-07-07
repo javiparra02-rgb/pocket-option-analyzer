@@ -18,6 +18,8 @@ from pocket_option_analyzer.application.strategy import (
 )
 from pocket_option_analyzer.application.use_cases import (
     AnalyzeCapturedFrameUseCase,
+    FrameAnalysisLoopService,
+    FrameCaptureService,
 )
 from pocket_option_analyzer.domain.signals import SignalHistory
 from pocket_option_analyzer.domain.strategy import StrategyProfile
@@ -165,12 +167,6 @@ class SignalPipelineFactory:
     ) -> AnalyzeCapturedFrameUseCase:
         """
         Crea el caso de uso completo para analizar frames capturados.
-
-        Este será el punto de entrada principal para conectar:
-        - CaptureService
-        - VisualSignalRecordingPipeline
-        - SignalHistory
-        - JSONL opcional
         """
 
         pipeline = SignalPipelineFactory.create_visual_signal_recording_pipeline(
@@ -183,6 +179,43 @@ class SignalPipelineFactory:
         return AnalyzeCapturedFrameUseCase(
             pipeline=pipeline,
             source=source,
+        )
+
+    @staticmethod
+    def create_frame_analysis_loop_service(
+        capture_service: FrameCaptureService,
+        signal_history: SignalHistory | None = None,
+        signal_file_path: Path | None = None,
+        strategy_profile: StrategyProfile | None = None,
+        color_profile: CandleColorProfile | None = None,
+        source: str = "captured_frame_visual_analysis",
+        interval_seconds: float = 1.0,
+    ) -> FrameAnalysisLoopService:
+        """
+        Crea el servicio completo de ciclo continuo.
+
+        Este será el motor lógico que luego podrá controlar la GUI:
+        - iniciar análisis
+        - detener análisis
+        - capturar frame
+        - analizar señal
+        - registrar resultado
+        """
+
+        analysis_use_case = (
+            SignalPipelineFactory.create_captured_frame_analysis_use_case(
+                signal_history=signal_history,
+                signal_file_path=signal_file_path,
+                strategy_profile=strategy_profile,
+                color_profile=color_profile,
+                source=source,
+            )
+        )
+
+        return FrameAnalysisLoopService(
+            capture_service=capture_service,
+            analysis_use_case=analysis_use_case,
+            interval_seconds=interval_seconds,
         )
 
     @staticmethod
