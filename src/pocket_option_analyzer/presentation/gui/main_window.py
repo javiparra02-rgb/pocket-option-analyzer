@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
@@ -12,6 +14,8 @@ from pocket_option_analyzer.presentation.signals import (
     SignalRecordViewModel,
 )
 
+WindowAction = Callable[[], None]
+
 
 class MainWindow(QMainWindow):
     """
@@ -21,11 +25,21 @@ class MainWindow(QMainWindow):
     No captura pantalla.
     No interactúa con Pocket Option.
 
-    Solo representa el estado visual inicial de la GUI.
+    Solo representa el estado visual de la GUI y delega acciones
+    mediante callbacks.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        on_start_requested: WindowAction | None = None,
+        on_stop_requested: WindowAction | None = None,
+        on_run_once_requested: WindowAction | None = None,
+    ) -> None:
         super().__init__()
+
+        self._on_start_requested = on_start_requested
+        self._on_stop_requested = on_stop_requested
+        self._on_run_once_requested = on_run_once_requested
 
         self.setWindowTitle(
             "Pocket Option Analyzer",
@@ -53,14 +67,26 @@ class MainWindow(QMainWindow):
         self._start_button = QPushButton(
             "Iniciar análisis",
         )
+        self._start_button.setObjectName(
+            "start_button",
+        )
+
         self._stop_button = QPushButton(
             "Detener análisis",
         )
+        self._stop_button.setObjectName(
+            "stop_button",
+        )
+
         self._run_once_button = QPushButton(
             "Analizar una vez",
         )
+        self._run_once_button.setObjectName(
+            "run_once_button",
+        )
 
         self._setup_layout()
+        self._connect_events()
 
     @property
     def status_text(self) -> str:
@@ -167,3 +193,26 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(
             central_widget,
         )
+
+    def _connect_events(self) -> None:
+        self._start_button.clicked.connect(
+            self._handle_start_clicked,
+        )
+        self._stop_button.clicked.connect(
+            self._handle_stop_clicked,
+        )
+        self._run_once_button.clicked.connect(
+            self._handle_run_once_clicked,
+        )
+
+    def _handle_start_clicked(self) -> None:
+        if self._on_start_requested is not None:
+            self._on_start_requested()
+
+    def _handle_stop_clicked(self) -> None:
+        if self._on_stop_requested is not None:
+            self._on_stop_requested()
+
+    def _handle_run_once_clicked(self) -> None:
+        if self._on_run_once_requested is not None:
+            self._on_run_once_requested()

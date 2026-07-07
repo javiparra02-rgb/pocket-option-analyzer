@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import sys
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QPushButton
 
 from pocket_option_analyzer.presentation.gui import MainWindow
 from pocket_option_analyzer.presentation.signals import (
     SignalRecordViewModel,
 )
+
+
+class CallbackSpy:
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def __call__(self) -> None:
+        self.calls += 1
 
 
 def _application() -> QApplication:
@@ -20,6 +29,21 @@ def _application() -> QApplication:
         )
 
     return app
+
+
+def _button(
+    window: MainWindow,
+    object_name: str,
+) -> QPushButton:
+
+    button = window.findChild(
+        QPushButton,
+        object_name,
+    )
+
+    assert button is not None
+
+    return button
 
 
 def test_main_window_has_initial_state() -> None:
@@ -81,3 +105,57 @@ def test_main_window_updates_signal_view_model() -> None:
     assert window.reason_text == "Motivo: Strategy conditions confirmed."
     assert window.source_text == "Origen: test_source"
     assert window.created_at_text == "Fecha: 2026-01-01 10:30:45"
+
+
+def test_main_window_calls_start_callback_when_start_button_is_clicked() -> None:
+
+    _application()
+
+    start_callback = CallbackSpy()
+
+    window = MainWindow(
+        on_start_requested=start_callback,
+    )
+
+    _button(
+        window=window,
+        object_name="start_button",
+    ).click()
+
+    assert start_callback.calls == 1
+
+
+def test_main_window_calls_stop_callback_when_stop_button_is_clicked() -> None:
+
+    _application()
+
+    stop_callback = CallbackSpy()
+
+    window = MainWindow(
+        on_stop_requested=stop_callback,
+    )
+
+    _button(
+        window=window,
+        object_name="stop_button",
+    ).click()
+
+    assert stop_callback.calls == 1
+
+
+def test_main_window_calls_run_once_callback_when_run_once_button_is_clicked() -> None:
+
+    _application()
+
+    run_once_callback = CallbackSpy()
+
+    window = MainWindow(
+        on_run_once_requested=run_once_callback,
+    )
+
+    _button(
+        window=window,
+        object_name="run_once_button",
+    ).click()
+
+    assert run_once_callback.calls == 1
