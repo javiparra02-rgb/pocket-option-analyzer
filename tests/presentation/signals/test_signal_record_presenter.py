@@ -1,0 +1,103 @@
+from datetime import datetime, timezone
+
+from pocket_option_analyzer.domain.signals import (
+    MarketSignal,
+    SignalDirection,
+    SignalRecord,
+    SignalStrength,
+)
+from pocket_option_analyzer.presentation.signals import (
+    SignalRecordPresenter,
+)
+
+
+def _record(
+    direction: SignalDirection,
+    strength: SignalStrength,
+) -> SignalRecord:
+
+    return SignalRecord(
+        signal=MarketSignal(
+            direction=direction,
+            strength=strength,
+            reason="Strategy conditions confirmed.",
+        ),
+        created_at=datetime(
+            2026,
+            1,
+            1,
+            10,
+            30,
+            45,
+            tzinfo=timezone.utc,
+        ),
+        source="test_source",
+    )
+
+
+def test_presenter_formats_call_signal() -> None:
+
+    presenter = SignalRecordPresenter()
+
+    view_model = presenter.present(
+        record=_record(
+            direction=SignalDirection.CALL,
+            strength=SignalStrength.HIGH,
+        ),
+    )
+
+    assert view_model.direction_label == "CALL"
+    assert view_model.strength_label == "ALTA"
+    assert view_model.reason == "Strategy conditions confirmed."
+    assert view_model.source == "test_source"
+    assert view_model.created_at_label == "2026-01-01 10:30:45"
+    assert view_model.is_actionable is True
+    assert view_model.css_class == "signal-call"
+
+
+def test_presenter_formats_put_signal() -> None:
+
+    presenter = SignalRecordPresenter()
+
+    view_model = presenter.present(
+        record=_record(
+            direction=SignalDirection.PUT,
+            strength=SignalStrength.MEDIUM,
+        ),
+    )
+
+    assert view_model.direction_label == "PUT"
+    assert view_model.strength_label == "MEDIA"
+    assert view_model.is_actionable is True
+    assert view_model.css_class == "signal-put"
+
+
+def test_presenter_formats_neutral_signal() -> None:
+
+    presenter = SignalRecordPresenter()
+
+    view_model = presenter.present(
+        record=_record(
+            direction=SignalDirection.NONE,
+            strength=SignalStrength.NONE,
+        ),
+    )
+
+    assert view_model.direction_label == "SIN SEÑAL"
+    assert view_model.strength_label == "NINGUNA"
+    assert view_model.is_actionable is False
+    assert view_model.css_class == "signal-neutral"
+
+
+def test_presenter_formats_low_strength_signal() -> None:
+
+    presenter = SignalRecordPresenter()
+
+    view_model = presenter.present(
+        record=_record(
+            direction=SignalDirection.CALL,
+            strength=SignalStrength.LOW,
+        ),
+    )
+
+    assert view_model.strength_label == "BAJA"
