@@ -1,4 +1,5 @@
 from pocket_option_analyzer.domain.indicators import (
+    EmaCalculator,
     EmaSnapshot,
     IndicatorSnapshot,
     RsiSnapshot,
@@ -20,6 +21,7 @@ from pocket_option_analyzer.domain.strategy import (
 )
 
 __all__ = [
+    "EmaCalculator",
     "EmaSnapshot",
     "IndicatorSnapshot",
     "MarketSignal",
