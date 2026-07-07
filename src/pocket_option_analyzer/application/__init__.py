@@ -18,11 +18,15 @@ from pocket_option_analyzer.application.strategy import (
 )
 from pocket_option_analyzer.application.use_cases import (
     AnalyzeCapturedFrameUseCase,
+    FrameAnalysisLoopService,
+    FrameCaptureService,
     FrameLike,
 )
 
 __all__ = [
     "AnalyzeCapturedFrameUseCase",
+    "FrameAnalysisLoopService",
+    "FrameCaptureService",
     "FrameLike",
     "SignalAnalysisPipeline",
     "SignalRecorder",
