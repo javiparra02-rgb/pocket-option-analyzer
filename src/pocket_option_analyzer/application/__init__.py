@@ -1,3 +1,6 @@
+from pocket_option_analyzer.application.market import (
+    VisualPriceSeriesBuilder,
+)
 from pocket_option_analyzer.application.signals import (
     SignalAnalysisPipeline,
     SignalRecorder,
@@ -20,4 +23,5 @@ __all__ = [
     "StrategySignalAnalysisPipeline",
     "StrategySignalGenerator",
     "TrendSignalGenerator",
+    "VisualPriceSeriesBuilder",
 ]
