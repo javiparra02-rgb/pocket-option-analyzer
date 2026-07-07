@@ -5,6 +5,7 @@ from .indicator_snapshot import IndicatorSnapshot
 from .rsi_calculator import RsiCalculator
 from .rsi_snapshot import RsiSnapshot
 from .rsi_snapshot_builder import RsiSnapshotBuilder
+from .stochastic_calculator import StochasticCalculator
 from .stochastic_snapshot import StochasticSnapshot
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "RsiCalculator",
     "RsiSnapshot",
     "RsiSnapshotBuilder",
+    "StochasticCalculator",
     "StochasticSnapshot",
 ]

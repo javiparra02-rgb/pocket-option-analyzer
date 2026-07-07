@@ -6,6 +6,7 @@ from pocket_option_analyzer.domain.indicators import (
     RsiCalculator,
     RsiSnapshot,
     RsiSnapshotBuilder,
+    StochasticCalculator,
     StochasticSnapshot,
 )
 from pocket_option_analyzer.domain.market import (
@@ -38,6 +39,7 @@ __all__ = [
     "SignalHistory",
     "SignalRecord",
     "SignalStrength",
+    "StochasticCalculator",
     "StochasticSnapshot",
     "StrategyProfile",
 ]
