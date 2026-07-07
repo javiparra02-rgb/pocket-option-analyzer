@@ -3,6 +3,7 @@ from pocket_option_analyzer.domain.indicators import (
     EmaSnapshot,
     EmaSnapshotBuilder,
     IndicatorSnapshot,
+    RsiCalculator,
     RsiSnapshot,
     StochasticSnapshot,
 )
@@ -29,6 +30,7 @@ __all__ = [
     "MarketSignal",
     "PriceCandle",
     "PriceSeries",
+    "RsiCalculator",
     "RsiSnapshot",
     "SignalDirection",
     "SignalHistory",
