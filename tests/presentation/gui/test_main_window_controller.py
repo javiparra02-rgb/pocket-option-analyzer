@@ -16,6 +16,27 @@ from pocket_option_analyzer.presentation.signals import (
 )
 
 
+class FakeSignal:
+
+    def __init__(self) -> None:
+        self._callbacks = []
+
+    def connect(
+        self,
+        callback,
+    ) -> None:
+        self._callbacks.append(callback)
+
+    def emit(
+        self,
+        *args,
+    ) -> None:
+        for callback in list(self._callbacks):
+            callback(
+                *args,
+            )
+
+
 class FakeRuntimeService:
 
     def __init__(
@@ -24,25 +45,97 @@ class FakeRuntimeService:
     ) -> None:
         self._is_running = False
         self.record = record
-        self.start_calls = 0
-        self.stop_calls = 0
         self.run_once_calls = 0
 
     @property
     def is_running(self) -> bool:
         return self._is_running
 
-    def start(self) -> None:
-        self.start_calls += 1
+    def run_once(self) -> SignalRecord | None:
+        self.run_once_calls += 1
+        return self.record
+
+
+class FakeWorker:
+
+    def __init__(
+        self,
+        record: SignalRecord | None = None,
+        auto_finish: bool = True,
+    ) -> None:
+        self.record_ready = FakeSignal()
+        self.error_occurred = FakeSignal()
+        self.running_changed = FakeSignal()
+        self.finished = FakeSignal()
+
+        self.record = record
+        self.auto_finish = auto_finish
+        self.run_calls = 0
+        self.stop_calls = 0
+        self.delete_later_calls = 0
+        self.moved_thread = None
+        self._is_running = False
+
+    @property
+    def is_running(self) -> bool:
+        return self._is_running
+
+    def moveToThread(
+        self,
+        thread,
+    ) -> None:
+        self.moved_thread = thread
+
+    def run(self) -> None:
+        self.run_calls += 1
         self._is_running = True
+        self.running_changed.emit(
+            True,
+        )
+
+        if self.record is not None:
+            self.record_ready.emit(
+                self.record,
+            )
+
+        if self.auto_finish:
+            self._is_running = False
+            self.running_changed.emit(
+                False,
+            )
+            self.finished.emit()
 
     def stop(self) -> None:
         self.stop_calls += 1
         self._is_running = False
+        self.running_changed.emit(
+            False,
+        )
+        self.finished.emit()
 
-    def run_once(self) -> SignalRecord | None:
-        self.run_once_calls += 1
-        return self.record
+    def deleteLater(self) -> None:
+        self.delete_later_calls += 1
+
+
+class FakeThread:
+
+    def __init__(self) -> None:
+        self.started = FakeSignal()
+        self.finished = FakeSignal()
+        self.start_calls = 0
+        self.quit_calls = 0
+        self.delete_later_calls = 0
+
+    def start(self) -> None:
+        self.start_calls += 1
+        self.started.emit()
+
+    def quit(self) -> None:
+        self.quit_calls += 1
+        self.finished.emit()
+
+    def deleteLater(self) -> None:
+        self.delete_later_calls += 1
 
 
 class FakeWindow:
@@ -101,48 +194,6 @@ def test_controller_initializes_window_running_state() -> None:
     ]
 
 
-def test_controller_starts_runtime_and_updates_window_state() -> None:
-
-    runtime = FakeRuntimeService()
-    window = FakeWindow()
-
-    controller = MainWindowController(
-        runtime_service=runtime,
-        presenter=SignalRecordPresenter(),
-        window=window,
-    )
-
-    controller.start()
-
-    assert runtime.start_calls == 1
-    assert window.running_states == [
-        False,
-        True,
-    ]
-
-
-def test_controller_stops_runtime_and_updates_window_state() -> None:
-
-    runtime = FakeRuntimeService()
-    window = FakeWindow()
-
-    controller = MainWindowController(
-        runtime_service=runtime,
-        presenter=SignalRecordPresenter(),
-        window=window,
-    )
-
-    controller.start()
-    controller.stop()
-
-    assert runtime.stop_calls == 1
-    assert window.running_states == [
-        False,
-        True,
-        False,
-    ]
-
-
 def test_controller_run_once_updates_signal_when_record_exists() -> None:
 
     runtime = FakeRuntimeService(
@@ -184,3 +235,87 @@ def test_controller_run_once_does_not_update_signal_when_record_is_missing() -> 
     assert record is None
     assert runtime.run_once_calls == 1
     assert window.view_models == []
+
+
+def test_controller_start_runs_worker_inside_thread() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    record = _record()
+    worker = FakeWorker(
+        record=record,
+    )
+    thread = FakeThread()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window=window,
+        worker_factory=lambda runtime_service: worker,
+        thread_factory=lambda: thread,
+    )
+
+    controller.start()
+
+    assert worker.moved_thread is thread
+    assert thread.start_calls == 1
+    assert worker.run_calls == 1
+    assert thread.quit_calls == 1
+    assert worker.delete_later_calls == 1
+    assert thread.delete_later_calls == 1
+    assert len(window.view_models) == 1
+    assert window.view_models[0].direction_label == "CALL"
+    assert window.running_states[0] is False
+    assert True in window.running_states
+    assert window.running_states[-1] is False
+
+
+def test_controller_stop_requests_worker_stop() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    worker = FakeWorker(
+        record=None,
+        auto_finish=False,
+    )
+    thread = FakeThread()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window=window,
+        worker_factory=lambda runtime_service: worker,
+        thread_factory=lambda: thread,
+    )
+
+    controller.start()
+    controller.stop()
+
+    assert worker.run_calls == 1
+    assert worker.stop_calls == 1
+    assert thread.quit_calls == 1
+    assert window.running_states[-1] is False
+
+
+def test_controller_ignores_start_when_worker_is_already_running() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    worker = FakeWorker(
+        auto_finish=False,
+    )
+    thread = FakeThread()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window=window,
+        worker_factory=lambda runtime_service: worker,
+        thread_factory=lambda: thread,
+    )
+
+    controller.start()
+    controller.start()
+
+    assert thread.start_calls == 1
+    assert worker.run_calls == 1
