@@ -16,6 +16,9 @@ from pocket_option_analyzer.application.signals import (
 from pocket_option_analyzer.application.strategy import (
     StrategyConditionEvaluator,
 )
+from pocket_option_analyzer.application.use_cases import (
+    AnalyzeCapturedFrameUseCase,
+)
 from pocket_option_analyzer.domain.signals import SignalHistory
 from pocket_option_analyzer.domain.strategy import StrategyProfile
 from pocket_option_analyzer.infrastructure.signals import (
@@ -150,6 +153,36 @@ class SignalPipelineFactory:
             analysis_pipeline=visual_strategy_signal_analysis_pipeline,
             recorder=recorder,
             record_writer=writer,
+        )
+
+    @staticmethod
+    def create_captured_frame_analysis_use_case(
+        signal_history: SignalHistory | None = None,
+        signal_file_path: Path | None = None,
+        strategy_profile: StrategyProfile | None = None,
+        color_profile: CandleColorProfile | None = None,
+        source: str = "captured_frame_visual_analysis",
+    ) -> AnalyzeCapturedFrameUseCase:
+        """
+        Crea el caso de uso completo para analizar frames capturados.
+
+        Este será el punto de entrada principal para conectar:
+        - CaptureService
+        - VisualSignalRecordingPipeline
+        - SignalHistory
+        - JSONL opcional
+        """
+
+        pipeline = SignalPipelineFactory.create_visual_signal_recording_pipeline(
+            signal_history=signal_history,
+            signal_file_path=signal_file_path,
+            strategy_profile=strategy_profile,
+            color_profile=color_profile,
+        )
+
+        return AnalyzeCapturedFrameUseCase(
+            pipeline=pipeline,
+            source=source,
         )
 
     @staticmethod
