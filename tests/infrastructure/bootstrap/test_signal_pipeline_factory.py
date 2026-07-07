@@ -308,3 +308,67 @@ def test_factory_creates_frame_analysis_loop_service_that_writes_jsonl_file(
     assert data["strength"] == "none"
     assert data["source"] == "captured_frame_visual_analysis"
     assert data["is_actionable"] is False
+
+
+def test_factory_creates_analysis_runtime_service() -> None:
+
+    history = SignalHistory()
+    frame = _frame()
+
+    runtime_service = SignalPipelineFactory.create_analysis_runtime_service(
+        capture_service=FakeCaptureService(
+            frames=[
+                frame,
+            ],
+        ),
+        signal_history=history,
+        interval_seconds=0.0,
+    )
+
+    record = runtime_service.run_once()
+
+    assert record is not None
+    assert history.latest() is record
+    assert record.signal.direction is SignalDirection.NONE
+    assert record.created_at is frame.captured_at
+    assert record.source == "captured_frame_visual_analysis"
+    assert runtime_service.is_running is False
+
+
+def test_factory_creates_analysis_runtime_service_that_writes_jsonl_file(
+    tmp_path,
+) -> None:
+
+    history = SignalHistory()
+    frame = _frame()
+    file_path = tmp_path / "signals" / "runtime_signals.jsonl"
+
+    runtime_service = SignalPipelineFactory.create_analysis_runtime_service(
+        capture_service=FakeCaptureService(
+            frames=[
+                frame,
+            ],
+        ),
+        signal_history=history,
+        signal_file_path=file_path,
+        interval_seconds=0.0,
+    )
+
+    record = runtime_service.run_once()
+
+    assert record is not None
+    assert history.latest() is record
+    assert file_path.exists()
+
+    lines = file_path.read_text(
+        encoding="utf-8",
+    ).splitlines()
+
+    assert len(lines) == 1
+
+    data = json.loads(lines[0])
+
+    assert data["direction"] == "none"
+    assert data["strength"] == "none"
+    assert data["source"] == "captured_frame_visual_analysis"
+    assert data["is_actionable"] is False

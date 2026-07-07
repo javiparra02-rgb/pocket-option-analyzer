@@ -5,6 +5,9 @@ from pathlib import Path
 from pocket_option_analyzer.application.market import (
     VisualIndicatorSnapshotBuilder,
 )
+from pocket_option_analyzer.application.runtime import (
+    AnalysisRuntimeService,
+)
 from pocket_option_analyzer.application.signals import (
     SignalRecorder,
     SignalRecordingPipeline,
@@ -216,6 +219,40 @@ class SignalPipelineFactory:
             capture_service=capture_service,
             analysis_use_case=analysis_use_case,
             interval_seconds=interval_seconds,
+        )
+
+    @staticmethod
+    def create_analysis_runtime_service(
+        capture_service: FrameCaptureService,
+        signal_history: SignalHistory | None = None,
+        signal_file_path: Path | None = None,
+        strategy_profile: StrategyProfile | None = None,
+        color_profile: CandleColorProfile | None = None,
+        source: str = "captured_frame_visual_analysis",
+        interval_seconds: float = 1.0,
+    ) -> AnalysisRuntimeService:
+        """
+        Crea el runtime completo de análisis.
+
+        Este será el punto de entrada recomendado para la futura GUI:
+        - run_once()
+        - start()
+        - stop()
+        - is_running
+        """
+
+        loop_service = SignalPipelineFactory.create_frame_analysis_loop_service(
+            capture_service=capture_service,
+            signal_history=signal_history,
+            signal_file_path=signal_file_path,
+            strategy_profile=strategy_profile,
+            color_profile=color_profile,
+            source=source,
+            interval_seconds=interval_seconds,
+        )
+
+        return AnalysisRuntimeService(
+            loop_service=loop_service,
         )
 
     @staticmethod
