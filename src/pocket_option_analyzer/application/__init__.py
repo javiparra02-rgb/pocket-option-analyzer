@@ -2,6 +2,10 @@ from pocket_option_analyzer.application.market import (
     VisualIndicatorSnapshotBuilder,
     VisualPriceSeriesBuilder,
 )
+from pocket_option_analyzer.application.runtime import (
+    AnalysisRuntimeService,
+    FrameAnalysisLoop,
+)
 from pocket_option_analyzer.application.signals import (
     SignalAnalysisPipeline,
     SignalRecorder,
@@ -24,7 +28,9 @@ from pocket_option_analyzer.application.use_cases import (
 )
 
 __all__ = [
+    "AnalysisRuntimeService",
     "AnalyzeCapturedFrameUseCase",
+    "FrameAnalysisLoop",
     "FrameAnalysisLoopService",
     "FrameCaptureService",
     "FrameLike",
