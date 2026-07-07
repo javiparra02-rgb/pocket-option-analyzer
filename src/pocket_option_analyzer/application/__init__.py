@@ -10,6 +10,7 @@ from pocket_option_analyzer.application.signals import (
     StrategySignalAnalysisPipeline,
     StrategySignalGenerator,
     TrendSignalGenerator,
+    VisualSignalRecordingPipeline,
     VisualStrategySignalAnalysisPipeline,
 )
 from pocket_option_analyzer.application.strategy import (
@@ -27,5 +28,6 @@ __all__ = [
     "TrendSignalGenerator",
     "VisualIndicatorSnapshotBuilder",
     "VisualPriceSeriesBuilder",
+    "VisualSignalRecordingPipeline",
     "VisualStrategySignalAnalysisPipeline",
 ]
