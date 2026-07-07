@@ -1,5 +1,6 @@
 from pocket_option_analyzer.presentation.gui import (
     MainWindow,
+    MainWindowController,
 )
 from pocket_option_analyzer.presentation.signals import (
     SignalRecordPresenter,
@@ -8,6 +9,7 @@ from pocket_option_analyzer.presentation.signals import (
 
 __all__ = [
     "MainWindow",
+    "MainWindowController",
     "SignalRecordPresenter",
     "SignalRecordViewModel",
 ]
