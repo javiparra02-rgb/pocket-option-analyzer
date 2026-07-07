@@ -7,6 +7,7 @@ from .rsi_snapshot import RsiSnapshot
 from .rsi_snapshot_builder import RsiSnapshotBuilder
 from .stochastic_calculator import StochasticCalculator
 from .stochastic_snapshot import StochasticSnapshot
+from .stochastic_snapshot_builder import StochasticSnapshotBuilder
 
 __all__ = [
     "EmaCalculator",
@@ -18,4 +19,5 @@ __all__ = [
     "RsiSnapshotBuilder",
     "StochasticCalculator",
     "StochasticSnapshot",
+    "StochasticSnapshotBuilder",
 ]

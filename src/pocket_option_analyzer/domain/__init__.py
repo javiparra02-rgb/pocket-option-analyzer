@@ -8,6 +8,7 @@ from pocket_option_analyzer.domain.indicators import (
     RsiSnapshotBuilder,
     StochasticCalculator,
     StochasticSnapshot,
+    StochasticSnapshotBuilder,
 )
 from pocket_option_analyzer.domain.market import (
     PriceCandle,
@@ -41,5 +42,6 @@ __all__ = [
     "SignalStrength",
     "StochasticCalculator",
     "StochasticSnapshot",
+    "StochasticSnapshotBuilder",
     "StrategyProfile",
 ]
