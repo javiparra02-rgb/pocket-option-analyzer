@@ -16,8 +16,14 @@ from pocket_option_analyzer.application.signals import (
 from pocket_option_analyzer.application.strategy import (
     StrategyConditionEvaluator,
 )
+from pocket_option_analyzer.application.use_cases import (
+    AnalyzeCapturedFrameUseCase,
+    FrameLike,
+)
 
 __all__ = [
+    "AnalyzeCapturedFrameUseCase",
+    "FrameLike",
     "SignalAnalysisPipeline",
     "SignalRecorder",
     "SignalRecordingPipeline",
