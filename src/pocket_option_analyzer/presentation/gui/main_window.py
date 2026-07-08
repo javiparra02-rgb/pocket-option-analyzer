@@ -49,7 +49,11 @@ class MainWindow(QMainWindow):
         )
         self.resize(
             720,
-            420,
+            560,
+        )
+        self.setMinimumSize(
+            520,
+            520,
         )
 
         self._status_label = QLabel(
@@ -72,12 +76,12 @@ class MainWindow(QMainWindow):
         self._reason_text.setPlainText(
             "Motivo: -",
         )
-        self._reason_text.setFixedHeight(
-            100,
+        self._reason_text.setMinimumHeight(
+            180,
         )
         self._reason_text.setSizePolicy(
             QSizePolicy.Policy.Expanding,
-            QSizePolicy.Policy.Fixed,
+            QSizePolicy.Policy.Expanding,
         )
         self._reason_text.setWordWrapMode(
             QTextOption.WrapMode.WordWrap,
@@ -161,6 +165,14 @@ class MainWindow(QMainWindow):
         return self._reason_text.styleSheet()
 
     @property
+    def reason_scroll_position(self) -> int:
+        return self._reason_text.verticalScrollBar().value()
+
+    @property
+    def reason_minimum_height(self) -> int:
+        return self._reason_text.minimumHeight()
+
+    @property
     def start_button_enabled(self) -> bool:
         return self._start_button.isEnabled()
 
@@ -171,10 +183,6 @@ class MainWindow(QMainWindow):
     @property
     def run_once_button_enabled(self) -> bool:
         return self._run_once_button.isEnabled()
-    
-    @property
-    def reason_scroll_position(self) -> int:
-        return self._reason_text.verticalScrollBar().value()
 
     def set_running_state(
         self,

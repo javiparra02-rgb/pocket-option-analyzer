@@ -364,3 +364,14 @@ def test_main_window_keeps_long_reason_scrolled_to_top() -> None:
         "Motivo: condition-0"
     )
     assert window.reason_scroll_position == 0
+
+
+def test_main_window_reason_panel_has_more_vertical_space() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert window.reason_minimum_height >= 180
+    assert window.minimumWidth() >= 520
+    assert window.minimumHeight() >= 520
