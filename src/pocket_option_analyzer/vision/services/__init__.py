@@ -16,6 +16,7 @@ from .dataset_filename_generator import DatasetFilenameGenerator
 from .debug_capture_service import DebugCaptureService
 from .debug_image_saver import DebugImageSaver
 from .market_analysis_pipeline import MarketAnalysisPipeline
+from .pocket_option_candle_mask_builder import PocketOptionCandleMaskBuilder
 from .roi_debug_renderer import RoiDebugRenderer
 from .trend_detector import TrendDetector
 from .vision_pipeline import VisionPipeline
@@ -39,6 +40,7 @@ __all__ = [
     "DebugCaptureService",
     "DebugImageSaver",
     "MarketAnalysisPipeline",
+    "PocketOptionCandleMaskBuilder",
     "RoiDebugRenderer",
     "TrendDetector",
     "VisionPipeline",

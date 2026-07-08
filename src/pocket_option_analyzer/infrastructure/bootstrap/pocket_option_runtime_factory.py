@@ -482,12 +482,18 @@ class PocketOptionRuntimeFactory:
             )
         )
 
+        resolved_color_profile = (
+            color_profile
+            if color_profile is not None
+            else CandleColorProfile.white_red()
+        )
+
         return SignalPipelineFactory.create_analysis_runtime_service(
             capture_service=resolved_capture_service,
             signal_history=signal_history,
             signal_file_path=signal_file_path,
             strategy_profile=strategy_profile,
-            color_profile=color_profile,
+            color_profile=resolved_color_profile,
             interval_seconds=interval_seconds,
         )
 
