@@ -1,6 +1,9 @@
+from PySide6.QtWidgets import QApplication
+
 from pocket_option_analyzer.main import (
     NoopRuntimeService,
     build_gui_application,
+    ensure_qapplication,
 )
 
 
@@ -14,6 +17,17 @@ def test_noop_runtime_service_is_not_running() -> None:
     assert runtime.stop() is None
 
 
+def test_ensure_qapplication_returns_qapplication_instance() -> None:
+
+    app = ensure_qapplication(
+        argv=[
+            "test",
+        ],
+    )
+
+    assert app is QApplication.instance()
+
+
 def test_build_gui_application_returns_application() -> None:
 
     application = build_gui_application(
@@ -23,3 +37,4 @@ def test_build_gui_application_returns_application() -> None:
     )
 
     assert application is not None
+    assert QApplication.instance() is not None

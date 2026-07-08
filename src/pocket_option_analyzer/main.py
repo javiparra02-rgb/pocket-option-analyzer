@@ -3,6 +3,8 @@ from __future__ import annotations
 import sys
 from collections.abc import Sequence
 
+from PySide6.QtWidgets import QApplication
+
 from pocket_option_analyzer.presentation.gui import (
     GuiApplication,
     MainWindowController,
@@ -34,14 +36,41 @@ class NoopRuntimeService:
         return None
 
 
+def ensure_qapplication(
+    argv: Sequence[str] | None = None,
+) -> QApplication:
+    """
+    Garantiza que QApplication exista antes de crear cualquier QWidget.
+
+    En PySide6, ningún QWidget puede construirse antes de QApplication.
+    """
+
+    app = QApplication.instance()
+
+    if app is not None:
+        return app
+
+    return QApplication(
+        list(
+            argv
+            if argv is not None
+            else sys.argv
+        )
+    )
+
+
 def build_gui_application(
     argv: Sequence[str] | None = None,
 ) -> GuiApplication:
     """
     Construye la aplicación gráfica.
 
-    Por ahora usa NoopRuntimeService para validar el arranque de la GUI.
+    Primero crea QApplication y luego crea el controlador/ventana.
     """
+
+    ensure_qapplication(
+        argv=argv,
+    )
 
     controller = MainWindowController(
         runtime_service=NoopRuntimeService(),
