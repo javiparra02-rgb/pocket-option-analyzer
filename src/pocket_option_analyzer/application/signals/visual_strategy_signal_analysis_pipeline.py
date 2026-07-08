@@ -50,7 +50,7 @@ class VisualStrategySignalAnalysisPipeline:
         Analiza una imagen y devuelve una señal de mercado.
 
         Si no hay suficientes velas para calcular indicadores,
-        devuelve una señal neutral.
+        devuelve una señal neutral con diagnóstico.
         """
 
         market_analysis = self._market_analysis_pipeline.analyze(
@@ -64,10 +64,44 @@ class VisualStrategySignalAnalysisPipeline:
 
         if indicators is None:
             return MarketSignal.neutral(
-                reason="Not enough visual candles to calculate indicators.",
+                reason=self._not_enough_candles_reason(
+                    detected_candles=len(
+                        market_analysis.series,
+                    ),
+                ),
             )
 
         return self._signal_generator.generate(
             analysis=market_analysis,
             indicators=indicators,
+        )
+
+    def _not_enough_candles_reason(
+        self,
+        detected_candles: int,
+    ) -> str:
+        return (
+            "Not enough visual candles to calculate indicators. "
+            f"Detected candles: {detected_candles}. "
+            f"Minimum required: {self._minimum_required_candles()}."
+        )
+
+    def _minimum_required_candles(
+        self,
+    ) -> int:
+        ema_required = self._profile.ema_slow_period
+
+        rsi_required = self._profile.rsi_period + 1
+
+        stochastic_required = (
+            self._profile.stoch_k_period
+            + self._profile.stoch_smooth_period
+            + self._profile.stoch_d_period
+            - 1
+        )
+
+        return max(
+            ema_required,
+            rsi_required,
+            stochastic_required,
         )
