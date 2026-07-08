@@ -32,6 +32,11 @@ class MainWindow(QMainWindow):
     mediante callbacks.
     """
 
+    CAPTURE_NOTE = (
+        "Nota: no cubras el gráfico de Pocket Option con esta ventana. "
+        "El análisis usa los píxeles visibles en pantalla."
+    )
+
     def __init__(
         self,
         on_start_requested: WindowAction | None = None,
@@ -62,6 +67,17 @@ class MainWindow(QMainWindow):
         self._error_label = QLabel(
             "Error: -",
         )
+
+        self._capture_note_label = QLabel(
+            self.CAPTURE_NOTE,
+        )
+        self._capture_note_label.setWordWrap(
+            True,
+        )
+        self._capture_note_label.setStyleSheet(
+            "color: #5f6368; font-style: italic;"
+        )
+
         self._direction_label = QLabel(
             "Señal: SIN SEÑAL",
         )
@@ -131,6 +147,10 @@ class MainWindow(QMainWindow):
     @property
     def error_text(self) -> str:
         return self._error_label.text()
+
+    @property
+    def capture_note_text(self) -> str:
+        return self._capture_note_label.text()
 
     @property
     def direction_text(self) -> str:
@@ -265,6 +285,9 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(
             self._error_label,
+        )
+        layout.addWidget(
+            self._capture_note_label,
         )
         layout.addWidget(
             self._direction_label,

@@ -60,6 +60,11 @@ def test_main_window_has_initial_state() -> None:
     assert window.source_text == "Origen: -"
     assert window.created_at_text == "Fecha: -"
     assert window.error_text == "Error: -"
+    assert (
+        window.capture_note_text
+        == "Nota: no cubras el gráfico de Pocket Option con esta ventana. "
+        "El análisis usa los píxeles visibles en pantalla."
+    )
 
 
 def test_main_window_updates_running_state() -> None:
@@ -375,3 +380,13 @@ def test_main_window_reason_panel_has_more_vertical_space() -> None:
     assert window.reason_minimum_height >= 180
     assert window.minimumWidth() >= 520
     assert window.minimumHeight() >= 520
+
+
+def test_main_window_displays_capture_note() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert "no cubras el gráfico" in window.capture_note_text
+    assert "píxeles visibles" in window.capture_note_text
