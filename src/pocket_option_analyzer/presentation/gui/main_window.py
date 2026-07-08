@@ -4,6 +4,7 @@ from collections.abc import Callable
 
 from PySide6.QtGui import QTextCursor, QTextOption
 from PySide6.QtWidgets import (
+    QApplication,
     QLabel,
     QMainWindow,
     QPushButton,
@@ -242,6 +243,25 @@ class MainWindow(QMainWindow):
         self._error_label.setText(
             "Error: -",
         )
+
+    def hide_for_capture(self) -> None:
+        """
+        Oculta temporalmente la ventana para no tapar el gráfico.
+
+        Esto ayuda porque MSS captura los píxeles visibles en pantalla.
+        """
+
+        self.hide()
+        QApplication.processEvents()
+
+    def show_after_capture(self) -> None:
+        """
+        Vuelve a mostrar la ventana después de capturar.
+        """
+
+        self.show()
+        self.raise_()
+        QApplication.processEvents()
 
     def update_signal(
         self,

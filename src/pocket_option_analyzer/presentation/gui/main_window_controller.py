@@ -216,19 +216,27 @@ class MainWindowController:
     ) -> SignalRecord | None:
         """
         Ejecuta un análisis único y muestra la señal si existe.
+
+        Para evitar que la GUI tape el gráfico, la ventana se oculta
+        temporalmente durante la captura manual.
         """
 
         self._window.set_error_message(
             None,
         )
 
+        self._prepare_window_for_capture()
+
         try:
             record = self._runtime_service.run_once()
         except Exception as error:
+            self._restore_window_after_capture()
             self._handle_error_occurred(
                 message=str(error),
             )
             return None
+
+        self._restore_window_after_capture()
 
         if record is None:
             return None
@@ -242,6 +250,36 @@ class MainWindowController:
         )
 
         return record
+    
+    def _prepare_window_for_capture(
+        self,
+    ) -> None:
+
+        hide_for_capture = getattr(
+            self._window,
+            "hide_for_capture",
+            None,
+        )
+
+        if callable(
+            hide_for_capture,
+        ):
+            hide_for_capture()
+
+    def _restore_window_after_capture(
+        self,
+    ) -> None:
+
+        show_after_capture = getattr(
+            self._window,
+            "show_after_capture",
+            None,
+        )
+
+        if callable(
+            show_after_capture,
+        ):
+            show_after_capture()
 
     def _create_worker(
         self,

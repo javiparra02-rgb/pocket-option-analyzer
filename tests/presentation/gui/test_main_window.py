@@ -390,3 +390,21 @@ def test_main_window_displays_capture_note() -> None:
 
     assert "no cubras el gráfico" in window.capture_note_text
     assert "píxeles visibles" in window.capture_note_text
+
+
+def test_main_window_can_hide_and_show_for_capture() -> None:
+
+    _application()
+
+    window = MainWindow()
+    window.show()
+
+    assert window.isVisible() is True
+
+    window.hide_for_capture()
+
+    assert window.isVisible() is False
+
+    window.show_after_capture()
+
+    assert window.isVisible() is True

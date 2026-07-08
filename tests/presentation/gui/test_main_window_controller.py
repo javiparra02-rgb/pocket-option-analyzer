@@ -150,6 +150,8 @@ class FakeWindow:
         self.running_states: list[bool] = []
         self.view_models = []
         self.error_messages: list[str | None] = []
+        self.hide_for_capture_calls = 0
+        self.show_after_capture_calls = 0
 
     def set_running_state(
         self,
@@ -168,6 +170,12 @@ class FakeWindow:
         message: str | None,
     ) -> None:
         self.error_messages.append(message)
+    
+    def hide_for_capture(self) -> None:
+        self.hide_for_capture_calls += 1
+
+    def show_after_capture(self) -> None:
+        self.show_after_capture_calls += 1
 
 
 def _record() -> SignalRecord:
@@ -356,3 +364,24 @@ def test_controller_run_once_displays_error_when_runtime_fails() -> None:
         "capture failed",
     ]
     assert window.running_states[-1] is False
+
+
+def test_controller_run_once_hides_and_restores_window_during_capture() -> None:
+
+    runtime = FakeRuntimeService(
+        record=_record(),
+    )
+    window = FakeWindow()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window=window,
+    )
+
+    record = controller.run_once()
+
+    assert record is runtime.record
+    assert window.hide_for_capture_calls == 1
+    assert window.show_after_capture_calls == 1
+    assert len(window.view_models) == 1
