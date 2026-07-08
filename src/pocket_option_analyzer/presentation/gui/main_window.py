@@ -9,12 +9,12 @@ from PySide6.QtWidgets import (
     QListWidget,
     QMainWindow,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
-
 from pocket_option_analyzer.presentation.signals import (
     SignalRecordViewModel,
 )
@@ -203,6 +203,13 @@ class MainWindow(QMainWindow):
     @property
     def strength_style(self) -> str:
         return self._strength_label.styleSheet()
+    
+    @property
+    def has_scrollable_content(self) -> bool:
+        return isinstance(
+            self.centralWidget(),
+            QScrollArea,
+        )
 
     @property
     def reason_style(self) -> str:
@@ -355,7 +362,7 @@ class MainWindow(QMainWindow):
         )
 
     def _setup_layout(self) -> None:
-        central_widget = QWidget()
+        content_widget = QWidget()
         layout = QVBoxLayout()
 
         layout.addWidget(
@@ -400,28 +407,21 @@ class MainWindow(QMainWindow):
         layout.addWidget(
             self._run_once_button,
         )
-        layout.addWidget(
-            self._history_label,
-        )
-        layout.addWidget(
-            self._history_list,
-        )
-        layout.addWidget(
-            self._start_button,
-        )
-        layout.addWidget(
-            self._stop_button,
-        )
-        layout.addWidget(
-            self._run_once_button,
-        )
 
-        central_widget.setLayout(
+        content_widget.setLayout(
             layout,
         )
 
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(
+            True,
+        )
+        scroll_area.setWidget(
+            content_widget,
+        )
+
         self.setCentralWidget(
-            central_widget,
+            scroll_area,
         )
 
     def _connect_events(self) -> None:

@@ -576,3 +576,12 @@ def test_main_window_clear_history_button_clears_history() -> None:
 
     assert window.signal_history_count == 0
     assert window.latest_signal_history_text is None
+
+
+def test_main_window_uses_scrollable_content() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert window.has_scrollable_content is True
