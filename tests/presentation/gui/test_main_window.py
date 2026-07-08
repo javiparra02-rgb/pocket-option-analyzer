@@ -517,3 +517,62 @@ def test_main_window_limits_signal_history_size() -> None:
         window.signal_history_texts[-1]
         == "2026-01-01 10:30:05 | SIN SEÑAL | NINGUNA"
     )
+
+
+def test_main_window_clears_signal_history() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="CALL",
+        strength_label="ALTA",
+        reason="CALL setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=True,
+        css_class="signal-call",
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert window.signal_history_count == 1
+
+    window.clear_signal_history()
+
+    assert window.signal_history_count == 0
+    assert window.latest_signal_history_text is None
+
+
+def test_main_window_clear_history_button_clears_history() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="PUT",
+        strength_label="ALTA",
+        reason="PUT setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:31:45",
+        is_actionable=True,
+        css_class="signal-put",
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert window.signal_history_count == 1
+
+    _button(
+        window=window,
+        object_name="clear_history_button",
+    ).click()
+
+    assert window.signal_history_count == 0
+    assert window.latest_signal_history_text is None

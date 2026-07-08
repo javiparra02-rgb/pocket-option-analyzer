@@ -78,6 +78,13 @@ class MainWindow(QMainWindow):
             QSizePolicy.Policy.Fixed,
         )
 
+        self._clear_history_button = QPushButton(
+            "Limpiar historial",
+        )
+        self._clear_history_button.setObjectName(
+            "clear_history_button",
+        )
+
         self._status_label = QLabel(
             "Estado: detenido",
         )
@@ -220,6 +227,10 @@ class MainWindow(QMainWindow):
     @property
     def run_once_button_enabled(self) -> bool:
         return self._run_once_button.isEnabled()
+    
+    @property
+    def clear_history_button_enabled(self) -> bool:
+        return self._clear_history_button.isEnabled()
     
     @property
     def signal_history_texts(self) -> list[str]:
@@ -378,6 +389,24 @@ class MainWindow(QMainWindow):
             self._history_list,
         )
         layout.addWidget(
+            self._clear_history_button,
+        )
+        layout.addWidget(
+            self._start_button,
+        )
+        layout.addWidget(
+            self._stop_button,
+        )
+        layout.addWidget(
+            self._run_once_button,
+        )
+        layout.addWidget(
+            self._history_label,
+        )
+        layout.addWidget(
+            self._history_list,
+        )
+        layout.addWidget(
             self._start_button,
         )
         layout.addWidget(
@@ -404,6 +433,9 @@ class MainWindow(QMainWindow):
         )
         self._run_once_button.clicked.connect(
             self._handle_run_once_clicked,
+        )
+        self._clear_history_button.clicked.connect(
+            self.clear_signal_history,
         )
 
     def _apply_button_state(
@@ -466,6 +498,15 @@ class MainWindow(QMainWindow):
             reason_style,
         )
     
+    def clear_signal_history(self) -> None:
+        """
+        Limpia el historial visible de señales.
+
+        No elimina el archivo logs/signals.jsonl.
+        """
+
+        self._history_list.clear()
+
     def _append_signal_history(
         self,
         view_model: SignalRecordViewModel,
