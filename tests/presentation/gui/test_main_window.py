@@ -485,3 +485,35 @@ def test_main_window_keeps_latest_signal_at_top_of_history() -> None:
         window.latest_signal_history_text
         == "2026-01-01 10:31:45 | PUT | ALTA"
     )
+
+
+def test_main_window_limits_signal_history_size() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    for index in range(55):
+        view_model = SignalRecordViewModel(
+            direction_label="SIN SEÑAL",
+            strength_label="NINGUNA",
+            reason="No setup confirmed.",
+            source="test_source",
+            created_at_label=f"2026-01-01 10:30:{index:02d}",
+            is_actionable=False,
+            css_class="signal-neutral",
+        )
+
+        window.update_signal(
+            view_model=view_model,
+        )
+
+    assert window.signal_history_count == window.max_signal_history_items
+    assert (
+        window.latest_signal_history_text
+        == "2026-01-01 10:30:54 | SIN SEÑAL | NINGUNA"
+    )
+    assert (
+        window.signal_history_texts[-1]
+        == "2026-01-01 10:30:05 | SIN SEÑAL | NINGUNA"
+    )

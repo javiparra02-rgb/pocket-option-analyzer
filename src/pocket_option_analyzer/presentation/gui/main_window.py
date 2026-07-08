@@ -39,6 +39,8 @@ class MainWindow(QMainWindow):
         "El análisis usa los píxeles visibles en pantalla."
     )
 
+    MAX_SIGNAL_HISTORY_ITEMS = 50
+
     def __init__(
         self,
         on_start_requested: WindowAction | None = None,
@@ -218,6 +220,19 @@ class MainWindow(QMainWindow):
     @property
     def run_once_button_enabled(self) -> bool:
         return self._run_once_button.isEnabled()
+    
+    @property
+    def signal_history_texts(self) -> list[str]:
+        return [
+            self._history_list.item(index).text()
+            for index in range(
+                self._history_list.count(),
+            )
+        ]
+
+    @property
+    def max_signal_history_items(self) -> int:
+        return self.MAX_SIGNAL_HISTORY_ITEMS
     
     @property
     def signal_history_count(self) -> int:
@@ -466,6 +481,18 @@ class MainWindow(QMainWindow):
             0,
             item_text,
         )
+
+        self._trim_signal_history()
+
+
+    def _trim_signal_history(
+        self,
+    ) -> None:
+
+        while self._history_list.count() > self.MAX_SIGNAL_HISTORY_ITEMS:
+            self._history_list.takeItem(
+                self._history_list.count() - 1,
+            )
 
     def _handle_start_clicked(self) -> None:
         if self._on_start_requested is not None:
