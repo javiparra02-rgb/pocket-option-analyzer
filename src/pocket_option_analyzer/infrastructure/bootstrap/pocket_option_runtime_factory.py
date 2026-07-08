@@ -35,9 +35,6 @@ from pocket_option_analyzer.vision.models import (
 class RuntimeWindowHandle:
     """
     Ventana localizada por el runtime.
-
-    CaptureService solo necesita que el resultado de finder.find(...)
-    tenga atributo hwnd.
     """
 
     hwnd: int
@@ -91,9 +88,6 @@ WindowInfoProvider = Callable[[int], RuntimeWindowInfo]
 class RuntimeWindowFinder:
     """
     Localizador de ventanas usado por el runtime real.
-
-    Evita depender de WindowEnumerator.enumerate(), porque esa API
-    no está disponible en la implementación actual.
     """
 
     def __init__(
@@ -199,9 +193,6 @@ class RuntimeWindowFinder:
 class RuntimeWindowReader:
     """
     Reader simple para el runtime real.
-
-    Lee directamente el rectángulo de la ventana usando HWND y devuelve
-    una estructura compatible con MSSCaptureAdapter.
     """
 
     def __init__(
@@ -267,9 +258,6 @@ class RuntimeWindowReader:
 class FixedChartRegionExtractor:
     """
     Extractor de región fija para el gráfico.
-
-    CaptureService espera un objeto con método:
-    - extract(image) -> ChartRegion
     """
 
     def __init__(
@@ -282,24 +270,30 @@ class FixedChartRegionExtractor:
         self,
         image,
     ) -> ChartRegion:
-        """
-        Devuelve la región configurada, limitada al tamaño de la imagen.
-        """
+        return self._clamp_region(
+            image=image,
+            region=self._region,
+        )
 
+    def _clamp_region(
+        self,
+        image,
+        region: ChartRegion,
+    ) -> ChartRegion:
         image_height = image.shape[0]
         image_width = image.shape[1]
 
         x = max(
             0,
             min(
-                self._region.x,
+                region.x,
                 image_width,
             ),
         )
         y = max(
             0,
             min(
-                self._region.y,
+                region.y,
                 image_height,
             ),
         )
@@ -307,16 +301,77 @@ class FixedChartRegionExtractor:
         width = max(
             0,
             min(
-                self._region.width,
+                region.width,
                 image_width - x,
             ),
         )
         height = max(
             0,
             min(
-                self._region.height,
+                region.height,
                 image_height - y,
             ),
+        )
+
+        return ChartRegion(
+            x=x,
+            y=y,
+            width=width,
+            height=height,
+        )
+
+
+class PocketOptionChartRegionExtractor:
+    """
+    Extractor proporcional para el gráfico principal de Pocket Option.
+
+    Excluye aproximadamente:
+    - barra superior
+    - panel derecho de operación
+    - indicadores inferiores RSI/Stochastic
+
+    El objetivo es analizar principalmente la zona de velas.
+    """
+
+    def __init__(
+        self,
+        top_ratio: float = 0.11,
+        right_ratio: float = 0.15,
+        bottom_ratio: float = 0.24,
+    ) -> None:
+        self._top_ratio = top_ratio
+        self._right_ratio = right_ratio
+        self._bottom_ratio = bottom_ratio
+
+    def extract(
+        self,
+        image,
+    ) -> ChartRegion:
+        image_height = image.shape[0]
+        image_width = image.shape[1]
+
+        x = 0
+        y = int(
+            image_height * self._top_ratio,
+        )
+
+        right_margin = int(
+            image_width * self._right_ratio,
+        )
+        bottom_margin = int(
+            image_height * self._bottom_ratio,
+        )
+
+        width = image_width - right_margin
+        height = image_height - y - bottom_margin
+
+        width = max(
+            0,
+            width,
+        )
+        height = max(
+            0,
+            height,
         )
 
         return ChartRegion(
@@ -343,13 +398,6 @@ class PocketOptionRuntimeFactory:
         "logs",
     ) / "signals.jsonl"
 
-    DEFAULT_CHART_REGION = ChartRegion(
-        x=0,
-        y=0,
-        width=1550,
-        height=848,
-    )
-
     @staticmethod
     def create_runtime_service(
         capture_service: FrameCaptureService | None = None,
@@ -358,7 +406,7 @@ class PocketOptionRuntimeFactory:
         strategy_profile: StrategyProfile | None = None,
         color_profile: CandleColorProfile | None = None,
         window_title: str = DEFAULT_WINDOW_TITLE,
-        chart_region: ChartRegion | None = DEFAULT_CHART_REGION,
+        chart_region: ChartRegion | None = None,
         interval_seconds: float = 1.0,
     ) -> AnalysisRuntimeService:
         """
@@ -386,29 +434,21 @@ class PocketOptionRuntimeFactory:
     @staticmethod
     def create_capture_service(
         window_title: str = DEFAULT_WINDOW_TITLE,
-        chart_region: ChartRegion | None = DEFAULT_CHART_REGION,
+        chart_region: ChartRegion | None = None,
     ) -> CaptureService:
         """
         Crea el servicio real de captura para Pocket Option.
-
-        Wiring correcto:
-        - RuntimeWindowFinder localiza una ventana con hwnd.
-        - RuntimeWindowReader lee coordenadas completas usando hwnd.
-        - MSSCaptureAdapter captura la región de pantalla.
-        - FixedChartRegionExtractor recorta el gráfico.
         """
-
-        resolved_chart_region = (
-            chart_region
-            if chart_region is not None
-            else PocketOptionRuntimeFactory.DEFAULT_CHART_REGION
-        )
 
         finder = RuntimeWindowFinder()
         reader = RuntimeWindowReader()
 
-        region_extractor = FixedChartRegionExtractor(
-            region=resolved_chart_region,
+        region_extractor = (
+            FixedChartRegionExtractor(
+                region=chart_region,
+            )
+            if chart_region is not None
+            else PocketOptionChartRegionExtractor()
         )
 
         return CaptureService(

@@ -11,6 +11,7 @@ from pocket_option_analyzer.domain.signals import (
 )
 from pocket_option_analyzer.infrastructure.bootstrap import (
     FixedChartRegionExtractor,
+    PocketOptionChartRegionExtractor,
     PocketOptionRuntimeFactory,
     RuntimeWindowFinder,
     RuntimeWindowHandle,
@@ -212,6 +213,25 @@ def test_fixed_chart_region_extractor_returns_clamped_region() -> None:
     assert region.y == 20
     assert region.width == 190
     assert region.height == 80
+
+
+def test_pocket_option_chart_region_extractor_returns_main_chart_area() -> None:
+
+    extractor = PocketOptionChartRegionExtractor()
+
+    image = np.zeros(
+        (900, 1600, 3),
+        dtype=np.uint8,
+    )
+
+    region = extractor.extract(
+        image=image,
+    )
+
+    assert region.x == 0
+    assert region.y == 99
+    assert region.width == 1360
+    assert region.height == 585
 
 
 def test_pocket_option_runtime_factory_creates_real_capture_service() -> None:
