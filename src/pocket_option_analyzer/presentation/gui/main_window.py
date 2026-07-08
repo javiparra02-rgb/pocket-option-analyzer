@@ -116,6 +116,9 @@ class MainWindow(QMainWindow):
         self._apply_signal_style(
             css_class="signal-neutral",
         )
+        self.set_running_state(
+            is_running=False,
+        )
 
     @property
     def status_text(self) -> str:
@@ -157,6 +160,18 @@ class MainWindow(QMainWindow):
     def reason_style(self) -> str:
         return self._reason_text.styleSheet()
 
+    @property
+    def start_button_enabled(self) -> bool:
+        return self._start_button.isEnabled()
+
+    @property
+    def stop_button_enabled(self) -> bool:
+        return self._stop_button.isEnabled()
+
+    @property
+    def run_once_button_enabled(self) -> bool:
+        return self._run_once_button.isEnabled()
+
     def set_running_state(
         self,
         is_running: bool,
@@ -169,10 +184,13 @@ class MainWindow(QMainWindow):
             self._status_label.setText(
                 "Estado: ejecutando",
             )
-            return
+        else:
+            self._status_label.setText(
+                "Estado: detenido",
+            )
 
-        self._status_label.setText(
-            "Estado: detenido",
+        self._apply_button_state(
+            is_running=is_running,
         )
 
     def set_error_message(
@@ -272,6 +290,21 @@ class MainWindow(QMainWindow):
         )
         self._run_once_button.clicked.connect(
             self._handle_run_once_clicked,
+        )
+
+    def _apply_button_state(
+        self,
+        is_running: bool,
+    ) -> None:
+
+        self._start_button.setEnabled(
+            not is_running,
+        )
+        self._stop_button.setEnabled(
+            is_running,
+        )
+        self._run_once_button.setEnabled(
+            not is_running,
         )
 
     def _apply_signal_style(

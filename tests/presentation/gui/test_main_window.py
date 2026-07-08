@@ -136,6 +136,10 @@ def test_main_window_calls_stop_callback_when_stop_button_is_clicked() -> None:
         on_stop_requested=stop_callback,
     )
 
+    window.set_running_state(
+        is_running=True,
+    )
+
     _button(
         window=window,
         object_name="stop_button",
@@ -284,4 +288,48 @@ def test_main_window_applies_neutral_style() -> None:
 
     assert "#5f6368" in window.direction_style
     assert "#5f6368" in window.strength_style
-    assert "#9aa0a6" in window.reason_style    
+    assert "#9aa0a6" in window.reason_style
+
+
+def test_main_window_initial_button_state() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert window.start_button_enabled is True
+    assert window.stop_button_enabled is False
+    assert window.run_once_button_enabled is True
+
+
+def test_main_window_disables_start_and_run_once_when_running() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window.set_running_state(
+        is_running=True,
+    )
+
+    assert window.start_button_enabled is False
+    assert window.stop_button_enabled is True
+    assert window.run_once_button_enabled is False
+
+
+def test_main_window_enables_start_and_run_once_when_stopped() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window.set_running_state(
+        is_running=True,
+    )
+    window.set_running_state(
+        is_running=False,
+    )
+
+    assert window.start_button_enabled is True
+    assert window.stop_button_enabled is False
+    assert window.run_once_button_enabled is True
