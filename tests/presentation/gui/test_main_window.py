@@ -408,3 +408,80 @@ def test_main_window_can_hide_and_show_for_capture() -> None:
     window.show_after_capture()
 
     assert window.isVisible() is True
+
+
+def test_main_window_initial_signal_history_is_empty() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert window.signal_history_count == 0
+    assert window.latest_signal_history_text is None
+
+
+def test_main_window_appends_signal_to_history() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="CALL",
+        strength_label="ALTA",
+        reason="CALL setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=True,
+        css_class="signal-call",
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert window.signal_history_count == 1
+    assert (
+        window.latest_signal_history_text
+        == "2026-01-01 10:30:45 | CALL | ALTA"
+    )
+
+
+def test_main_window_keeps_latest_signal_at_top_of_history() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    first = SignalRecordViewModel(
+        direction_label="CALL",
+        strength_label="ALTA",
+        reason="CALL setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=True,
+        css_class="signal-call",
+    )
+
+    second = SignalRecordViewModel(
+        direction_label="PUT",
+        strength_label="ALTA",
+        reason="PUT setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:31:45",
+        is_actionable=True,
+        css_class="signal-put",
+    )
+
+    window.update_signal(
+        view_model=first,
+    )
+    window.update_signal(
+        view_model=second,
+    )
+
+    assert window.signal_history_count == 2
+    assert (
+        window.latest_signal_history_text
+        == "2026-01-01 10:31:45 | PUT | ALTA"
+    )

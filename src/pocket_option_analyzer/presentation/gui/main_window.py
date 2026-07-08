@@ -6,6 +6,7 @@ from PySide6.QtGui import QTextCursor, QTextOption
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
+    QListWidget,
     QMainWindow,
     QPushButton,
     QSizePolicy,
@@ -60,6 +61,19 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(
             520,
             520,
+        )
+
+        self._history_label = QLabel(
+            "Historial de señales:",
+        )
+
+        self._history_list = QListWidget()
+        self._history_list.setMinimumHeight(
+            90,
+        )
+        self._history_list.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
         )
 
         self._status_label = QLabel(
@@ -204,6 +218,21 @@ class MainWindow(QMainWindow):
     @property
     def run_once_button_enabled(self) -> bool:
         return self._run_once_button.isEnabled()
+    
+    @property
+    def signal_history_count(self) -> int:
+        return self._history_list.count()
+
+    @property
+    def latest_signal_history_text(self) -> str | None:
+        if self._history_list.count() == 0:
+            return None
+
+        item = self._history_list.item(
+            0,
+        )
+
+        return item.text()
 
     def set_running_state(
         self,
@@ -295,6 +324,9 @@ class MainWindow(QMainWindow):
         self._apply_signal_style(
             css_class=view_model.css_class,
         )
+        self._append_signal_history(
+            view_model=view_model,
+        )
 
     def _setup_layout(self) -> None:
         central_widget = QWidget()
@@ -323,6 +355,12 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(
             self._created_at_label,
+        )
+        layout.addWidget(
+            self._history_label,
+        )
+        layout.addWidget(
+            self._history_list,
         )
         layout.addWidget(
             self._start_button,
@@ -411,6 +449,22 @@ class MainWindow(QMainWindow):
         )
         self._reason_text.setStyleSheet(
             reason_style,
+        )
+    
+    def _append_signal_history(
+        self,
+        view_model: SignalRecordViewModel,
+    ) -> None:
+
+        item_text = (
+            f"{view_model.created_at_label} | "
+            f"{view_model.direction_label} | "
+            f"{view_model.strength_label}"
+        )
+
+        self._history_list.insertItem(
+            0,
+            item_text,
         )
 
     def _handle_start_clicked(self) -> None:
