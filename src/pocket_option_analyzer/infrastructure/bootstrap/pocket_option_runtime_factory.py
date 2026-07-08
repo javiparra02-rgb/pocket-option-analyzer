@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import ctypes
+from collections.abc import Callable, Iterable
+from ctypes import wintypes
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 from pocket_option_analyzer.application.runtime import (
     AnalysisRuntimeService,
@@ -16,7 +19,6 @@ from pocket_option_analyzer.infrastructure.bootstrap.signal_pipeline_factory imp
 )
 from pocket_option_analyzer.infrastructure.capture.adapters import (
     MSSCaptureAdapter,
-    Win32WindowLocator,
 )
 from pocket_option_analyzer.infrastructure.capture.services import (
     CaptureService,
@@ -29,51 +31,299 @@ from pocket_option_analyzer.vision.models import (
 )
 
 
-class WindowLocatorReaderAdapter:
+@dataclass(frozen=True, slots=True)
+class RuntimeWindowHandle:
     """
-    Adapta un WindowLocator existente al contrato esperado por CaptureService.
+    Ventana localizada por el runtime.
 
-    CaptureService espera un objeto con método:
-    - read(window_title)
+    CaptureService solo necesita que el resultado de finder.find(...)
+    tenga atributo hwnd.
+    """
 
-    Win32WindowLocator puede exponer el método con otro nombre según la capa
-    de infraestructura. Este adaptador evita acoplar el runtime a esos detalles.
+    hwnd: int
+
+    title: str
+
+    left: int = 0
+
+    top: int = 0
+
+    width: int = 0
+
+    height: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeWindowInfo:
+    """
+    Información completa de ventana para captura con MSS.
+    """
+
+    hwnd: int
+
+    title: str
+
+    left: int
+
+    top: int
+
+    width: int
+
+    height: int
+
+    visible: bool = True
+
+    minimized: bool = False
+
+    @property
+    def right(self) -> int:
+        return self.left + self.width
+
+    @property
+    def bottom(self) -> int:
+        return self.top + self.height
+
+
+WindowProvider = Callable[[], Iterable[RuntimeWindowHandle]]
+WindowInfoProvider = Callable[[int], RuntimeWindowInfo]
+
+
+class RuntimeWindowFinder:
+    """
+    Localizador de ventanas usado por el runtime real.
+
+    Evita depender de WindowEnumerator.enumerate(), porque esa API
+    no está disponible en la implementación actual.
     """
 
     def __init__(
         self,
-        locator: Any,
+        window_provider: WindowProvider | None = None,
     ) -> None:
-        self._locator = locator
+        self._window_provider = window_provider or self._enumerate_windows
+
+    def find(
+        self,
+        title: str,
+    ) -> RuntimeWindowHandle | None:
+        """
+        Busca la mejor ventana cuyo título contenga el texto indicado.
+        """
+
+        search = title.lower()
+
+        matches = [
+            window
+            for window in self._window_provider()
+            if search in window.title.lower()
+        ]
+
+        if not matches:
+            return None
+
+        matches.sort(
+            key=lambda window: window.width * window.height,
+            reverse=True,
+        )
+
+        return matches[0]
+
+    def _enumerate_windows(
+        self,
+    ) -> Iterable[RuntimeWindowHandle]:
+        """
+        Enumera ventanas visibles usando Win32 directamente.
+        """
+
+        windows: list[RuntimeWindowHandle] = []
+
+        enum_windows_proc = ctypes.WINFUNCTYPE(
+            wintypes.BOOL,
+            wintypes.HWND,
+            wintypes.LPARAM,
+        )
+
+        def callback(
+            hwnd,
+            lparam,
+        ) -> bool:
+            if not ctypes.windll.user32.IsWindowVisible(hwnd):
+                return True
+
+            title_length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
+
+            if title_length <= 0:
+                return True
+
+            title_buffer = ctypes.create_unicode_buffer(
+                title_length + 1,
+            )
+
+            ctypes.windll.user32.GetWindowTextW(
+                hwnd,
+                title_buffer,
+                title_length + 1,
+            )
+
+            title = title_buffer.value
+
+            rect = wintypes.RECT()
+
+            if not ctypes.windll.user32.GetWindowRect(
+                hwnd,
+                ctypes.byref(rect),
+            ):
+                return True
+
+            windows.append(
+                RuntimeWindowHandle(
+                    hwnd=int(hwnd),
+                    title=title,
+                    left=rect.left,
+                    top=rect.top,
+                    width=rect.right - rect.left,
+                    height=rect.bottom - rect.top,
+                )
+            )
+
+            return True
+
+        ctypes.windll.user32.EnumWindows(
+            enum_windows_proc(callback),
+            0,
+        )
+
+        return windows
+
+
+class RuntimeWindowReader:
+    """
+    Reader simple para el runtime real.
+
+    Lee directamente el rectángulo de la ventana usando HWND y devuelve
+    una estructura compatible con MSSCaptureAdapter.
+    """
+
+    def __init__(
+        self,
+        info_provider: WindowInfoProvider | None = None,
+    ) -> None:
+        self._info_provider = info_provider or self._read_window_info
 
     def read(
         self,
-        window_title: str,
-    ):
-        """
-        Lee/localiza una ventana usando el localizador interno.
-        """
+        hwnd: int,
+    ) -> RuntimeWindowInfo:
+        return self._info_provider(
+            hwnd,
+        )
 
-        for method_name in (
-            "read",
-            "locate",
-            "find",
-            "find_by_title",
-            "find_window",
-        ):
-            method = getattr(
-                self._locator,
-                method_name,
-                None,
+    def _read_window_info(
+        self,
+        hwnd: int,
+    ) -> RuntimeWindowInfo:
+        rect = wintypes.RECT()
+
+        success = ctypes.windll.user32.GetWindowRect(
+            hwnd,
+            ctypes.byref(rect),
+        )
+
+        if not success:
+            raise RuntimeError(
+                f"Could not read window rectangle for hwnd: {hwnd}"
             )
 
-            if callable(method):
-                return method(
-                    window_title,
-                )
+        title_buffer = ctypes.create_unicode_buffer(
+            512,
+        )
 
-        raise AttributeError(
-            "Window locator does not expose a compatible read method."
+        ctypes.windll.user32.GetWindowTextW(
+            hwnd,
+            title_buffer,
+            512,
+        )
+
+        return RuntimeWindowInfo(
+            hwnd=hwnd,
+            title=title_buffer.value,
+            left=rect.left,
+            top=rect.top,
+            width=rect.right - rect.left,
+            height=rect.bottom - rect.top,
+            visible=bool(
+                ctypes.windll.user32.IsWindowVisible(
+                    hwnd,
+                )
+            ),
+            minimized=bool(
+                ctypes.windll.user32.IsIconic(
+                    hwnd,
+                )
+            ),
+        )
+
+
+class FixedChartRegionExtractor:
+    """
+    Extractor de región fija para el gráfico.
+
+    CaptureService espera un objeto con método:
+    - extract(image) -> ChartRegion
+    """
+
+    def __init__(
+        self,
+        region: ChartRegion,
+    ) -> None:
+        self._region = region
+
+    def extract(
+        self,
+        image,
+    ) -> ChartRegion:
+        """
+        Devuelve la región configurada, limitada al tamaño de la imagen.
+        """
+
+        image_height = image.shape[0]
+        image_width = image.shape[1]
+
+        x = max(
+            0,
+            min(
+                self._region.x,
+                image_width,
+            ),
+        )
+        y = max(
+            0,
+            min(
+                self._region.y,
+                image_height,
+            ),
+        )
+
+        width = max(
+            0,
+            min(
+                self._region.width,
+                image_width - x,
+            ),
+        )
+        height = max(
+            0,
+            min(
+                self._region.height,
+                image_height - y,
+            ),
+        )
+
+        return ChartRegion(
+            x=x,
+            y=y,
+            width=width,
+            height=height,
         )
 
 
@@ -113,9 +363,6 @@ class PocketOptionRuntimeFactory:
     ) -> AnalysisRuntimeService:
         """
         Crea el runtime principal para la GUI.
-
-        Si capture_service no se entrega, crea un CaptureService real
-        configurado para buscar la ventana de Pocket Option.
         """
 
         resolved_capture_service = (
@@ -144,13 +391,11 @@ class PocketOptionRuntimeFactory:
         """
         Crea el servicio real de captura para Pocket Option.
 
-        Orden actual esperado por CaptureService:
-        - window_title
-        - window_reader compatible con read()
-        - capture_adapter
-        - chart_region
-        - frame_factory
-        - frame_buffer
+        Wiring correcto:
+        - RuntimeWindowFinder localiza una ventana con hwnd.
+        - RuntimeWindowReader lee coordenadas completas usando hwnd.
+        - MSSCaptureAdapter captura la región de pantalla.
+        - FixedChartRegionExtractor recorta el gráfico.
         """
 
         resolved_chart_region = (
@@ -159,15 +404,21 @@ class PocketOptionRuntimeFactory:
             else PocketOptionRuntimeFactory.DEFAULT_CHART_REGION
         )
 
+        finder = RuntimeWindowFinder()
+        reader = RuntimeWindowReader()
+
+        region_extractor = FixedChartRegionExtractor(
+            region=resolved_chart_region,
+        )
+
         return CaptureService(
-            window_title,
-            WindowLocatorReaderAdapter(
-                Win32WindowLocator(),
-            ),
-            MSSCaptureAdapter(),
-            resolved_chart_region,
-            FrameFactory(),
-            FrameBuffer(
+            finder=finder,
+            reader=reader,
+            capture=MSSCaptureAdapter(),
+            region_extractor=region_extractor,
+            frame_factory=FrameFactory(),
+            frame_buffer=FrameBuffer(
                 max_size=20,
             ),
+            window_title=window_title,
         )
