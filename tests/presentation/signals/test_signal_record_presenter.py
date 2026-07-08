@@ -14,13 +14,14 @@ from pocket_option_analyzer.presentation.signals import (
 def _record(
     direction: SignalDirection,
     strength: SignalStrength,
+    reason: str = "Strategy conditions confirmed.",
 ) -> SignalRecord:
 
     return SignalRecord(
         signal=MarketSignal(
             direction=direction,
             strength=strength,
-            reason="Strategy conditions confirmed.",
+            reason=reason,
         ),
         created_at=datetime(
             2026,
@@ -101,3 +102,32 @@ def test_presenter_formats_low_strength_signal() -> None:
     )
 
     assert view_model.strength_label == "BAJA"
+
+
+def test_presenter_formats_strategy_diagnostics_in_multiple_lines() -> None:
+
+    presenter = SignalRecordPresenter()
+
+    reason = (
+        "OTC Precision 10S conditions were not fully confirmed. "
+        "CALL failed: trend is not bullish, EMA separation is insufficient. "
+        "PUT failed: trend is not bearish, stochastic did not cross down."
+    )
+
+    view_model = presenter.present(
+        record=_record(
+            direction=SignalDirection.NONE,
+            strength=SignalStrength.NONE,
+            reason=reason,
+        ),
+    )
+
+    assert view_model.reason == (
+        "OTC Precision 10S conditions were not fully confirmed.\n\n"
+        "CALL failed:\n"
+        "  - trend is not bullish\n"
+        "  - EMA separation is insufficient\n\n"
+        "PUT failed:\n"
+        "  - trend is not bearish\n"
+        "  - stochastic did not cross down"
+    )

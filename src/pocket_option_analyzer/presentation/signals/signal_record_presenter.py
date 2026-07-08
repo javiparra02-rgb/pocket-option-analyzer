@@ -32,7 +32,9 @@ class SignalRecordPresenter:
             strength_label=self._strength_label(
                 strength=record.signal.strength,
             ),
-            reason=record.signal.reason,
+            reason=self._format_reason(
+                reason=record.signal.reason,
+            ),
             source=record.source,
             created_at_label=record.created_at.strftime(
                 "%Y-%m-%d %H:%M:%S",
@@ -84,3 +86,59 @@ class SignalRecordPresenter:
             return "signal-put"
 
         return "signal-neutral"
+
+    def _format_reason(
+        self,
+        reason: str,
+    ) -> str:
+        """
+        Formatea diagnósticos largos de estrategia para la GUI.
+
+        Si el texto no tiene el formato CALL/PUT diagnostics,
+        se devuelve sin modificar.
+        """
+
+        if (
+            "CALL failed:" not in reason
+            or "PUT failed:" not in reason
+        ):
+            return reason
+
+        prefix, call_and_put_text = reason.split(
+            "CALL failed:",
+            1,
+        )
+
+        call_text, put_text = call_and_put_text.split(
+            "PUT failed:",
+            1,
+        )
+
+        return (
+            f"{prefix.strip()}\n\n"
+            "CALL failed:\n"
+            f"{self._format_failure_items(call_text)}\n\n"
+            "PUT failed:\n"
+            f"{self._format_failure_items(put_text)}"
+        )
+
+    def _format_failure_items(
+        self,
+        text: str,
+    ) -> str:
+
+        cleaned_text = text.strip().strip(".")
+
+        if cleaned_text == "none":
+            return "  - none"
+
+        failures = [
+            failure.strip()
+            for failure in cleaned_text.split(",")
+            if failure.strip()
+        ]
+
+        return "\n".join(
+            f"  - {failure}"
+            for failure in failures
+        )
