@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Protocol
 
-from PySide6.QtCore import QThread
+from PySide6.QtCore import QObject, QThread, Slot
 
 from pocket_option_analyzer.application.runtime import (
     AnalysisRuntimeService,
@@ -24,11 +24,8 @@ class WorkerLike(Protocol):
     """
 
     record_ready: object
-
     error_occurred: object
-
     running_changed: object
-
     finished: object
 
     @property
@@ -62,7 +59,6 @@ class ThreadLike(Protocol):
     """
 
     started: object
-
     finished: object
 
     def start(self) -> None:
@@ -77,20 +73,15 @@ class ThreadLike(Protocol):
 
 
 WorkerFactory = Callable[[AnalysisRuntimeService], WorkerLike]
-
 ThreadFactory = Callable[[], ThreadLike]
 
 
-class MainWindowController:
+class MainWindowController(QObject):
     """
     Controlador de la ventana principal.
 
-    Conecta:
-    - MainWindow
-    - AnalysisRuntimeService
-    - SignalRecordPresenter
-    - AnalysisWorker
-    - QThread
+    Hereda de QObject para que las señales emitidas desde AnalysisWorker
+    puedan ser entregadas correctamente al hilo principal de Qt.
 
     No analiza mercado directamente.
     No captura pantalla directamente.
@@ -107,6 +98,8 @@ class MainWindowController:
         thread_factory: ThreadFactory | None = None,
         worker_interval_seconds: float = 1.0,
     ) -> None:
+        super().__init__()
+
         self._runtime_service = runtime_service
         self._presenter = presenter or SignalRecordPresenter()
         self._worker_interval_seconds = worker_interval_seconds
@@ -136,6 +129,9 @@ class MainWindowController:
     ) -> None:
         """
         Inicia el análisis continuo en un worker/thread.
+
+        Las señales del worker vuelven al controlador, que vive en el hilo
+        principal de Qt, evitando modificar la GUI desde el hilo secundario.
         """
 
         if self._worker is not None and self._worker.is_running:
@@ -167,7 +163,7 @@ class MainWindowController:
             self._handle_error_occurred,
         )
         worker.running_changed.connect(
-            self._window.set_running_state,
+            self._handle_running_changed,
         )
         worker.finished.connect(
             thread.quit,
@@ -250,7 +246,7 @@ class MainWindowController:
         )
 
         return record
-    
+
     def _prepare_window_for_capture(
         self,
     ) -> None:
@@ -291,6 +287,7 @@ class MainWindowController:
             interval_seconds=self._worker_interval_seconds,
         )
 
+    @Slot(object)
     def _handle_record_ready(
         self,
         record: SignalRecord,
@@ -304,6 +301,7 @@ class MainWindowController:
             view_model=view_model,
         )
 
+    @Slot(str)
     def _handle_error_occurred(
         self,
         message: str,
@@ -316,6 +314,17 @@ class MainWindowController:
             is_running=False,
         )
 
+    @Slot(bool)
+    def _handle_running_changed(
+        self,
+        is_running: bool,
+    ) -> None:
+
+        self._window.set_running_state(
+            is_running=is_running,
+        )
+
+    @Slot()
     def _handle_worker_finished(
         self,
     ) -> None:
@@ -324,6 +333,7 @@ class MainWindowController:
             is_running=False,
         )
 
+    @Slot()
     def _handle_thread_finished(
         self,
     ) -> None:

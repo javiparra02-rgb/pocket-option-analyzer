@@ -385,3 +385,34 @@ def test_controller_run_once_hides_and_restores_window_during_capture() -> None:
     assert window.hide_for_capture_calls == 1
     assert window.show_after_capture_calls == 1
     assert len(window.view_models) == 1
+
+
+def test_controller_receives_worker_running_state_through_controller_slot() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    worker = FakeWorker(
+        auto_finish=False,
+    )
+    thread = FakeThread()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window=window,
+        worker_factory=lambda runtime_service: worker,
+        thread_factory=lambda: thread,
+    )
+
+    controller.start()
+
+    assert window.running_states == [
+        False,
+        True,
+    ]
+
+    worker.running_changed.emit(
+        False,
+    )
+
+    assert window.running_states[-1] is False
