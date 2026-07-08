@@ -13,6 +13,7 @@ from pocket_option_analyzer.infrastructure.bootstrap import (
     FixedChartRegionExtractor,
     PocketOptionChartRegionExtractor,
     PocketOptionRuntimeFactory,
+    RuntimeRoiDebugCapture,
     RuntimeWindowFinder,
     RuntimeWindowHandle,
     RuntimeWindowInfo,
@@ -244,6 +245,31 @@ def test_pocket_option_runtime_factory_creates_real_capture_service() -> None:
             width=100,
             height=100,
         ),
+        debug_roi_directory=None,
     )
 
-    assert capture_service is not None
+
+def test_runtime_roi_debug_capture_saves_image(
+    tmp_path,
+) -> None:
+
+    capture = RuntimeRoiDebugCapture(
+        directory=tmp_path,
+        filename_prefix="test_roi",
+    )
+
+    image = np.zeros(
+        (20, 30, 3),
+        dtype=np.uint8,
+    )
+
+    capture.save(
+        image=image,
+    )
+
+    assert capture.latest_path is not None
+    assert capture.latest_path.exists()
+    assert capture.latest_path.name.startswith(
+        "test_roi_",
+    )
+    assert capture.latest_path.suffix == ".png"

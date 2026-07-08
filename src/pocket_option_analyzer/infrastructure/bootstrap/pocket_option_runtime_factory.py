@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
+import cv2
+import numpy as np
+
 import ctypes
 from collections.abc import Callable, Iterable
 from ctypes import wintypes
@@ -382,6 +387,59 @@ class PocketOptionChartRegionExtractor:
         )
 
 
+class RuntimeRoiDebugCapture:
+    """
+    Guarda el ROI real que será analizado por el sistema.
+
+    Esto permite depurar:
+    - si el recorte del gráfico es correcto
+    - si las velas llegan visibles al detector
+    - si la GUI está tapando parte del gráfico
+    """
+
+    def __init__(
+        self,
+        directory: Path = Path("debug") / "runtime_roi",
+        filename_prefix: str = "roi",
+    ) -> None:
+        self._directory = directory
+        self._filename_prefix = filename_prefix
+        self._latest_path: Path | None = None
+
+    @property
+    def latest_path(self) -> Path | None:
+        return self._latest_path
+
+    def save(
+        self,
+        image: np.ndarray,
+    ) -> None:
+        self._directory.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        timestamp = datetime.now(
+            tz=timezone.utc,
+        ).strftime(
+            "%Y%m%d_%H%M%S_%f",
+        )
+
+        file_path = self._directory / f"{self._filename_prefix}_{timestamp}.png"
+
+        success = cv2.imwrite(
+            str(file_path),
+            image,
+        )
+
+        if not success:
+            raise RuntimeError(
+                f"Could not save runtime ROI debug image: {file_path}"
+            )
+
+        self._latest_path = file_path
+
+
 class PocketOptionRuntimeFactory:
     """
     Construye el runtime real de análisis para Pocket Option.
@@ -408,6 +466,7 @@ class PocketOptionRuntimeFactory:
         window_title: str = DEFAULT_WINDOW_TITLE,
         chart_region: ChartRegion | None = None,
         interval_seconds: float = 1.0,
+        debug_roi_directory: Path | None = Path("debug") / "runtime_roi",
     ) -> AnalysisRuntimeService:
         """
         Crea el runtime principal para la GUI.
@@ -419,6 +478,7 @@ class PocketOptionRuntimeFactory:
             else PocketOptionRuntimeFactory.create_capture_service(
                 window_title=window_title,
                 chart_region=chart_region,
+                debug_roi_directory=debug_roi_directory,
             )
         )
 
@@ -435,6 +495,7 @@ class PocketOptionRuntimeFactory:
     def create_capture_service(
         window_title: str = DEFAULT_WINDOW_TITLE,
         chart_region: ChartRegion | None = None,
+        debug_roi_directory: Path | None = Path("debug") / "runtime_roi",
     ) -> CaptureService:
         """
         Crea el servicio real de captura para Pocket Option.
@@ -451,6 +512,14 @@ class PocketOptionRuntimeFactory:
             else PocketOptionChartRegionExtractor()
         )
 
+        dataset_capture = (
+            RuntimeRoiDebugCapture(
+                directory=debug_roi_directory,
+            )
+            if debug_roi_directory is not None
+            else None
+        )
+
         return CaptureService(
             finder=finder,
             reader=reader,
@@ -460,5 +529,6 @@ class PocketOptionRuntimeFactory:
             frame_buffer=FrameBuffer(
                 max_size=20,
             ),
+            dataset_capture=dataset_capture,
             window_title=window_title,
         )
