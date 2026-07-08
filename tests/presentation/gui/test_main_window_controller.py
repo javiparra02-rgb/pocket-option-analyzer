@@ -42,9 +42,11 @@ class FakeRuntimeService:
     def __init__(
         self,
         record: SignalRecord | None = None,
+        error: Exception | None = None,
     ) -> None:
         self._is_running = False
         self.record = record
+        self.error = error
         self.run_once_calls = 0
 
     @property
@@ -53,6 +55,10 @@ class FakeRuntimeService:
 
     def run_once(self) -> SignalRecord | None:
         self.run_once_calls += 1
+
+        if self.error is not None:
+            raise self.error
+
         return self.record
 
 
@@ -143,6 +149,7 @@ class FakeWindow:
     def __init__(self) -> None:
         self.running_states: list[bool] = []
         self.view_models = []
+        self.error_messages: list[str | None] = []
 
     def set_running_state(
         self,
@@ -155,6 +162,12 @@ class FakeWindow:
         view_model,
     ) -> None:
         self.view_models.append(view_model)
+
+    def set_error_message(
+        self,
+        message: str | None,
+    ) -> None:
+        self.error_messages.append(message)
 
 
 def _record() -> SignalRecord:
@@ -319,3 +332,27 @@ def test_controller_ignores_start_when_worker_is_already_running() -> None:
 
     assert thread.start_calls == 1
     assert worker.run_calls == 1
+
+
+def test_controller_run_once_displays_error_when_runtime_fails() -> None:
+
+    runtime = FakeRuntimeService(
+        error=RuntimeError("capture failed"),
+    )
+    window = FakeWindow()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window=window,
+    )
+
+    record = controller.run_once()
+
+    assert record is None
+    assert runtime.run_once_calls == 1
+    assert window.error_messages == [
+        None,
+        "capture failed",
+    ]
+    assert window.running_states[-1] is False

@@ -48,6 +48,9 @@ class MainWindow(QMainWindow):
         self._status_label = QLabel(
             "Estado: detenido",
         )
+        self._error_label = QLabel(
+            "Error: -",
+        )
         self._direction_label = QLabel(
             "Señal: SIN SEÑAL",
         )
@@ -93,6 +96,10 @@ class MainWindow(QMainWindow):
         return self._status_label.text()
 
     @property
+    def error_text(self) -> str:
+        return self._error_label.text()
+
+    @property
     def direction_text(self) -> str:
         return self._direction_label.text()
 
@@ -130,6 +137,24 @@ class MainWindow(QMainWindow):
             "Estado: detenido",
         )
 
+    def set_error_message(
+        self,
+        message: str | None,
+    ) -> None:
+        """
+        Muestra o limpia el mensaje de error visible.
+        """
+
+        if message:
+            self._error_label.setText(
+                f"Error: {message}",
+            )
+            return
+
+        self._error_label.setText(
+            "Error: -",
+        )
+
     def update_signal(
         self,
         view_model: SignalRecordViewModel,
@@ -160,6 +185,9 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(
             self._status_label,
+        )
+        layout.addWidget(
+            self._error_label,
         )
         layout.addWidget(
             self._direction_label,

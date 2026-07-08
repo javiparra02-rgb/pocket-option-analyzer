@@ -59,6 +59,7 @@ def test_main_window_has_initial_state() -> None:
     assert window.reason_text == "Motivo: -"
     assert window.source_text == "Origen: -"
     assert window.created_at_text == "Fecha: -"
+    assert window.error_text == "Error: -"
 
 
 def test_main_window_updates_running_state() -> None:
@@ -159,3 +160,22 @@ def test_main_window_calls_run_once_callback_when_run_once_button_is_clicked() -
     ).click()
 
     assert run_once_callback.calls == 1
+
+
+def test_main_window_displays_error_message() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window.set_error_message(
+        "capture failed",
+    )
+
+    assert window.error_text == "Error: capture failed"
+
+    window.set_error_message(
+        None,
+    )
+
+    assert window.error_text == "Error: -"

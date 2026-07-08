@@ -136,12 +136,14 @@ class MainWindowController:
     ) -> None:
         """
         Inicia el análisis continuo en un worker/thread.
-
-        Esto evita bloquear la GUI.
         """
 
         if self._worker is not None and self._worker.is_running:
             return
+
+        self._window.set_error_message(
+            None,
+        )
 
         worker = self._worker_factory(
             self._runtime_service,
@@ -216,7 +218,17 @@ class MainWindowController:
         Ejecuta un análisis único y muestra la señal si existe.
         """
 
-        record = self._runtime_service.run_once()
+        self._window.set_error_message(
+            None,
+        )
+
+        try:
+            record = self._runtime_service.run_once()
+        except Exception as error:
+            self._handle_error_occurred(
+                message=str(error),
+            )
+            return None
 
         if record is None:
             return None
@@ -259,6 +271,9 @@ class MainWindowController:
         message: str,
     ) -> None:
 
+        self._window.set_error_message(
+            message,
+        )
         self._window.set_running_state(
             is_running=False,
         )
