@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtGui import QTextOption
+from PySide6.QtGui import QTextCursor, QTextOption
 from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
@@ -171,6 +171,10 @@ class MainWindow(QMainWindow):
     @property
     def run_once_button_enabled(self) -> bool:
         return self._run_once_button.isEnabled()
+    
+    @property
+    def reason_scroll_position(self) -> int:
+        return self._reason_text.verticalScrollBar().value()
 
     def set_running_state(
         self,
@@ -227,6 +231,12 @@ class MainWindow(QMainWindow):
         )
         self._reason_text.setPlainText(
             f"Motivo: {view_model.reason}",
+        )
+        self._reason_text.moveCursor(
+            QTextCursor.MoveOperation.Start,
+        )
+        self._reason_text.verticalScrollBar().setValue(
+            0,
         )
         self._source_label.setText(
             f"Origen: {view_model.source}",

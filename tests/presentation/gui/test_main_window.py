@@ -333,3 +333,34 @@ def test_main_window_enables_start_and_run_once_when_stopped() -> None:
     assert window.start_button_enabled is True
     assert window.stop_button_enabled is False
     assert window.run_once_button_enabled is True
+
+
+def test_main_window_keeps_long_reason_scrolled_to_top() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    long_reason = " ".join(
+        f"condition-{index}"
+        for index in range(100)
+    )
+
+    view_model = SignalRecordViewModel(
+        direction_label="SIN SEÑAL",
+        strength_label="NINGUNA",
+        reason=long_reason,
+        source="captured_frame_visual_analysis",
+        created_at_label="2026-07-08 14:43:47",
+        is_actionable=False,
+        css_class="signal-neutral",
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert window.reason_text.startswith(
+        "Motivo: condition-0"
+    )
+    assert window.reason_scroll_position == 0
