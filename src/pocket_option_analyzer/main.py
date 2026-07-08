@@ -5,6 +5,9 @@ from collections.abc import Sequence
 
 from PySide6.QtWidgets import QApplication
 
+from pocket_option_analyzer.infrastructure.bootstrap import (
+    PocketOptionRuntimeFactory,
+)
 from pocket_option_analyzer.presentation.gui import (
     GuiApplication,
     MainWindowController,
@@ -13,10 +16,9 @@ from pocket_option_analyzer.presentation.gui import (
 
 class NoopRuntimeService:
     """
-    Runtime temporal para abrir la GUI sin capturar todavía.
+    Runtime temporal para pruebas.
 
-    Será reemplazado por el runtime real construido con SignalPipelineFactory
-    cuando conectemos CaptureService.
+    La aplicación real usa PocketOptionRuntimeFactory.
     """
 
     @property
@@ -41,8 +43,6 @@ def ensure_qapplication(
 ) -> QApplication:
     """
     Garantiza que QApplication exista antes de crear cualquier QWidget.
-
-    En PySide6, ningún QWidget puede construirse antes de QApplication.
     """
 
     app = QApplication.instance()
@@ -61,19 +61,27 @@ def ensure_qapplication(
 
 def build_gui_application(
     argv: Sequence[str] | None = None,
+    runtime_service=None,
 ) -> GuiApplication:
     """
     Construye la aplicación gráfica.
 
-    Primero crea QApplication y luego crea el controlador/ventana.
+    Si no se entrega runtime_service, construye el runtime real para
+    capturar y analizar Pocket Option.
     """
 
     ensure_qapplication(
         argv=argv,
     )
 
+    resolved_runtime_service = (
+        runtime_service
+        if runtime_service is not None
+        else PocketOptionRuntimeFactory.create_runtime_service()
+    )
+
     controller = MainWindowController(
-        runtime_service=NoopRuntimeService(),
+        runtime_service=resolved_runtime_service,
     )
 
     return GuiApplication(

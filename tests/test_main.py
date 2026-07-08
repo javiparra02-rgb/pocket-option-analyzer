@@ -28,12 +28,13 @@ def test_ensure_qapplication_returns_qapplication_instance() -> None:
     assert app is QApplication.instance()
 
 
-def test_build_gui_application_returns_application() -> None:
+def test_build_gui_application_returns_application_with_injected_runtime() -> None:
 
     application = build_gui_application(
         argv=[
             "test",
         ],
+        runtime_service=NoopRuntimeService(),
     )
 
     assert application is not None
