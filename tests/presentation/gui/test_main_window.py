@@ -179,3 +179,34 @@ def test_main_window_displays_error_message() -> None:
     )
 
     assert window.error_text == "Error: -"
+
+
+def test_main_window_accepts_long_reason_without_losing_text() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    long_reason = (
+        "OTC Precision 10S conditions were not fully confirmed. "
+        "CALL failed: EMA alignment is not bullish, "
+        "EMA separation is insufficient, RSI is not in CALL range. "
+        "PUT failed: trend is not bearish, EMA separation is insufficient, "
+        "stochastic did not cross down."
+    )
+
+    view_model = SignalRecordViewModel(
+        direction_label="SIN SEÑAL",
+        strength_label="NINGUNA",
+        reason=long_reason,
+        source="captured_frame_visual_analysis",
+        created_at_label="2026-07-08 14:19:29",
+        is_actionable=False,
+        css_class="signal-neutral",
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert window.reason_text == f"Motivo: {long_reason}"

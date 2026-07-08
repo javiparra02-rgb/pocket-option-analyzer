@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from PySide6.QtGui import QTextOption
 from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QPushButton,
+    QSizePolicy,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -44,6 +47,10 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(
             "Pocket Option Analyzer",
         )
+        self.resize(
+            720,
+            420,
+        )
 
         self._status_label = QLabel(
             "Estado: detenido",
@@ -57,9 +64,25 @@ class MainWindow(QMainWindow):
         self._strength_label = QLabel(
             "Fuerza: NINGUNA",
         )
-        self._reason_label = QLabel(
+
+        self._reason_text = QTextEdit()
+        self._reason_text.setReadOnly(
+            True,
+        )
+        self._reason_text.setPlainText(
             "Motivo: -",
         )
+        self._reason_text.setFixedHeight(
+            100,
+        )
+        self._reason_text.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Fixed,
+        )
+        self._reason_text.setWordWrapMode(
+            QTextOption.WrapMode.WordWrap,
+        )
+
         self._source_label = QLabel(
             "Origen: -",
         )
@@ -109,7 +132,7 @@ class MainWindow(QMainWindow):
 
     @property
     def reason_text(self) -> str:
-        return self._reason_label.text()
+        return self._reason_text.toPlainText()
 
     @property
     def source_text(self) -> str:
@@ -169,7 +192,7 @@ class MainWindow(QMainWindow):
         self._strength_label.setText(
             f"Fuerza: {view_model.strength_label}",
         )
-        self._reason_label.setText(
+        self._reason_text.setPlainText(
             f"Motivo: {view_model.reason}",
         )
         self._source_label.setText(
@@ -196,7 +219,7 @@ class MainWindow(QMainWindow):
             self._strength_label,
         )
         layout.addWidget(
-            self._reason_label,
+            self._reason_text,
         )
         layout.addWidget(
             self._source_label,
