@@ -113,6 +113,9 @@ class MainWindow(QMainWindow):
 
         self._setup_layout()
         self._connect_events()
+        self._apply_signal_style(
+            css_class="signal-neutral",
+        )
 
     @property
     def status_text(self) -> str:
@@ -141,6 +144,18 @@ class MainWindow(QMainWindow):
     @property
     def created_at_text(self) -> str:
         return self._created_at_label.text()
+
+    @property
+    def direction_style(self) -> str:
+        return self._direction_label.styleSheet()
+
+    @property
+    def strength_style(self) -> str:
+        return self._strength_label.styleSheet()
+
+    @property
+    def reason_style(self) -> str:
+        return self._reason_text.styleSheet()
 
     def set_running_state(
         self,
@@ -201,6 +216,9 @@ class MainWindow(QMainWindow):
         self._created_at_label.setText(
             f"Fecha: {view_model.created_at_label}",
         )
+        self._apply_signal_style(
+            css_class=view_model.css_class,
+        )
 
     def _setup_layout(self) -> None:
         central_widget = QWidget()
@@ -254,6 +272,51 @@ class MainWindow(QMainWindow):
         )
         self._run_once_button.clicked.connect(
             self._handle_run_once_clicked,
+        )
+
+    def _apply_signal_style(
+        self,
+        css_class: str,
+    ) -> None:
+
+        if css_class == "signal-call":
+            label_style = (
+                "font-weight: bold; "
+                "color: #0f9d58;"
+            )
+            reason_style = (
+                "border: 1px solid #0f9d58; "
+                "background-color: #eefaf3;"
+            )
+
+        elif css_class == "signal-put":
+            label_style = (
+                "font-weight: bold; "
+                "color: #d93025;"
+            )
+            reason_style = (
+                "border: 1px solid #d93025; "
+                "background-color: #fff0f0;"
+            )
+
+        else:
+            label_style = (
+                "font-weight: bold; "
+                "color: #5f6368;"
+            )
+            reason_style = (
+                "border: 1px solid #9aa0a6; "
+                "background-color: #f8f9fa;"
+            )
+
+        self._direction_label.setStyleSheet(
+            label_style,
+        )
+        self._strength_label.setStyleSheet(
+            label_style,
+        )
+        self._reason_text.setStyleSheet(
+            reason_style,
         )
 
     def _handle_start_clicked(self) -> None:

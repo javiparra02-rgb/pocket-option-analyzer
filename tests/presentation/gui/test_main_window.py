@@ -210,3 +210,78 @@ def test_main_window_accepts_long_reason_without_losing_text() -> None:
     )
 
     assert window.reason_text == f"Motivo: {long_reason}"
+
+
+def test_main_window_applies_call_style() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="CALL",
+        strength_label="ALTA",
+        reason="CALL setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=True,
+        css_class="signal-call",
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert "#0f9d58" in window.direction_style
+    assert "#0f9d58" in window.strength_style
+    assert "#0f9d58" in window.reason_style
+
+
+def test_main_window_applies_put_style() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="PUT",
+        strength_label="ALTA",
+        reason="PUT setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=True,
+        css_class="signal-put",
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert "#d93025" in window.direction_style
+    assert "#d93025" in window.strength_style
+    assert "#d93025" in window.reason_style
+
+
+def test_main_window_applies_neutral_style() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="SIN SEÑAL",
+        strength_label="NINGUNA",
+        reason="No setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=False,
+        css_class="signal-neutral",
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert "#5f6368" in window.direction_style
+    assert "#5f6368" in window.strength_style
+    assert "#9aa0a6" in window.reason_style    
