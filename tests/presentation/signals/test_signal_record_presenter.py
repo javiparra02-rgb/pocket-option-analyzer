@@ -140,7 +140,8 @@ def test_presenter_extracts_visual_diagnostics_from_reason() -> None:
     reason = (
         "[visual_diagnostics] Diagnóstico visual: Tendencia: BEARISH | "
         "Velas: 24 | Últimas: BEARISH, BULLISH, BULLISH | "
-        "Cerradas: BEARISH, BEARISH, BULLISH\n"
+        "Cerradas: BEARISH, BEARISH, BULLISH | "
+        "Contexto: BEARISH_PULLBACK | Entrada: ESPERAR\n"
         "OTC Precision 10S conditions were not fully confirmed. "
         "CALL failed: trend is not bullish. "
         "PUT failed: recent closed candle is not bearish."
@@ -158,6 +159,7 @@ def test_presenter_extracts_visual_diagnostics_from_reason() -> None:
         view_model.visual_diagnostics_label
         == "Diagnóstico visual: Tendencia: BEARISH | "
         "Velas: 24 | Últimas: BEARISH, BULLISH, BULLISH | "
-        "Cerradas: BEARISH, BEARISH, BULLISH"
+        "Cerradas: BEARISH, BEARISH, BULLISH | "
+        "Contexto: BEARISH_PULLBACK | Entrada: ESPERAR"
     )
     assert "[visual_diagnostics]" not in view_model.reason

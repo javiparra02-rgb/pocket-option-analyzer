@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from pocket_option_analyzer.application.market import (
+    VisualEntryContextAnalyzer,
     VisualIndicatorSnapshotBuilder,
 )
 from pocket_option_analyzer.application.signals.strategy_signal_generator import (
@@ -36,11 +37,17 @@ class VisualStrategySignalAnalysisPipeline:
         indicator_snapshot_builder: VisualIndicatorSnapshotBuilder,
         signal_generator: StrategySignalGenerator,
         profile: StrategyProfile,
+        entry_context_analyzer: VisualEntryContextAnalyzer | None = None,
     ) -> None:
         self._market_analysis_pipeline = market_analysis_pipeline
         self._indicator_snapshot_builder = indicator_snapshot_builder
         self._signal_generator = signal_generator
         self._profile = profile
+        self._entry_context_analyzer = (
+            entry_context_analyzer
+            if entry_context_analyzer is not None
+            else VisualEntryContextAnalyzer()
+        )
 
     def analyze(
         self,
@@ -141,12 +148,18 @@ class VisualStrategySignalAnalysisPipeline:
             recent_closed_candles,
         )
 
+        entry_context = self._entry_context_analyzer.analyze(
+            analysis=market_analysis,
+        )
+
         return (
             "[visual_diagnostics] "
             f"Diagnóstico visual: Tendencia: {market_analysis.trend.name} | "
             f"Velas: {len(market_analysis.series)} | "
             f"Últimas: {latest_text} | "
-            f"Cerradas: {recent_closed_text}"
+            f"Cerradas: {recent_closed_text} | "
+            f"Contexto: {entry_context.context_label} | "
+            f"Entrada: {entry_context.entry_state_label}"
         )
 
 
