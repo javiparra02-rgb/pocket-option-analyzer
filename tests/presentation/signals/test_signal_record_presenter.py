@@ -163,3 +163,39 @@ def test_presenter_extracts_visual_diagnostics_from_reason() -> None:
         "Contexto: BEARISH_PULLBACK | Entrada: ESPERAR"
     )
     assert "[visual_diagnostics]" not in view_model.reason
+
+
+def test_presenter_hides_visual_diagnostics_from_reason_when_indicators_are_missing() -> None:
+
+    presenter = SignalRecordPresenter()
+
+    reason = (
+        "[visual_diagnostics] Diagnóstico visual: Tendencia: BEARISH | "
+        "Velas: 9 | Últimas: BEARISH, BEARISH, BEARISH | "
+        "Cerradas: BEARISH, BEARISH, BEARISH | "
+        "Contexto: BEARISH_CONTINUATION | Entrada: BUSCAR_PUT\n"
+        "Not enough visual candles to calculate indicators. "
+        "Detected candles: 9. Minimum required: 13."
+    )
+
+    view_model = presenter.present(
+        record=_record(
+            direction=SignalDirection.NONE,
+            strength=SignalStrength.NONE,
+            reason=reason,
+        ),
+    )
+
+    assert (
+        view_model.visual_diagnostics_label
+        == "Diagnóstico visual: Tendencia: BEARISH | "
+        "Velas: 9 | Últimas: BEARISH, BEARISH, BEARISH | "
+        "Cerradas: BEARISH, BEARISH, BEARISH | "
+        "Contexto: BEARISH_CONTINUATION | Entrada: BUSCAR_PUT"
+    )
+    assert "[visual_diagnostics]" not in view_model.reason
+    assert (
+        view_model.reason
+        == "Not enough visual candles to calculate indicators. "
+        "Detected candles: 9. Minimum required: 13."
+    )

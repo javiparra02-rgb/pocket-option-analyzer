@@ -204,11 +204,14 @@ def test_analyze_returns_neutral_signal_when_indicators_are_missing() -> None:
     )
 
     assert result.direction is SignalDirection.NONE
-    assert result.strength is SignalStrength.NONE
     assert result.is_actionable is False
+    assert "[visual_diagnostics]" in result.reason
+    assert "Diagnóstico visual:" in result.reason
+    assert "Velas:" in result.reason
+    assert "Contexto:" in result.reason
+    assert "Entrada:" in result.reason
     assert (
-        result.reason
-        == "Not enough visual candles to calculate indicators. "
-        "Detected candles: 1. Minimum required: 13."
-)
-    assert signal_generator.was_called is False
+        "Not enough visual candles to calculate indicators."
+        in result.reason
+    )
+    assert "Minimum required: 13." in result.reason

@@ -56,12 +56,16 @@ class VisualStrategySignalAnalysisPipeline:
         """
         Analiza una imagen y devuelve una señal de mercado.
 
-        Si no hay suficientes velas para calcular indicadores,
-        devuelve una señal neutral con diagnóstico.
+        Aunque falten velas para calcular indicadores, devuelve también
+        diagnóstico visual para entender qué está leyendo el sistema.
         """
 
         market_analysis = self._market_analysis_pipeline.analyze(
             image=image,
+        )
+
+        visual_diagnostics_line = self._visual_diagnostics_line(
+            market_analysis,
         )
 
         indicators = self._indicator_snapshot_builder.build(
@@ -70,11 +74,16 @@ class VisualStrategySignalAnalysisPipeline:
         )
 
         if indicators is None:
+            not_enough_reason = self._not_enough_candles_reason(
+                detected_candles=len(
+                    market_analysis.series,
+                ),
+            )
+
             return MarketSignal.neutral(
-                reason=self._not_enough_candles_reason(
-                    detected_candles=len(
-                        market_analysis.series,
-                    ),
+                reason=(
+                    f"{visual_diagnostics_line}\n"
+                    f"{not_enough_reason}"
                 ),
             )
 
@@ -82,12 +91,13 @@ class VisualStrategySignalAnalysisPipeline:
             analysis=market_analysis,
             indicators=indicators,
         )
+        
 
         return MarketSignal(
             direction=signal.direction,
             strength=signal.strength,
             reason=(
-                f"{self._visual_diagnostics_line(market_analysis)}\n"
+                f"{visual_diagnostics_line}\n"
                 f"{signal.reason}"
             ),
         )
@@ -121,7 +131,7 @@ class VisualStrategySignalAnalysisPipeline:
             rsi_required,
             stochastic_required,
         )
-    
+
     def _visual_diagnostics_line(
         self,
         market_analysis,
@@ -161,7 +171,6 @@ class VisualStrategySignalAnalysisPipeline:
             f"Contexto: {entry_context.context_label} | "
             f"Entrada: {entry_context.entry_state_label}"
         )
-
 
     def _candle_types_text(
         self,
