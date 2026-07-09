@@ -235,19 +235,6 @@ def test_pocket_option_chart_region_extractor_returns_main_chart_area() -> None:
     assert region.height == 585
 
 
-def test_pocket_option_runtime_factory_creates_real_capture_service() -> None:
-
-    capture_service = PocketOptionRuntimeFactory.create_capture_service(
-        window_title="Pocket Option",
-        chart_region=ChartRegion(
-            x=0,
-            y=0,
-            width=100,
-            height=100,
-        ),
-        debug_roi_directory=None,
-    )
-
 
 def test_runtime_roi_debug_capture_saves_image(
     tmp_path,
@@ -273,3 +260,36 @@ def test_runtime_roi_debug_capture_saves_image(
         "test_roi_",
     )
     assert capture.latest_path.suffix == ".png"
+
+
+def test_pocket_option_runtime_factory_disables_roi_debug_by_default() -> None:
+
+    capture_service = PocketOptionRuntimeFactory.create_capture_service(
+        window_title="Pocket Option",
+        chart_region=ChartRegion(
+            x=0,
+            y=0,
+            width=100,
+            height=100,
+        ),
+    )
+
+    assert capture_service is not None
+
+    
+def test_pocket_option_runtime_factory_can_enable_roi_debug(
+    tmp_path,
+) -> None:
+
+    capture_service = PocketOptionRuntimeFactory.create_capture_service(
+        window_title="Pocket Option",
+        chart_region=ChartRegion(
+            x=0,
+            y=0,
+            width=100,
+            height=100,
+        ),
+        debug_roi_directory=tmp_path,
+    )
+
+    assert capture_service is not None

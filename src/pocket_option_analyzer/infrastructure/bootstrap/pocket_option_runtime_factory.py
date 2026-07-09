@@ -466,7 +466,7 @@ class PocketOptionRuntimeFactory:
         window_title: str = DEFAULT_WINDOW_TITLE,
         chart_region: ChartRegion | None = None,
         interval_seconds: float = 1.0,
-        debug_roi_directory: Path | None = Path("debug") / "runtime_roi",
+        debug_roi_directory: Path | None = None,
     ) -> AnalysisRuntimeService:
         """
         Crea el runtime principal para la GUI.
@@ -501,7 +501,7 @@ class PocketOptionRuntimeFactory:
     def create_capture_service(
         window_title: str = DEFAULT_WINDOW_TITLE,
         chart_region: ChartRegion | None = None,
-        debug_roi_directory: Path | None = Path("debug") / "runtime_roi",
+        debug_roi_directory: Path | None = None,
     ) -> CaptureService:
         """
         Crea el servicio real de captura para Pocket Option.
