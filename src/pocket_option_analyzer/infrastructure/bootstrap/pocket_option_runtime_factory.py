@@ -332,17 +332,18 @@ class PocketOptionChartRegionExtractor:
 
     Excluye aproximadamente:
     - barra superior
-    - panel derecho de operación
-    - indicadores inferiores RSI/Stochastic
+    - una pequeña parte del panel derecho
+    - zona inferior no esencial
 
-    El objetivo es analizar principalmente la zona de velas.
+    El objetivo es capturar más contexto del gráfico sin incluir
+    demasiado panel lateral.
     """
 
     def __init__(
         self,
-        top_ratio: float = 0.11,
-        right_ratio: float = 0.15,
-        bottom_ratio: float = 0.24,
+        top_ratio: float = 0.07,
+        right_ratio: float = 0.06,
+        bottom_ratio: float = 0.14,
     ) -> None:
         self._top_ratio = top_ratio
         self._right_ratio = right_ratio
@@ -370,20 +371,17 @@ class PocketOptionChartRegionExtractor:
         width = image_width - right_margin
         height = image_height - y - bottom_margin
 
-        width = max(
-            0,
-            width,
-        )
-        height = max(
-            0,
-            height,
-        )
-
         return ChartRegion(
             x=x,
             y=y,
-            width=width,
-            height=height,
+            width=max(
+                0,
+                width,
+            ),
+            height=max(
+                0,
+                height,
+            ),
         )
 
 
