@@ -131,3 +131,31 @@ def test_presenter_formats_strategy_diagnostics_in_multiple_lines() -> None:
         "  - trend is not bearish\n"
         "  - stochastic did not cross down"
     )
+
+
+def test_presenter_extracts_visual_diagnostics_from_reason() -> None:
+
+    presenter = SignalRecordPresenter()
+
+    reason = (
+        "[visual_diagnostics] Diagnóstico visual: Tendencia: BEARISH | "
+        "Velas: 24 | Últimas: BEARISH, BULLISH, BEARISH\n"
+        "OTC Precision 10S conditions were not fully confirmed. "
+        "CALL failed: trend is not bullish. "
+        "PUT failed: recent candle is not bearish."
+    )
+
+    view_model = presenter.present(
+        record=_record(
+            direction=SignalDirection.NONE,
+            strength=SignalStrength.NONE,
+            reason=reason,
+        ),
+    )
+
+    assert (
+        view_model.visual_diagnostics_label
+        == "Diagnóstico visual: Tendencia: BEARISH | "
+        "Velas: 24 | Últimas: BEARISH, BULLISH, BEARISH"
+    )
+    assert "[visual_diagnostics]" not in view_model.reason

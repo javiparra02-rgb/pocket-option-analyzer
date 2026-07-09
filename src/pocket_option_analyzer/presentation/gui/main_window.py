@@ -108,6 +108,15 @@ class MainWindow(QMainWindow):
         self._strength_label = QLabel(
             "Fuerza: NINGUNA",
         )
+        self._visual_diagnostics_label = QLabel(
+            "Diagnóstico visual: -",
+        )
+        self._visual_diagnostics_label.setWordWrap(
+            True,
+        )
+        self._visual_diagnostics_label.setStyleSheet(
+            "color: #3c4043;"
+        )
 
         self._reason_text = QTextEdit()
         self._reason_text.setReadOnly(
@@ -266,6 +275,10 @@ class MainWindow(QMainWindow):
         )
 
         return item.text()
+    
+    @property
+    def visual_diagnostics_text(self) -> str:
+        return self._visual_diagnostics_label.text()
 
     def set_running_state(
         self,
@@ -339,6 +352,9 @@ class MainWindow(QMainWindow):
         self._strength_label.setText(
             f"Fuerza: {view_model.strength_label}",
         )
+        self._visual_diagnostics_label.setText(
+            view_model.visual_diagnostics_label,
+        )
         self._reason_text.setPlainText(
             f"Motivo: {view_model.reason}",
         )
@@ -379,6 +395,9 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(
             self._strength_label,
+        )
+        layout.addWidget(
+            self._visual_diagnostics_label,
         )
         layout.addWidget(
             self._reason_text,

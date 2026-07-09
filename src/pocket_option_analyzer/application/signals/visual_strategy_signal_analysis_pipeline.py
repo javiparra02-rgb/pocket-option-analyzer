@@ -71,9 +71,18 @@ class VisualStrategySignalAnalysisPipeline:
                 ),
             )
 
-        return self._signal_generator.generate(
+        signal = self._signal_generator.generate(
             analysis=market_analysis,
             indicators=indicators,
+        )
+
+        return MarketSignal(
+            direction=signal.direction,
+            strength=signal.strength,
+            reason=(
+                f"{self._visual_diagnostics_line(market_analysis)}\n"
+                f"{signal.reason}"
+            ),
         )
 
     def _not_enough_candles_reason(
@@ -104,4 +113,33 @@ class VisualStrategySignalAnalysisPipeline:
             ema_required,
             rsi_required,
             stochastic_required,
+        )
+    
+    def _visual_diagnostics_line(
+        self,
+        market_analysis,
+    ) -> str:
+
+        recent_candles = tuple(
+            market_analysis.series.candles[-3:],
+        )
+
+        recent_labels = [
+            candle.candle_type.name
+            for candle in recent_candles
+        ]
+
+        recent_text = (
+            ", ".join(
+                recent_labels,
+            )
+            if recent_labels
+            else "NONE"
+        )
+
+        return (
+            "[visual_diagnostics] "
+            f"Diagnóstico visual: Tendencia: {market_analysis.trend.name} | "
+            f"Velas: {len(market_analysis.series)} | "
+            f"Últimas: {recent_text}"
         )

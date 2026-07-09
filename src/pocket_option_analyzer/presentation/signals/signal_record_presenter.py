@@ -13,17 +13,18 @@ from pocket_option_analyzer.presentation.signals.signal_record_view_model import
 class SignalRecordPresenter:
     """
     Convierte SignalRecord en un ViewModel listo para la GUI.
-
-    No analiza mercado.
-    No genera señales.
-    No interactúa con Pocket Option.
-    Solo adapta datos del dominio a presentación.
     """
+
+    VISUAL_DIAGNOSTICS_PREFIX = "[visual_diagnostics]"
 
     def present(
         self,
         record: SignalRecord,
     ) -> SignalRecordViewModel:
+
+        clean_reason = self._remove_visual_diagnostics(
+            reason=record.signal.reason,
+        )
 
         return SignalRecordViewModel(
             direction_label=self._direction_label(
@@ -33,7 +34,7 @@ class SignalRecordPresenter:
                 strength=record.signal.strength,
             ),
             reason=self._format_reason(
-                reason=record.signal.reason,
+                reason=clean_reason,
             ),
             source=record.source,
             created_at_label=record.created_at.strftime(
@@ -42,6 +43,9 @@ class SignalRecordPresenter:
             is_actionable=record.is_actionable,
             css_class=self._css_class(
                 direction=record.signal.direction,
+            ),
+            visual_diagnostics_label=self._visual_diagnostics_label(
+                reason=record.signal.reason,
             ),
         )
 
@@ -87,15 +91,46 @@ class SignalRecordPresenter:
 
         return "signal-neutral"
 
+    def _visual_diagnostics_label(
+        self,
+        reason: str,
+    ) -> str:
+
+        for line in reason.splitlines():
+            if line.startswith(
+                self.VISUAL_DIAGNOSTICS_PREFIX,
+            ):
+                return line.replace(
+                    self.VISUAL_DIAGNOSTICS_PREFIX,
+                    "",
+                    1,
+                ).strip()
+
+        return "Diagnóstico visual: -"
+
+    def _remove_visual_diagnostics(
+        self,
+        reason: str,
+    ) -> str:
+
+        lines = [
+            line
+            for line in reason.splitlines()
+            if not line.startswith(
+                self.VISUAL_DIAGNOSTICS_PREFIX,
+            )
+        ]
+
+        return "\n".join(
+            lines,
+        ).strip()
+
     def _format_reason(
         self,
         reason: str,
     ) -> str:
         """
         Formatea diagnósticos largos de estrategia para la GUI.
-
-        Si el texto no tiene el formato CALL/PUT diagnostics,
-        se devuelve sin modificar.
         """
 
         if (

@@ -7,9 +7,6 @@ from dataclasses import dataclass
 class SignalRecordViewModel:
     """
     Modelo de presentación para mostrar una señal en la GUI.
-
-    Esta clase no contiene lógica de negocio.
-    Solo representa datos ya preparados para pantalla.
     """
 
     direction_label: str
@@ -25,3 +22,5 @@ class SignalRecordViewModel:
     is_actionable: bool
 
     css_class: str
+
+    visual_diagnostics_label: str = "Diagnóstico visual: -"
