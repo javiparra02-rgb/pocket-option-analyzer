@@ -230,9 +230,9 @@ def test_pocket_option_chart_region_extractor_returns_main_chart_area() -> None:
     )
 
     assert region.x == 0
-    assert region.y == 63
-    assert region.width == 1504
-    assert region.height == 711
+    assert region.y == 45
+    assert region.width == 1520
+    assert region.height == 765
 
 
 

@@ -9,6 +9,7 @@ from pocket_option_analyzer.domain.signals import (
 from pocket_option_analyzer.domain.strategy import StrategyProfile
 from pocket_option_analyzer.vision.models import (
     CandleType,
+    ClassifiedCandle,
     MarketAnalysis,
     TrendDirection,
 )
@@ -22,7 +23,17 @@ class StrategyConditionEvaluator:
     No interactúa con Pocket Option.
     Solo decide si las condiciones visuales e indicadores justifican
     una señal informativa CALL, PUT o NONE.
+
+    En gráficos en vivo, la última vela detectada puede estar formándose.
+    Por eso se permite confirmar la dirección usando una ventana reciente
+    de velas.
     """
+
+    def __init__(
+        self,
+        recent_confirmation_candles: int = 2,
+    ) -> None:
+        self._recent_confirmation_candles = recent_confirmation_candles
 
     def evaluate(
         self,
@@ -109,11 +120,12 @@ class StrategyConditionEvaluator:
                 "stochastic previous K is above CALL trigger zone",
             )
 
-        latest = analysis.series.latest
-
-        if latest is None or latest.candle_type is not CandleType.BULLISH:
+        if not self._has_recent_candle_type(
+            analysis=analysis,
+            candle_type=CandleType.BULLISH,
+        ):
             failures.append(
-                "latest candle is not bullish",
+                "recent candle is not bullish",
             )
 
         return failures
@@ -163,14 +175,41 @@ class StrategyConditionEvaluator:
                 "stochastic previous K is below PUT trigger zone",
             )
 
-        latest = analysis.series.latest
-
-        if latest is None or latest.candle_type is not CandleType.BEARISH:
+        if not self._has_recent_candle_type(
+            analysis=analysis,
+            candle_type=CandleType.BEARISH,
+        ):
             failures.append(
-                "latest candle is not bearish",
+                "recent candle is not bearish",
             )
 
         return failures
+
+    def _has_recent_candle_type(
+        self,
+        analysis: MarketAnalysis,
+        candle_type: CandleType,
+    ) -> bool:
+
+        recent_candles = self._recent_candles(
+            analysis=analysis,
+        )
+
+        return any(
+            candle.candle_type is candle_type
+            for candle in recent_candles
+        )
+
+    def _recent_candles(
+        self,
+        analysis: MarketAnalysis,
+    ) -> tuple[ClassifiedCandle, ...]:
+
+        return tuple(
+            analysis.series.candles[
+                -self._recent_confirmation_candles :
+            ]
+        )
 
     def _neutral_reason(
         self,
