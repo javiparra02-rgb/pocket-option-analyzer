@@ -343,7 +343,7 @@ class PocketOptionChartRegionExtractor:
         self,
         top_ratio: float = 0.05,
         right_ratio: float = 0.05,
-        bottom_ratio: float = 0.10,
+        bottom_ratio: float = 0.02,
     ) -> None:
         self._top_ratio = top_ratio
         self._right_ratio = right_ratio

@@ -232,7 +232,7 @@ def test_pocket_option_chart_region_extractor_returns_main_chart_area() -> None:
     assert region.x == 0
     assert region.y == 45
     assert region.width == 1520
-    assert region.height == 765
+    assert region.height == 837
 
 
 
@@ -293,3 +293,21 @@ def test_pocket_option_runtime_factory_can_enable_roi_debug(
     )
 
     assert capture_service is not None
+
+
+def test_pocket_option_chart_region_extractor_keeps_timeline_area() -> None:
+
+    extractor = PocketOptionChartRegionExtractor()
+
+    image = np.zeros(
+        (1000, 1600, 3),
+        dtype=np.uint8,
+    )
+
+    region = extractor.extract(
+        image=image,
+    )
+
+    assert region.y == 50
+    assert region.height == 930
+    assert region.y + region.height == 980
