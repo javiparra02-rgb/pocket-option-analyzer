@@ -31,9 +31,11 @@ class StrategyConditionEvaluator:
 
     def __init__(
         self,
-        recent_confirmation_candles: int = 2,
+        recent_confirmation_candles: int = 3,
+        ignore_latest_candle: bool = True,
     ) -> None:
         self._recent_confirmation_candles = recent_confirmation_candles
+        self._ignore_latest_candle = ignore_latest_candle
 
     def evaluate(
         self,
@@ -125,7 +127,7 @@ class StrategyConditionEvaluator:
             candle_type=CandleType.BULLISH,
         ):
             failures.append(
-                "recent candle is not bullish",
+                "recent closed candle is not bullish",
             )
 
         return failures
@@ -180,7 +182,7 @@ class StrategyConditionEvaluator:
             candle_type=CandleType.BEARISH,
         ):
             failures.append(
-                "recent candle is not bearish",
+                "recent closed candle is not bearish",
             )
 
         return failures
@@ -205,8 +207,15 @@ class StrategyConditionEvaluator:
         analysis: MarketAnalysis,
     ) -> tuple[ClassifiedCandle, ...]:
 
+        candles = tuple(
+            analysis.series.candles,
+        )
+
+        if self._ignore_latest_candle and len(candles) > 1:
+            candles = candles[:-1]
+
         return tuple(
-            analysis.series.candles[
+            candles[
                 -self._recent_confirmation_candles :
             ]
         )

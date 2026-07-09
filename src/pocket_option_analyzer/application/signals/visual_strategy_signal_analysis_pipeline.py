@@ -120,26 +120,50 @@ class VisualStrategySignalAnalysisPipeline:
         market_analysis,
     ) -> str:
 
-        recent_candles = tuple(
-            market_analysis.series.candles[-3:],
+        candles = tuple(
+            market_analysis.series.candles,
         )
 
-        recent_labels = [
-            candle.candle_type.name
-            for candle in recent_candles
-        ]
+        latest_candles = candles[-3:]
 
-        recent_text = (
-            ", ".join(
-                recent_labels,
-            )
-            if recent_labels
-            else "NONE"
+        closed_candles = (
+            candles[:-1]
+            if len(candles) > 1
+            else candles
+        )
+
+        recent_closed_candles = closed_candles[-3:]
+
+        latest_text = self._candle_types_text(
+            latest_candles,
+        )
+        recent_closed_text = self._candle_types_text(
+            recent_closed_candles,
         )
 
         return (
             "[visual_diagnostics] "
             f"Diagnóstico visual: Tendencia: {market_analysis.trend.name} | "
             f"Velas: {len(market_analysis.series)} | "
-            f"Últimas: {recent_text}"
+            f"Últimas: {latest_text} | "
+            f"Cerradas: {recent_closed_text}"
+        )
+
+
+    def _candle_types_text(
+        self,
+        candles,
+    ) -> str:
+
+        labels = [
+            candle.candle_type.name
+            for candle in candles
+        ]
+
+        return (
+            ", ".join(
+                labels,
+            )
+            if labels
+            else "NONE"
         )
