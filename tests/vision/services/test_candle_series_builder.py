@@ -46,3 +46,48 @@ def test_build_orders_candles_by_x_position() -> None:
 
     assert series.first is oldest_candle
     assert series.latest is newest_candle
+
+
+def _classified(
+    x: int,
+    candle_type: CandleType,
+) -> ClassifiedCandle:
+
+    return ClassifiedCandle(
+        candidate=CandleCandidate(
+            x=x,
+            y=10,
+            width=10,
+            height=40,
+            area=400,
+        ),
+        candle_type=candle_type,
+    )
+
+
+def test_candle_series_builder_orders_candles_from_left_to_right() -> None:
+
+    builder = CandleSeriesBuilder()
+
+    right = _classified(
+        x=100,
+        candle_type=CandleType.BEARISH,
+    )
+
+    left = _classified(
+        x=10,
+        candle_type=CandleType.BULLISH,
+    )
+
+    series = builder.build(
+        [
+            right,
+            left,
+        ],
+    )
+
+    assert series.candles == (
+        left,
+        right,
+    )
+    assert series.latest is right
