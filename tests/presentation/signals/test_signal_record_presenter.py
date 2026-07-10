@@ -141,7 +141,8 @@ def test_presenter_extracts_visual_diagnostics_from_reason() -> None:
         "[visual_diagnostics] Diagnóstico visual: Tendencia: BEARISH | "
         "Velas: 24 | Últimas: BEARISH, BULLISH, BULLISH | "
         "Cerradas: BEARISH, BEARISH, BULLISH | "
-        "Contexto: BEARISH_PULLBACK | Entrada: ESPERAR\n"
+        "Contexto: BEARISH_PULLBACK | Vigilancia: ESPERAR | "
+        "Estado: ESPERANDO_CONFIRMACION\n"
         "OTC Precision 10S conditions were not fully confirmed. "
         "CALL failed: trend is not bullish. "
         "PUT failed: recent closed candle is not bearish."
@@ -160,7 +161,8 @@ def test_presenter_extracts_visual_diagnostics_from_reason() -> None:
         == "Diagnóstico visual: Tendencia: BEARISH | "
         "Velas: 24 | Últimas: BEARISH, BULLISH, BULLISH | "
         "Cerradas: BEARISH, BEARISH, BULLISH | "
-        "Contexto: BEARISH_PULLBACK | Entrada: ESPERAR"
+        "Contexto: BEARISH_PULLBACK | Vigilancia: ESPERAR | "
+        "Estado: ESPERANDO_CONFIRMACION"
     )
     assert "[visual_diagnostics]" not in view_model.reason
 
@@ -173,7 +175,8 @@ def test_presenter_hides_visual_diagnostics_from_reason_when_indicators_are_miss
         "[visual_diagnostics] Diagnóstico visual: Tendencia: BEARISH | "
         "Velas: 9 | Últimas: BEARISH, BEARISH, BEARISH | "
         "Cerradas: BEARISH, BEARISH, BEARISH | "
-        "Contexto: BEARISH_CONTINUATION | Entrada: BUSCAR_PUT\n"
+        "Contexto: BEARISH_CONTINUATION | Vigilancia: VIGILAR_PUT | "
+        "Estado: SIN_INDICADORES\n"
         "Not enough visual candles to calculate indicators. "
         "Detected candles: 9. Minimum required: 13."
     )
@@ -191,7 +194,8 @@ def test_presenter_hides_visual_diagnostics_from_reason_when_indicators_are_miss
         == "Diagnóstico visual: Tendencia: BEARISH | "
         "Velas: 9 | Últimas: BEARISH, BEARISH, BEARISH | "
         "Cerradas: BEARISH, BEARISH, BEARISH | "
-        "Contexto: BEARISH_CONTINUATION | Entrada: BUSCAR_PUT"
+        "Contexto: BEARISH_CONTINUATION | Vigilancia: VIGILAR_PUT | "
+        "Estado: SIN_INDICADORES"
     )
     assert "[visual_diagnostics]" not in view_model.reason
     assert (

@@ -604,7 +604,10 @@ def test_main_window_updates_visual_diagnostics() -> None:
         css_class="signal-neutral",
         visual_diagnostics_label=(
             "Diagnóstico visual: Tendencia: BEARISH | "
-            "Velas: 24 | Últimas: BEARISH, BULLISH, BEARISH"
+            "Velas: 24 | Últimas: BEARISH, BULLISH, BEARISH | "
+            "Cerradas: BEARISH, BEARISH, BULLISH | "
+            "Contexto: BEARISH_PULLBACK | Vigilancia: ESPERAR | "
+            "Estado: ESPERANDO_CONFIRMACION"
         ),
     )
 
@@ -615,5 +618,8 @@ def test_main_window_updates_visual_diagnostics() -> None:
     assert (
         window.visual_diagnostics_text
         == "Diagnóstico visual: Tendencia: BEARISH | "
-        "Velas: 24 | Últimas: BEARISH, BULLISH, BEARISH"
+        "Velas: 24 | Últimas: BEARISH, BULLISH, BEARISH | "
+        "Cerradas: BEARISH, BEARISH, BULLISH | "
+        "Contexto: BEARISH_PULLBACK | Vigilancia: ESPERAR | "
+        "Estado: ESPERANDO_CONFIRMACION"
     )

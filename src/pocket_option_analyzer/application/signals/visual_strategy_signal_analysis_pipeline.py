@@ -56,16 +56,12 @@ class VisualStrategySignalAnalysisPipeline:
         """
         Analiza una imagen y devuelve una señal de mercado.
 
-        Aunque falten velas para calcular indicadores, devuelve también
-        diagnóstico visual para entender qué está leyendo el sistema.
+        El diagnóstico visual se entrega siempre, incluso cuando faltan
+        velas para calcular indicadores.
         """
 
         market_analysis = self._market_analysis_pipeline.analyze(
             image=image,
-        )
-
-        visual_diagnostics_line = self._visual_diagnostics_line(
-            market_analysis,
         )
 
         indicators = self._indicator_snapshot_builder.build(
@@ -80,6 +76,11 @@ class VisualStrategySignalAnalysisPipeline:
                 ),
             )
 
+            visual_diagnostics_line = self._visual_diagnostics_line(
+                market_analysis=market_analysis,
+                signal_state_label="SIN_INDICADORES",
+            )
+
             return MarketSignal.neutral(
                 reason=(
                     f"{visual_diagnostics_line}\n"
@@ -91,7 +92,13 @@ class VisualStrategySignalAnalysisPipeline:
             analysis=market_analysis,
             indicators=indicators,
         )
-        
+
+        visual_diagnostics_line = self._visual_diagnostics_line(
+            market_analysis=market_analysis,
+            signal_state_label=self._signal_state_label(
+                signal=signal,
+            ),
+        )
 
         return MarketSignal(
             direction=signal.direction,
@@ -135,6 +142,7 @@ class VisualStrategySignalAnalysisPipeline:
     def _visual_diagnostics_line(
         self,
         market_analysis,
+        signal_state_label: str,
     ) -> str:
 
         candles = tuple(
@@ -169,7 +177,8 @@ class VisualStrategySignalAnalysisPipeline:
             f"Últimas: {latest_text} | "
             f"Cerradas: {recent_closed_text} | "
             f"Contexto: {entry_context.context_label} | "
-            f"Entrada: {entry_context.entry_state_label}"
+            f"Vigilancia: {self._watch_label(entry_context.entry_state_label)} | "
+            f"Estado: {signal_state_label}"
         )
 
     def _candle_types_text(
@@ -189,3 +198,26 @@ class VisualStrategySignalAnalysisPipeline:
             if labels
             else "NONE"
         )
+
+    def _watch_label(
+        self,
+        entry_state_label: str,
+    ) -> str:
+
+        if entry_state_label == "BUSCAR_PUT":
+            return "VIGILAR_PUT"
+
+        if entry_state_label == "BUSCAR_CALL":
+            return "VIGILAR_CALL"
+
+        return "ESPERAR"
+
+    def _signal_state_label(
+        self,
+        signal: MarketSignal,
+    ) -> str:
+
+        if signal.is_actionable:
+            return "SEÑAL_CONFIRMADA"
+
+        return "ESPERANDO_CONFIRMACION"
