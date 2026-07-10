@@ -12,24 +12,26 @@ class TrendDetector:
     """
     Detecta la tendencia visual de una serie de velas.
 
-    La detección considera:
-    - velas recientes
-    - desplazamiento vertical del precio
-    - proporción de velas alcistas/bajistas
+    Para evitar ruido, la tendencia se calcula usando solo velas
+    direccionales:
+    - BULLISH
+    - BEARISH
 
-    En coordenadas de pantalla:
-    - menor y = precio más alto
-    - mayor y = precio más bajo
+    Se ignoran:
+    - DOJI
+    - UNKNOWN
     """
 
     def __init__(
         self,
         min_candles: int = 5,
+        min_directional_candles: int = 3,
         recent_candles: int = 12,
-        directional_ratio: float = 0.5,
+        directional_ratio: float = 0.45,
         min_vertical_movement: float = 8.0,
     ) -> None:
         self._min_candles = min_candles
+        self._min_directional_candles = min_directional_candles
         self._recent_candles = recent_candles
         self._directional_ratio = directional_ratio
         self._min_vertical_movement = min_vertical_movement
@@ -45,22 +47,24 @@ class TrendDetector:
         if len(series) < self._min_candles:
             return TrendDirection.UNKNOWN
 
-        candles = tuple(
+        recent_candles = tuple(
             series.candles[-self._recent_candles :]
         )
 
-        if len(candles) < self._min_candles:
-            return TrendDirection.UNKNOWN
-
-        bullish_count = sum(
-            1
-            for candle in candles
-            if candle.candle_type is CandleType.BULLISH
+        directional_candles = self._directional_candles(
+            candles=recent_candles,
         )
-        bearish_count = sum(
-            1
-            for candle in candles
-            if candle.candle_type is CandleType.BEARISH
+
+        if len(directional_candles) < self._min_directional_candles:
+            return TrendDirection.SIDEWAYS
+
+        bullish_count = self._count_type(
+            candles=directional_candles,
+            candle_type=CandleType.BULLISH,
+        )
+        bearish_count = self._count_type(
+            candles=directional_candles,
+            candle_type=CandleType.BEARISH,
         )
 
         total_directional = bullish_count + bearish_count
@@ -72,10 +76,10 @@ class TrendDetector:
         bearish_ratio = bearish_count / total_directional
 
         first_center_y = self._center_y(
-            candles[0],
+            directional_candles[0],
         )
         latest_center_y = self._center_y(
-            candles[-1],
+            directional_candles[-1],
         )
 
         vertical_movement = latest_center_y - first_center_y
@@ -100,15 +104,36 @@ class TrendDetector:
 
         return TrendDirection.SIDEWAYS
 
+    def _directional_candles(
+        self,
+        candles: tuple[ClassifiedCandle, ...],
+    ) -> tuple[ClassifiedCandle, ...]:
+
+        return tuple(
+            candle
+            for candle in candles
+            if candle.candle_type
+            in {
+                CandleType.BULLISH,
+                CandleType.BEARISH,
+            }
+        )
+
+    def _count_type(
+        self,
+        candles: tuple[ClassifiedCandle, ...],
+        candle_type: CandleType,
+    ) -> int:
+
+        return sum(
+            1
+            for candle in candles
+            if candle.candle_type is candle_type
+        )
+
     def _center_y(
         self,
         candle: ClassifiedCandle,
     ) -> float:
-        """
-        Calcula el centro vertical de la vela.
-
-        CandleCandidate no expone center_y directamente, por eso se calcula
-        desde y + height / 2.
-        """
 
         return candle.candidate.y + candle.candidate.height / 2

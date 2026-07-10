@@ -333,3 +333,49 @@ def test_evaluator_ignores_latest_forming_candle_for_call_confirmation() -> None
 
     assert signal.direction is SignalDirection.CALL
     assert signal.reason == "OTC Precision 10S CALL setup confirmed."
+
+
+def test_evaluator_ignores_unknown_candles_for_recent_put_confirmation() -> None:
+
+    evaluator = StrategyConditionEvaluator(
+        recent_confirmation_candles=3,
+        ignore_latest_candle=True,
+    )
+
+    signal = evaluator.evaluate(
+        profile=StrategyProfile.otc_precision_10s(),
+        indicators=IndicatorSnapshot(
+            ema=EmaSnapshot(
+                fast_value=100.0,
+                slow_value=105.0,
+                separation_candles=3,
+            ),
+            rsi=RsiSnapshot(
+                value=42.0,
+            ),
+            stochastic=StochasticSnapshot(
+                k_previous=82.0,
+                d_previous=80.0,
+                k_value=76.0,
+                d_value=78.0,
+            ),
+        ),
+        analysis=MarketAnalysis(
+            series=CandleSeries(
+                candles=(
+                    _classified_candle(
+                        candle_type=CandleType.BEARISH,
+                    ),
+                    _classified_candle(
+                        candle_type=CandleType.UNKNOWN,
+                    ),
+                    _classified_candle(
+                        candle_type=CandleType.BULLISH,
+                    ),
+                ),
+            ),
+            trend=TrendDirection.BEARISH,
+        ),
+    )
+
+    assert signal.direction is SignalDirection.PUT

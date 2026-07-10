@@ -214,8 +214,18 @@ class StrategyConditionEvaluator:
         if self._ignore_latest_candle and len(candles) > 1:
             candles = candles[:-1]
 
+        directional_candles = tuple(
+            candle
+            for candle in candles
+            if candle.candle_type
+            in {
+                CandleType.BULLISH,
+                CandleType.BEARISH,
+            }
+        )
+
         return tuple(
-            candles[
+            directional_candles[
                 -self._recent_confirmation_candles :
             ]
         )

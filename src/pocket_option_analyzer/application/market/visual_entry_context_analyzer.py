@@ -5,6 +5,7 @@ from pocket_option_analyzer.application.market.visual_entry_context import (
 )
 from pocket_option_analyzer.vision.models import (
     CandleType,
+    ClassifiedCandle,
     MarketAnalysis,
     TrendDirection,
 )
@@ -17,10 +18,9 @@ class VisualEntryContextAnalyzer:
     Separa:
     - tendencia general
     - reacción reciente
-    - estado de entrada
+    - estado de vigilancia
 
-    En gráficos en vivo se ignora la última vela detectada porque puede
-    estar en formación.
+    Para evitar ruido, ignora velas UNKNOWN y DOJI.
     """
 
     def __init__(
@@ -36,13 +36,13 @@ class VisualEntryContextAnalyzer:
         analysis: MarketAnalysis,
     ) -> VisualEntryContext:
 
-        recent_candles = self._recent_candles(
+        recent_candles = self._recent_directional_candles(
             analysis=analysis,
         )
 
         if not recent_candles:
             return VisualEntryContext(
-                context_label="NO_CANDLES",
+                context_label="NO_DIRECTIONAL_CANDLES",
                 entry_state_label="ESPERAR",
             )
 
@@ -124,10 +124,11 @@ class VisualEntryContextAnalyzer:
             entry_state_label="ESPERAR",
         )
 
-    def _recent_candles(
+    def _recent_directional_candles(
         self,
         analysis: MarketAnalysis,
-    ):
+    ) -> tuple[ClassifiedCandle, ...]:
+
         candles = tuple(
             analysis.series.candles,
         )
@@ -135,13 +136,23 @@ class VisualEntryContextAnalyzer:
         if self._ignore_latest_candle and len(candles) > 1:
             candles = candles[:-1]
 
-        return candles[
+        directional_candles = tuple(
+            candle
+            for candle in candles
+            if candle.candle_type
+            in {
+                CandleType.BULLISH,
+                CandleType.BEARISH,
+            }
+        )
+
+        return directional_candles[
             -self._recent_closed_candles :
         ]
 
     def _count_type(
         self,
-        candles,
+        candles: tuple[ClassifiedCandle, ...],
         candle_type: CandleType,
     ) -> int:
 

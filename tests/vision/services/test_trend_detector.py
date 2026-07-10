@@ -124,3 +124,22 @@ def test_trend_detector_returns_sideways_when_no_direction_is_clear() -> None:
     )
 
     assert result is TrendDirection.SIDEWAYS
+
+
+def test_trend_detector_ignores_unknown_recent_candles() -> None:
+
+    detector = TrendDetector()
+
+    result = detector.detect(
+        series=_series(
+            [
+                _candle(1, 80, CandleType.BEARISH),
+                _candle(2, 95, CandleType.BEARISH),
+                _candle(3, 110, CandleType.BEARISH),
+                _candle(4, 125, CandleType.UNKNOWN),
+                _candle(5, 130, CandleType.UNKNOWN),
+            ],
+        ),
+    )
+
+    assert result is TrendDirection.BEARISH

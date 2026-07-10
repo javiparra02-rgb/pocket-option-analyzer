@@ -158,3 +158,26 @@ def test_visual_entry_context_analyzer_detects_sideways_market() -> None:
 
     assert context.context_label == "SIDEWAYS_MARKET"
     assert context.entry_state_label == "ESPERAR"
+
+
+def test_visual_entry_context_analyzer_ignores_unknown_candles() -> None:
+
+    analyzer = VisualEntryContextAnalyzer(
+        recent_closed_candles=3,
+        ignore_latest_candle=True,
+    )
+
+    context = analyzer.analyze(
+        analysis=_analysis(
+            trend=TrendDirection.BEARISH,
+            candle_types=[
+                CandleType.BEARISH,
+                CandleType.BEARISH,
+                CandleType.UNKNOWN,
+                CandleType.BULLISH,
+            ],
+        ),
+    )
+
+    assert context.context_label == "BEARISH_CONTINUATION"
+    assert context.entry_state_label == "BUSCAR_PUT"

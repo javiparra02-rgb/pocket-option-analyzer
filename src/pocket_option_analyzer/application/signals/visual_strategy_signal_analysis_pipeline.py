@@ -159,11 +159,19 @@ class VisualStrategySignalAnalysisPipeline:
 
         recent_closed_candles = closed_candles[-3:]
 
+        recent_directional_closed_candles = self._recent_directional_candles(
+            candles=closed_candles,
+            limit=3,
+        )
+
         latest_text = self._candle_types_text(
             latest_candles,
         )
         recent_closed_text = self._candle_types_text(
             recent_closed_candles,
+        )
+        directional_closed_text = self._candle_types_text(
+            recent_directional_closed_candles,
         )
 
         entry_context = self._entry_context_analyzer.analyze(
@@ -176,9 +184,32 @@ class VisualStrategySignalAnalysisPipeline:
             f"Velas: {len(market_analysis.series)} | "
             f"Últimas: {latest_text} | "
             f"Cerradas: {recent_closed_text} | "
+            f"Direccionales: {directional_closed_text} | "
             f"Contexto: {entry_context.context_label} | "
             f"Vigilancia: {self._watch_label(entry_context.entry_state_label)} | "
             f"Estado: {signal_state_label}"
+        )
+    
+    def _recent_directional_candles(
+        self,
+        candles,
+        limit: int,
+    ):
+
+        directional_candles = [
+            candle
+            for candle in candles
+            if candle.candle_type.name
+            in {
+            "BULLISH",
+                "BEARISH",
+            }
+        ]
+
+        return tuple(
+            directional_candles[
+                -limit:
+            ]
         )
 
     def _candle_types_text(
