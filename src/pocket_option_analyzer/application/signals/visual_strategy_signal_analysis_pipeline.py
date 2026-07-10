@@ -174,8 +174,9 @@ class VisualStrategySignalAnalysisPipeline:
             recent_directional_closed_candles,
         )
 
-        entry_context = self._entry_context_analyzer.analyze(
-            analysis=market_analysis,
+        entry_context = self._entry_context_analyzer.analyze_directional(
+            trend=market_analysis.trend,
+            candles=recent_directional_closed_candles,
         )
 
         return (

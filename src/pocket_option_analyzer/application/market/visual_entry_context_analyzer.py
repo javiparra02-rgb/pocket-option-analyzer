@@ -40,34 +40,51 @@ class VisualEntryContextAnalyzer:
             analysis=analysis,
         )
 
-        if not recent_candles:
+        return self.analyze_directional(
+            trend=analysis.trend,
+            candles=recent_candles,
+        )
+
+    def analyze_directional(
+        self,
+        trend: TrendDirection,
+        candles: tuple[ClassifiedCandle, ...],
+    ) -> VisualEntryContext:
+        """
+        Analiza el contexto usando velas direccionales ya filtradas.
+
+        Este método permite que la GUI muestre exactamente las mismas
+        velas usadas para decidir Contexto y Vigilancia.
+        """
+
+        if not candles:
             return VisualEntryContext(
                 context_label="NO_DIRECTIONAL_CANDLES",
                 entry_state_label="ESPERAR",
             )
 
         bearish_count = self._count_type(
-            candles=recent_candles,
+            candles=candles,
             candle_type=CandleType.BEARISH,
         )
         bullish_count = self._count_type(
-            candles=recent_candles,
+            candles=candles,
             candle_type=CandleType.BULLISH,
         )
 
-        if analysis.trend is TrendDirection.BEARISH:
+        if trend is TrendDirection.BEARISH:
             return self._bearish_context(
                 bearish_count=bearish_count,
                 bullish_count=bullish_count,
             )
 
-        if analysis.trend is TrendDirection.BULLISH:
+        if trend is TrendDirection.BULLISH:
             return self._bullish_context(
                 bearish_count=bearish_count,
                 bullish_count=bullish_count,
             )
 
-        if analysis.trend is TrendDirection.SIDEWAYS:
+        if trend is TrendDirection.SIDEWAYS:
             return VisualEntryContext(
                 context_label="SIDEWAYS_MARKET",
                 entry_state_label="ESPERAR",

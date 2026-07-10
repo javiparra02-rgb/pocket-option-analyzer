@@ -181,3 +181,55 @@ def test_visual_entry_context_analyzer_ignores_unknown_candles() -> None:
 
     assert context.context_label == "BEARISH_CONTINUATION"
     assert context.entry_state_label == "BUSCAR_PUT"
+
+
+def test_visual_entry_context_analyzer_detects_bullish_pullback_from_directional_candles() -> None:
+
+    analyzer = VisualEntryContextAnalyzer()
+
+    context = analyzer.analyze_directional(
+        trend=TrendDirection.BULLISH,
+        candles=(
+            _classified(
+                x=1,
+                candle_type=CandleType.BULLISH,
+            ),
+            _classified(
+                x=2,
+                candle_type=CandleType.BEARISH,
+            ),
+            _classified(
+                x=3,
+                candle_type=CandleType.BEARISH,
+            ),
+        ),
+    )
+
+    assert context.context_label == "BULLISH_PULLBACK"
+    assert context.entry_state_label == "ESPERAR"
+
+
+def test_visual_entry_context_analyzer_detects_bearish_pullback_from_directional_candles() -> None:
+
+    analyzer = VisualEntryContextAnalyzer()
+
+    context = analyzer.analyze_directional(
+        trend=TrendDirection.BEARISH,
+        candles=(
+            _classified(
+                x=1,
+                candle_type=CandleType.BEARISH,
+            ),
+            _classified(
+                x=2,
+                candle_type=CandleType.BULLISH,
+            ),
+            _classified(
+                x=3,
+                candle_type=CandleType.BULLISH,
+            ),
+        ),
+    )
+
+    assert context.context_label == "BEARISH_PULLBACK"
+    assert context.entry_state_label == "ESPERAR"
