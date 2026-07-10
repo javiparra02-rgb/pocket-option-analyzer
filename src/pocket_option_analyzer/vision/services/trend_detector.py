@@ -12,12 +12,12 @@ class TrendDetector:
     """
     Detecta la tendencia visual de una serie de velas.
 
-    Para evitar ruido, la tendencia se calcula usando solo velas
-    direccionales:
-    - BULLISH
-    - BEARISH
+    Prioridad de decisión:
+    1. Momentum direccional reciente.
+    2. Movimiento vertical visual.
+    3. Proporción general de velas recientes.
 
-    Se ignoran:
+    Para evitar ruido, ignora velas:
     - DOJI
     - UNKNOWN
     """
@@ -27,14 +27,18 @@ class TrendDetector:
         min_candles: int = 5,
         min_directional_candles: int = 3,
         recent_candles: int = 12,
+        recent_momentum_candles: int = 3,
         directional_ratio: float = 0.45,
         min_vertical_movement: float = 8.0,
+        ignore_latest_candle: bool = True,
     ) -> None:
         self._min_candles = min_candles
         self._min_directional_candles = min_directional_candles
         self._recent_candles = recent_candles
+        self._recent_momentum_candles = recent_momentum_candles
         self._directional_ratio = directional_ratio
         self._min_vertical_movement = min_vertical_movement
+        self._ignore_latest_candle = ignore_latest_candle
 
     def detect(
         self,
@@ -44,11 +48,19 @@ class TrendDetector:
         Devuelve la tendencia visual dominante.
         """
 
-        if len(series) < self._min_candles:
+        candles = tuple(
+            series.candles,
+        )
+
+        if len(candles) < self._min_candles:
             return TrendDirection.UNKNOWN
 
+        analysis_candles = self._analysis_candles(
+            candles=candles,
+        )
+
         recent_candles = tuple(
-            series.candles[-self._recent_candles :]
+            analysis_candles[-self._recent_candles :]
         )
 
         directional_candles = self._directional_candles(
@@ -57,6 +69,13 @@ class TrendDetector:
 
         if len(directional_candles) < self._min_directional_candles:
             return TrendDirection.SIDEWAYS
+
+        momentum_direction = self._recent_momentum_direction(
+            directional_candles=directional_candles,
+        )
+
+        if momentum_direction is not TrendDirection.UNKNOWN:
+            return momentum_direction
 
         bullish_count = self._count_type(
             candles=directional_candles,
@@ -103,6 +122,45 @@ class TrendDetector:
             return TrendDirection.BULLISH
 
         return TrendDirection.SIDEWAYS
+
+    def _analysis_candles(
+        self,
+        candles: tuple[ClassifiedCandle, ...],
+    ) -> tuple[ClassifiedCandle, ...]:
+
+        if (
+            self._ignore_latest_candle
+            and len(candles) > self._min_candles
+        ):
+            return candles[:-1]
+
+        return candles
+
+    def _recent_momentum_direction(
+        self,
+        directional_candles: tuple[ClassifiedCandle, ...],
+    ) -> TrendDirection:
+
+        recent = directional_candles[
+            -self._recent_momentum_candles :
+        ]
+
+        if len(recent) < self._recent_momentum_candles:
+            return TrendDirection.UNKNOWN
+
+        if all(
+            candle.candle_type is CandleType.BEARISH
+            for candle in recent
+        ):
+            return TrendDirection.BEARISH
+
+        if all(
+            candle.candle_type is CandleType.BULLISH
+            for candle in recent
+        ):
+            return TrendDirection.BULLISH
+
+        return TrendDirection.UNKNOWN
 
     def _directional_candles(
         self,

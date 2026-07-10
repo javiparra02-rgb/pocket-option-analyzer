@@ -143,3 +143,67 @@ def test_trend_detector_ignores_unknown_recent_candles() -> None:
     )
 
     assert result is TrendDirection.BEARISH
+
+
+def test_trend_detector_prioritizes_recent_bearish_momentum() -> None:
+
+    detector = TrendDetector()
+
+    result = detector.detect(
+        series=_series(
+            [
+                _candle(1, 140, CandleType.BULLISH),
+                _candle(2, 120, CandleType.BULLISH),
+                _candle(3, 100, CandleType.BULLISH),
+                _candle(4, 110, CandleType.BEARISH),
+                _candle(5, 120, CandleType.BEARISH),
+                _candle(6, 130, CandleType.BEARISH),
+                _candle(7, 125, CandleType.BULLISH),
+            ],
+        ),
+    )
+
+    assert result is TrendDirection.BEARISH
+
+
+def test_trend_detector_prioritizes_recent_bullish_momentum() -> None:
+
+    detector = TrendDetector()
+
+    result = detector.detect(
+        series=_series(
+            [
+                _candle(1, 100, CandleType.BEARISH),
+                _candle(2, 120, CandleType.BEARISH),
+                _candle(3, 140, CandleType.BEARISH),
+                _candle(4, 130, CandleType.BULLISH),
+                _candle(5, 120, CandleType.BULLISH),
+                _candle(6, 110, CandleType.BULLISH),
+                _candle(7, 115, CandleType.BEARISH),
+            ],
+        ),
+    )
+
+    assert result is TrendDirection.BULLISH
+
+
+def test_trend_detector_ignores_latest_forming_candle_for_momentum() -> None:
+
+    detector = TrendDetector(
+        ignore_latest_candle=True,
+    )
+
+    result = detector.detect(
+        series=_series(
+            [
+                _candle(1, 100, CandleType.BULLISH),
+                _candle(2, 95, CandleType.BULLISH),
+                _candle(3, 90, CandleType.BULLISH),
+                _candle(4, 85, CandleType.BULLISH),
+                _candle(5, 80, CandleType.BULLISH),
+                _candle(6, 120, CandleType.BEARISH),
+            ],
+        ),
+    )
+
+    assert result is TrendDirection.BULLISH
