@@ -595,6 +595,18 @@ def test_main_window_updates_visual_diagnostics() -> None:
 
     window = MainWindow()
 
+    visual_text = (
+        "Diagnóstico visual:\n"
+        "  Tendencia: BEARISH\n"
+        "  Velas detectadas: 24\n"
+        "  Últimas: BEARISH, BULLISH, BEARISH\n"
+        "  Cerradas: BEARISH, BEARISH, BULLISH\n"
+        "  Direccionales: BEARISH, BEARISH, BULLISH\n"
+        "  Contexto: BEARISH_PULLBACK\n"
+        "  Vigilancia: ESPERAR\n"
+        "  Estado: ESPERANDO_CONFIRMACION"
+    )
+
     view_model = SignalRecordViewModel(
         direction_label="SIN SEÑAL",
         strength_label="NINGUNA",
@@ -603,27 +615,15 @@ def test_main_window_updates_visual_diagnostics() -> None:
         created_at_label="2026-01-01 10:30:45",
         is_actionable=False,
         css_class="signal-neutral",
-        visual_diagnostics_label=(
-            "Diagnóstico visual: Tendencia: BEARISH | "
-            "Velas: 24 | Últimas: BEARISH, BULLISH, BEARISH | "
-            "Cerradas: BEARISH, BEARISH, BULLISH | "
-            "Contexto: BEARISH_PULLBACK | Vigilancia: ESPERAR | "
-            "Estado: ESPERANDO_CONFIRMACION"
-        ),
+        visual_diagnostics_label=visual_text,
+        indicator_diagnostics_label="Diagnóstico de indicadores: -",
     )
 
     window.update_signal(
         view_model=view_model,
     )
 
-    assert (
-        window.visual_diagnostics_text
-        == "Diagnóstico visual: Tendencia: BEARISH | "
-        "Velas: 24 | Últimas: BEARISH, BULLISH, BEARISH | "
-        "Cerradas: BEARISH, BEARISH, BULLISH | "
-        "Contexto: BEARISH_PULLBACK | Vigilancia: ESPERAR | "
-        "Estado: ESPERANDO_CONFIRMACION"
-    )
+    assert window.visual_diagnostics_text == visual_text
 
 
 def test_main_window_updates_indicator_diagnostics() -> None:

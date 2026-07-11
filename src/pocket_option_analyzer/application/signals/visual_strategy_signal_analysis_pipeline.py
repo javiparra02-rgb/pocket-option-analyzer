@@ -183,14 +183,15 @@ class VisualStrategySignalAnalysisPipeline:
 
         return (
             "[visual_diagnostics] "
-            f"Diagnóstico visual: Tendencia: {market_analysis.trend.name} | "
-            f"Velas: {len(market_analysis.series)} | "
-            f"Últimas: {latest_text} | "
-            f"Cerradas: {recent_closed_text} | "
-            f"Direccionales: {directional_closed_text} | "
-            f"Contexto: {entry_context.context_label} | "
-            f"Vigilancia: {self._watch_label(entry_context.entry_state_label)} | "
-            f"Estado: {signal_state_label}"
+            "Diagnóstico visual:\n"
+            f"  Tendencia: {market_analysis.trend.name}\n"
+            f"  Velas detectadas: {len(market_analysis.series)}\n"
+            f"  Últimas: {latest_text}\n"
+            f"  Cerradas: {recent_closed_text}\n"
+            f"  Direccionales: {directional_closed_text}\n"
+            f"  Contexto: {entry_context.context_label}\n"
+            f"  Vigilancia: {self._watch_label(entry_context.entry_state_label)}\n"
+            f"  Estado: {signal_state_label}"
         )
     
     def _recent_directional_candles(
