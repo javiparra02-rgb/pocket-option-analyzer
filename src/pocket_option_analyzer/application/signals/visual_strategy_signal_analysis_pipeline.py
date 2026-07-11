@@ -84,6 +84,7 @@ class VisualStrategySignalAnalysisPipeline:
             return MarketSignal.neutral(
                 reason=(
                     f"{visual_diagnostics_line}\n"
+                    f"{self._missing_indicator_diagnostics_line()}\n"
                     f"{not_enough_reason}"
                 ),
             )
@@ -105,6 +106,7 @@ class VisualStrategySignalAnalysisPipeline:
             strength=signal.strength,
             reason=(
                 f"{visual_diagnostics_line}\n"
+                f"{self._indicator_diagnostics_line(indicators)}\n"
                 f"{signal.reason}"
             ),
         )
@@ -253,3 +255,67 @@ class VisualStrategySignalAnalysisPipeline:
             return "SEÑAL_CONFIRMADA"
 
         return "ESPERANDO_CONFIRMACION"
+    
+    def _missing_indicator_diagnostics_line(
+        self,
+    ) -> str:
+        return (
+            "[indicator_diagnostics] "
+            "Diagnóstico de indicadores: no disponibles "
+            "(velas insuficientes)"
+        )
+
+
+    def _indicator_diagnostics_line(
+        self,
+        indicators,
+    ) -> str:
+
+        return (
+            "[indicator_diagnostics] "
+            "Diagnóstico de indicadores: "
+            f"EMA={self._ema_label(indicators)} | "
+            f"RSI={indicators.rsi.value:.2f} | "
+            f"Stoch={self._stochastic_label(indicators)}"
+        )
+
+
+    def _ema_label(
+        self,
+        indicators,
+    ) -> str:
+
+        if indicators.ema.is_bullish_alignment:
+            alignment = "BULLISH"
+        elif indicators.ema.is_bearish_alignment:
+            alignment = "BEARISH"
+        else:
+            alignment = "NEUTRAL"
+
+        return (
+            f"{alignment} "
+            f"fast={indicators.ema.fast_value:.2f} "
+            f"slow={indicators.ema.slow_value:.2f} "
+            f"sep={indicators.ema.separation_candles}"
+        )
+
+
+    def _stochastic_label(
+        self,
+        indicators,
+    ) -> str:
+
+        if indicators.stochastic.crossed_up:
+            cross = "CROSS_UP"
+        elif indicators.stochastic.crossed_down:
+            cross = "CROSS_DOWN"
+        else:
+            cross = "NO_CROSS"
+
+        return (
+            f"{cross} "
+            f"K={indicators.stochastic.k_value:.2f} "
+            f"D={indicators.stochastic.d_value:.2f} "
+            f"prevK={indicators.stochastic.k_previous:.2f} "
+            f"prevD={indicators.stochastic.d_previous:.2f}"
+        )

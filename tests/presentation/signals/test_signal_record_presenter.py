@@ -203,3 +203,37 @@ def test_presenter_hides_visual_diagnostics_from_reason_when_indicators_are_miss
         == "Not enough visual candles to calculate indicators. "
         "Detected candles: 9. Minimum required: 13."
     )
+
+
+def test_presenter_extracts_indicator_diagnostics_from_reason() -> None:
+
+    presenter = SignalRecordPresenter()
+
+    reason = (
+        "[visual_diagnostics] Diagnóstico visual: Tendencia: BEARISH | "
+        "Velas: 18\n"
+        "[indicator_diagnostics] Diagnóstico de indicadores: "
+        "EMA=BEARISH fast=10.00 slow=12.00 sep=3 | "
+        "RSI=42.00 | "
+        "Stoch=CROSS_DOWN K=76.00 D=78.00 prevK=82.00 prevD=80.00\n"
+        "OTC Precision 10S conditions were not fully confirmed. "
+        "CALL failed: trend is not bullish. "
+        "PUT failed: stochastic did not cross down."
+    )
+
+    view_model = presenter.present(
+        record=_record(
+            direction=SignalDirection.NONE,
+            strength=SignalStrength.NONE,
+            reason=reason,
+        ),
+    )
+
+    assert (
+        view_model.indicator_diagnostics_label
+        == "Diagnóstico de indicadores: "
+        "EMA=BEARISH fast=10.00 slow=12.00 sep=3 | "
+        "RSI=42.00 | "
+        "Stoch=CROSS_DOWN K=76.00 D=78.00 prevK=82.00 prevD=80.00"
+    )
+    assert "[indicator_diagnostics]" not in view_model.reason

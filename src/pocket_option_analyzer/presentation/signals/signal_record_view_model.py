@@ -24,3 +24,5 @@ class SignalRecordViewModel:
     css_class: str
 
     visual_diagnostics_label: str = "Diagnóstico visual: -"
+
+    indicator_diagnostics_label: str = "Diagnóstico de indicadores: -"

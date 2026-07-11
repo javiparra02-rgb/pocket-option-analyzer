@@ -210,6 +210,9 @@ def test_analyze_returns_neutral_signal_when_indicators_are_missing() -> None:
     assert "Velas:" in result.reason
     assert "Contexto:" in result.reason
     assert "Vigilancia:" in result.reason
+    assert "[indicator_diagnostics]" in result.reason
+    assert "Diagnóstico de indicadores:" in result.reason
+    assert "no disponibles" in result.reason
     assert "Estado: SIN_INDICADORES" in result.reason
     assert (
         "Not enough visual candles to calculate indicators."

@@ -16,13 +16,14 @@ class SignalRecordPresenter:
     """
 
     VISUAL_DIAGNOSTICS_PREFIX = "[visual_diagnostics]"
+    INDICATOR_DIAGNOSTICS_PREFIX = "[indicator_diagnostics]"
 
     def present(
         self,
         record: SignalRecord,
     ) -> SignalRecordViewModel:
 
-        clean_reason = self._remove_visual_diagnostics(
+        clean_reason = self._remove_diagnostics(
             reason=record.signal.reason,
         )
 
@@ -44,8 +45,15 @@ class SignalRecordPresenter:
             css_class=self._css_class(
                 direction=record.signal.direction,
             ),
-            visual_diagnostics_label=self._visual_diagnostics_label(
+            visual_diagnostics_label=self._diagnostics_label(
                 reason=record.signal.reason,
+                prefix=self.VISUAL_DIAGNOSTICS_PREFIX,
+                default="Diagnóstico visual: -",
+            ),
+            indicator_diagnostics_label=self._diagnostics_label(
+                reason=record.signal.reason,
+                prefix=self.INDICATOR_DIAGNOSTICS_PREFIX,
+                default="Diagnóstico de indicadores: -",
             ),
         )
 
@@ -91,33 +99,40 @@ class SignalRecordPresenter:
 
         return "signal-neutral"
 
-    def _visual_diagnostics_label(
+    def _diagnostics_label(
         self,
         reason: str,
+        prefix: str,
+        default: str,
     ) -> str:
 
         for line in reason.splitlines():
             if line.startswith(
-                self.VISUAL_DIAGNOSTICS_PREFIX,
+                prefix,
             ):
                 return line.replace(
-                    self.VISUAL_DIAGNOSTICS_PREFIX,
+                    prefix,
                     "",
                     1,
                 ).strip()
 
-        return "Diagnóstico visual: -"
+        return default
 
-    def _remove_visual_diagnostics(
+    def _remove_diagnostics(
         self,
         reason: str,
     ) -> str:
+
+        diagnostic_prefixes = (
+            self.VISUAL_DIAGNOSTICS_PREFIX,
+            self.INDICATOR_DIAGNOSTICS_PREFIX,
+        )
 
         lines = [
             line
             for line in reason.splitlines()
             if not line.startswith(
-                self.VISUAL_DIAGNOSTICS_PREFIX,
+                diagnostic_prefixes,
             )
         ]
 
