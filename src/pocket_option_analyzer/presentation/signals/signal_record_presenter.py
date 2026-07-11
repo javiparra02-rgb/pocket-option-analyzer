@@ -13,6 +13,8 @@ from pocket_option_analyzer.presentation.signals.signal_record_view_model import
 class SignalRecordPresenter:
     """
     Convierte SignalRecord en un ViewModel listo para la GUI.
+
+    Soporta diagnósticos de una línea y diagnósticos multilínea.
     """
 
     VISUAL_DIAGNOSTICS_PREFIX = "[visual_diagnostics]"
@@ -106,39 +108,101 @@ class SignalRecordPresenter:
         default: str,
     ) -> str:
 
-        for line in reason.splitlines():
+        lines = reason.splitlines()
+
+        for index, line in enumerate(
+            lines,
+        ):
             if line.startswith(
                 prefix,
             ):
-                return line.replace(
-                    prefix,
-                    "",
-                    1,
-                ).strip()
+                return self._collect_diagnostic_block(
+                    lines=lines,
+                    start_index=index,
+                    prefix=prefix,
+                )
 
         return default
+
+    def _collect_diagnostic_block(
+        self,
+        lines: list[str],
+        start_index: int,
+        prefix: str,
+    ) -> str:
+
+        first_line = lines[start_index].replace(
+            prefix,
+            "",
+            1,
+        ).strip()
+
+        collected_lines = [
+            first_line,
+        ]
+
+        for line in lines[start_index + 1 :]:
+            if line.startswith(
+                self._diagnostic_prefixes(),
+            ):
+                break
+
+            if not line.startswith(
+                "  ",
+            ):
+                break
+
+            collected_lines.append(
+                line.rstrip(),
+            )
+
+        return "\n".join(
+            line
+            for line in collected_lines
+            if line
+        ).strip()
 
     def _remove_diagnostics(
         self,
         reason: str,
     ) -> str:
 
-        diagnostic_prefixes = (
+        lines = reason.splitlines()
+
+        cleaned_lines: list[str] = []
+        skipping_diagnostic_block = False
+
+        for line in lines:
+            if line.startswith(
+                self._diagnostic_prefixes(),
+            ):
+                skipping_diagnostic_block = True
+                continue
+
+            if skipping_diagnostic_block:
+                if line.startswith(
+                    "  ",
+                ):
+                    continue
+
+                skipping_diagnostic_block = False
+
+            cleaned_lines.append(
+                line,
+            )
+
+        return "\n".join(
+            cleaned_lines,
+        ).strip()
+
+    def _diagnostic_prefixes(
+        self,
+    ) -> tuple[str, str]:
+
+        return (
             self.VISUAL_DIAGNOSTICS_PREFIX,
             self.INDICATOR_DIAGNOSTICS_PREFIX,
         )
-
-        lines = [
-            line
-            for line in reason.splitlines()
-            if not line.startswith(
-                diagnostic_prefixes,
-            )
-        ]
-
-        return "\n".join(
-            lines,
-        ).strip()
 
     def _format_reason(
         self,

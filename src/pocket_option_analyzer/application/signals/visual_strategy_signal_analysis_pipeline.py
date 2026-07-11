@@ -261,8 +261,11 @@ class VisualStrategySignalAnalysisPipeline:
     ) -> str:
         return (
             "[indicator_diagnostics] "
-            "Diagnóstico de indicadores: no disponibles "
-            "(velas insuficientes)"
+            "Diagnóstico de indicadores:\n"
+            "  EMA: no disponible\n"
+            "  RSI: no disponible\n"
+            "  Stochastic: no disponible\n"
+            "  Estado: velas insuficientes"
         )
 
 
@@ -273,10 +276,11 @@ class VisualStrategySignalAnalysisPipeline:
 
         return (
             "[indicator_diagnostics] "
-            "Diagnóstico de indicadores: "
-            f"EMA={self._ema_label(indicators)} | "
-            f"RSI={indicators.rsi.value:.2f} | "
-            f"Stoch={self._stochastic_label(indicators)}"
+            "Diagnóstico de indicadores:\n"
+            f"  {self._ema_label(indicators)}\n"
+            f"  {self._rsi_label(indicators)}\n"
+            f"  {self._stochastic_label(indicators)}\n"
+            "  Estado: esperando confirmación de estrategia"
         )
 
 
@@ -286,17 +290,61 @@ class VisualStrategySignalAnalysisPipeline:
     ) -> str:
 
         if indicators.ema.is_bullish_alignment:
-            alignment = "BULLISH"
+            alignment = "alcista"
         elif indicators.ema.is_bearish_alignment:
-            alignment = "BEARISH"
+            alignment = "bajista"
         else:
-            alignment = "NEUTRAL"
+            alignment = "neutral"
+
+        separation_state = (
+            "suficiente"
+            if (
+                indicators.ema.separation_candles
+                >= self._profile.ema_min_separation_candles
+            )
+            else "insuficiente"
+        )
 
         return (
-            f"{alignment} "
-            f"fast={indicators.ema.fast_value:.2f} "
-            f"slow={indicators.ema.slow_value:.2f} "
-            f"sep={indicators.ema.separation_candles}"
+            "EMA: "
+            f"{alignment} | "
+            f"rápida={indicators.ema.fast_value:.2f} | "
+            f"lenta={indicators.ema.slow_value:.2f} | "
+            "separación="
+            f"{indicators.ema.separation_candles}/"
+            f"{self._profile.ema_min_separation_candles} "
+            f"{separation_state}"
+        )
+
+
+    def _rsi_label(
+        self,
+        indicators,
+    ) -> str:
+
+        call_state = (
+            "CALL en rango"
+            if indicators.rsi.is_between(
+                self._profile.rsi_call_min,
+                self._profile.rsi_call_max,
+            )
+            else "CALL fuera de rango"
+        )
+
+        put_state = (
+            "PUT en rango"
+            if indicators.rsi.is_between(
+                self._profile.rsi_put_min,
+                self._profile.rsi_put_max,
+            )
+            else "PUT fuera de rango"
+        )
+
+        return (
+            "RSI: "
+            f"{indicators.rsi.value:.2f} | "
+            f"{call_state} | "
+            f"{put_state}"
         )
 
 
@@ -306,16 +354,17 @@ class VisualStrategySignalAnalysisPipeline:
     ) -> str:
 
         if indicators.stochastic.crossed_up:
-            cross = "CROSS_UP"
+            cross = "cruce alcista"
         elif indicators.stochastic.crossed_down:
-            cross = "CROSS_DOWN"
+            cross = "cruce bajista"
         else:
-            cross = "NO_CROSS"
+            cross = "sin cruce"
 
         return (
-            f"{cross} "
-            f"K={indicators.stochastic.k_value:.2f} "
-            f"D={indicators.stochastic.d_value:.2f} "
-            f"prevK={indicators.stochastic.k_previous:.2f} "
+            "Stochastic: "
+            f"{cross} | "
+            f"K={indicators.stochastic.k_value:.2f} | "
+            f"D={indicators.stochastic.d_value:.2f} | "
+            f"prevK={indicators.stochastic.k_previous:.2f} | "
             f"prevD={indicators.stochastic.d_previous:.2f}"
         )

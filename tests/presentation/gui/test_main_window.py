@@ -632,6 +632,16 @@ def test_main_window_updates_indicator_diagnostics() -> None:
 
     window = MainWindow()
 
+    indicator_text = (
+        "Diagnóstico de indicadores:\n"
+        "  EMA: bajista | rápida=10.00 | lenta=12.00 | "
+        "separación=3/3 suficiente\n"
+        "  RSI: 42.00 | CALL fuera de rango | PUT en rango\n"
+        "  Stochastic: cruce bajista | K=76.00 | D=78.00 | "
+        "prevK=82.00 | prevD=80.00\n"
+        "  Estado: esperando confirmación de estrategia"
+    )
+
     view_model = SignalRecordViewModel(
         direction_label="SIN SEÑAL",
         strength_label="NINGUNA",
@@ -641,22 +651,11 @@ def test_main_window_updates_indicator_diagnostics() -> None:
         is_actionable=False,
         css_class="signal-neutral",
         visual_diagnostics_label="Diagnóstico visual: Tendencia: BEARISH",
-        indicator_diagnostics_label=(
-            "Diagnóstico de indicadores: "
-            "EMA=BEARISH fast=10.00 slow=12.00 sep=3 | "
-            "RSI=42.00 | "
-            "Stoch=CROSS_DOWN K=76.00 D=78.00 prevK=82.00 prevD=80.00"
-        ),
+        indicator_diagnostics_label=indicator_text,
     )
 
     window.update_signal(
         view_model=view_model,
     )
 
-    assert (
-        window.indicator_diagnostics_text
-        == "Diagnóstico de indicadores: "
-        "EMA=BEARISH fast=10.00 slow=12.00 sep=3 | "
-        "RSI=42.00 | "
-        "Stoch=CROSS_DOWN K=76.00 D=78.00 prevK=82.00 prevD=80.00"
-    )
+    assert window.indicator_diagnostics_text == indicator_text

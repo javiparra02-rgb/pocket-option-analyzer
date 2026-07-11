@@ -212,10 +212,13 @@ def test_presenter_extracts_indicator_diagnostics_from_reason() -> None:
     reason = (
         "[visual_diagnostics] Diagnóstico visual: Tendencia: BEARISH | "
         "Velas: 18\n"
-        "[indicator_diagnostics] Diagnóstico de indicadores: "
-        "EMA=BEARISH fast=10.00 slow=12.00 sep=3 | "
-        "RSI=42.00 | "
-        "Stoch=CROSS_DOWN K=76.00 D=78.00 prevK=82.00 prevD=80.00\n"
+        "[indicator_diagnostics] Diagnóstico de indicadores:\n"
+        "  EMA: bajista | rápida=10.00 | lenta=12.00 | "
+        "separación=3/3 suficiente\n"
+        "  RSI: 42.00 | CALL fuera de rango | PUT en rango\n"
+        "  Stochastic: cruce bajista | K=76.00 | D=78.00 | "
+        "prevK=82.00 | prevD=80.00\n"
+        "  Estado: esperando confirmación de estrategia\n"
         "OTC Precision 10S conditions were not fully confirmed. "
         "CALL failed: trend is not bullish. "
         "PUT failed: stochastic did not cross down."
@@ -231,9 +234,13 @@ def test_presenter_extracts_indicator_diagnostics_from_reason() -> None:
 
     assert (
         view_model.indicator_diagnostics_label
-        == "Diagnóstico de indicadores: "
-        "EMA=BEARISH fast=10.00 slow=12.00 sep=3 | "
-        "RSI=42.00 | "
-        "Stoch=CROSS_DOWN K=76.00 D=78.00 prevK=82.00 prevD=80.00"
+        == "Diagnóstico de indicadores:\n"
+        "  EMA: bajista | rápida=10.00 | lenta=12.00 | "
+        "separación=3/3 suficiente\n"
+        "  RSI: 42.00 | CALL fuera de rango | PUT en rango\n"
+        "  Stochastic: cruce bajista | K=76.00 | D=78.00 | "
+        "prevK=82.00 | prevD=80.00\n"
+        "  Estado: esperando confirmación de estrategia"
     )
     assert "[indicator_diagnostics]" not in view_model.reason
+    assert "EMA: bajista" not in view_model.reason
