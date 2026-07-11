@@ -209,14 +209,16 @@ class SignalRecordPresenter:
         reason: str,
     ) -> str:
         """
-        Formatea diagnósticos largos de estrategia para la GUI.
+        Formatea el motivo técnico de estrategia para la GUI.
         """
 
         if (
             "CALL failed:" not in reason
             or "PUT failed:" not in reason
         ):
-            return reason
+            return self._translate_reason(
+                reason=reason,
+            )
 
         prefix, call_and_put_text = reason.split(
             "CALL failed:",
@@ -229,12 +231,12 @@ class SignalRecordPresenter:
         )
 
         return (
-            f"{prefix.strip()}\n\n"
-            "CALL failed:\n"
+            f"{self._translate_reason(prefix.strip())}\n\n"
+            "Condiciones CALL no confirmadas:\n"
             f"{self._format_failure_items(call_text)}\n\n"
-            "PUT failed:\n"
+            "Condiciones PUT no confirmadas:\n"
             f"{self._format_failure_items(put_text)}"
-        )
+        ).strip()
 
     def _format_failure_items(
         self,
@@ -244,7 +246,7 @@ class SignalRecordPresenter:
         cleaned_text = text.strip().strip(".")
 
         if cleaned_text == "none":
-            return "  - none"
+            return "  - Ninguna."
 
         failures = [
             failure.strip()
@@ -253,6 +255,100 @@ class SignalRecordPresenter:
         ]
 
         return "\n".join(
-            f"  - {failure}"
+            f"  - {self._translate_failure(failure)}"
             for failure in failures
+        )
+    
+    def _translate_reason(
+        self,
+        reason: str,
+    ) -> str:
+
+        translations = {
+            "OTC Precision 10S conditions were not fully confirmed.": (
+                "Las condiciones de OTC Precision 10S no fueron "
+                "confirmadas completamente."
+            ),
+            "Not enough visual candles to calculate indicators.": (
+                "No hay suficientes velas visuales para calcular "
+                "indicadores."
+            ),
+            "Detected candles:": (
+                "Velas detectadas:"
+            ),
+            "Minimum visible required:": (
+                "Mínimo visible requerido:"
+            ),
+            "Minimum closed required:": (
+                "Mínimo cerrado requerido:"
+            ),
+        }
+
+        translated_reason = reason
+
+        for english_text, spanish_text in translations.items():
+            translated_reason = translated_reason.replace(
+                english_text,
+                spanish_text,
+            )
+
+        return translated_reason
+
+
+    def _translate_failure(
+        self,
+        failure: str,
+    ) -> str:
+
+        translations = {
+            "trend is not bullish": (
+                "La tendencia visual no es alcista."
+            ),
+            "trend is not bearish": (
+                "La tendencia visual no es bajista."
+            ),
+            "EMA alignment is not bullish": (
+                "La alineación EMA no es alcista."
+            ),
+            "EMA alignment is not bearish": (
+                "La alineación EMA no es bajista."
+            ),
+            "EMA separation is insufficient": (
+                "La separación EMA es insuficiente."
+            ),
+            "RSI is not in CALL range": (
+                "El RSI no está en rango CALL."
+            ),
+            "RSI is not in PUT range": (
+                "El RSI no está en rango PUT."
+            ),
+            "stochastic did not cross up": (
+                "El Stochastic no confirmó cruce alcista."
+            ),
+            "stochastic did not cross down": (
+                "El Stochastic no confirmó cruce bajista."
+            ),
+            "stochastic previous K is above CALL trigger zone": (
+                "El K previo del Stochastic está sobre la zona de activación CALL."
+            ),
+            "stochastic previous K is below PUT trigger zone": (
+                "El K previo del Stochastic está bajo la zona de activación PUT."
+            ),
+            "latest candle is not bullish": (
+                "La última vela no es alcista."
+            ),
+            "latest candle is not bearish": (
+                "La última vela no es bajista."
+            ),
+            "recent closed candle is not bullish": (
+                "La vela cerrada reciente no es alcista."
+            ),
+            "recent closed candle is not bearish": (
+                "La vela cerrada reciente no es bajista."
+            ),
+        }
+
+        return translations.get(
+            failure,
+            f"{failure}.",
         )
