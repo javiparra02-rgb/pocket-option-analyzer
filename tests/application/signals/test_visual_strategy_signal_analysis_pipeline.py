@@ -225,4 +225,5 @@ def test_analyze_returns_neutral_signal_when_indicators_are_missing() -> None:
         "Not enough visual candles to calculate indicators."
         in result.reason
     )
-    assert "Minimum required: 13." in result.reason
+    assert "Minimum visible required: 14." in result.reason
+    assert "Minimum closed required: 13." in result.reason

@@ -191,7 +191,8 @@ def test_presenter_hides_visual_diagnostics_from_reason_when_indicators_are_miss
         "  Vigilancia: VIGILAR_PUT\n"
         "  Estado: SIN_INDICADORES\n"
         "Not enough visual candles to calculate indicators. "
-        "Detected candles: 9. Minimum required: 13."
+        "Detected candles: 9. Minimum visible required: 14. "
+        "Minimum closed required: 13."
     )
 
     view_model = presenter.present(
@@ -218,7 +219,8 @@ def test_presenter_hides_visual_diagnostics_from_reason_when_indicators_are_miss
     assert (
         view_model.reason
         == "Not enough visual candles to calculate indicators. "
-        "Detected candles: 9. Minimum required: 13."
+        "Detected candles: 9. Minimum visible required: 14. "
+        "Minimum closed required: 13."
     )
 
 

@@ -118,10 +118,24 @@ class VisualStrategySignalAnalysisPipeline:
         return (
             "Not enough visual candles to calculate indicators. "
             f"Detected candles: {detected_candles}. "
-            f"Minimum required: {self._minimum_required_candles()}."
+            f"Minimum visible required: {self._minimum_required_visible_candles()}. "
+            f"Minimum closed required: {self._minimum_required_closed_candles()}."
         )
 
-    def _minimum_required_candles(
+    def _minimum_required_visible_candles(
+        self,
+    ) -> int:
+        """
+        Cantidad mínima de velas visibles necesarias.
+
+        La última vela visible suele estar en formación, por lo que se exige
+        una vela adicional para asegurar suficientes velas cerradas.
+        """
+
+        return self._minimum_required_closed_candles() + 1
+
+
+    def _minimum_required_closed_candles(
         self,
     ) -> int:
         ema_required = self._profile.ema_slow_period
