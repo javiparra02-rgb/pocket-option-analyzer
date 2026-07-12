@@ -26,3 +26,5 @@ class SignalRecordViewModel:
     visual_diagnostics_label: str = "Diagnóstico visual: -"
 
     indicator_diagnostics_label: str = "Diagnóstico de indicadores: -"
+
+    operational_summary_label: str = "Resumen operativo: ESPERAR"

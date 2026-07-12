@@ -108,6 +108,15 @@ class MainWindow(QMainWindow):
         self._strength_label = QLabel(
             "Fuerza: NINGUNA",
         )
+        self._operational_summary_label = QLabel(
+            "Resumen operativo: ESPERAR",
+        )
+        self._operational_summary_label.setWordWrap(
+            True,
+        )
+        self._operational_summary_label.setStyleSheet(
+            "font-weight: bold; color: #1f2937;"
+        )
         self._visual_diagnostics_label = QLabel(
             "Diagnóstico visual: -",
         )
@@ -286,6 +295,10 @@ class MainWindow(QMainWindow):
         return item.text()
     
     @property
+    def operational_summary_text(self) -> str:
+        return self._operational_summary_label.text()
+    
+    @property
     def visual_diagnostics_text(self) -> str:
         return self._visual_diagnostics_label.text()
     
@@ -392,6 +405,9 @@ class MainWindow(QMainWindow):
         self._append_signal_history(
             view_model=view_model,
         )
+        self._operational_summary_label.setText(
+            view_model.operational_summary_label,
+        )
 
     def _setup_layout(self) -> None:
         content_widget = QWidget()
@@ -418,9 +434,9 @@ class MainWindow(QMainWindow):
         layout.addWidget(
             self._indicator_diagnostics_label,
         )
-        layout.addWidget(
-            self._reason_text,
-        )
+        # layout.addWidget(
+        #     self._reason_text,
+        # )
         layout.addWidget(
             self._source_label,
         )
@@ -444,6 +460,9 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(
             self._run_once_button,
+        )
+        layout.addWidget(
+            self._operational_summary_label,
         )
 
         content_widget.setLayout(

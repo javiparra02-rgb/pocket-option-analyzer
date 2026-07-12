@@ -62,6 +62,7 @@ def test_main_window_has_initial_state() -> None:
     assert window.visual_diagnostics_text == "Diagnóstico visual: -"
     assert window.indicator_diagnostics_text == "Diagnóstico de indicadores: -"
     assert window.error_text == "Error: -"
+    assert window.operational_summary_text == "Resumen operativo: ESPERAR"
     assert (
         window.capture_note_text
         == "Nota: no cubras el gráfico de Pocket Option con esta ventana. "
@@ -659,3 +660,36 @@ def test_main_window_updates_indicator_diagnostics() -> None:
     )
 
     assert window.indicator_diagnostics_text == indicator_text
+
+
+def test_main_window_updates_operational_summary() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="SIN SEÑAL",
+        strength_label="NINGUNA",
+        reason="Technical detail hidden from main view.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=False,
+        css_class="signal-neutral",
+        visual_diagnostics_label="Diagnóstico visual: Tendencia: BEARISH",
+        indicator_diagnostics_label="Diagnóstico de indicadores: -",
+        operational_summary_label=(
+            "Resumen operativo: VIGILAR PUT — falta confirmación "
+            "completa de la estrategia."
+        ),
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert (
+        window.operational_summary_text
+        == "Resumen operativo: VIGILAR PUT — falta confirmación "
+        "completa de la estrategia."
+    )

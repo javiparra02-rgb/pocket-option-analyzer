@@ -296,3 +296,96 @@ def test_presenter_translates_strategy_failure_reason_to_spanish() -> None:
         "  - El Stochastic no confirmó cruce bajista.\n"
         "  - La vela cerrada reciente no es bajista."
     )
+
+
+def test_presenter_builds_operational_summary_for_watch_call() -> None:
+
+    presenter = SignalRecordPresenter()
+
+    reason = (
+        "[visual_diagnostics] Diagnóstico visual:\n"
+        "  Tendencia: BULLISH\n"
+        "  Velas detectadas: 20\n"
+        "  Últimas: BULLISH, BEARISH, BULLISH\n"
+        "  Cerradas: BULLISH, BULLISH, BULLISH\n"
+        "  Direccionales: BULLISH, BULLISH, BULLISH\n"
+        "  Contexto: BULLISH_CONTINUATION\n"
+        "  Vigilancia: VIGILAR_CALL\n"
+        "  Estado: ESPERANDO_CONFIRMACION\n"
+        "OTC Precision 10S conditions were not fully confirmed. "
+        "CALL failed: stochastic did not cross up. "
+        "PUT failed: trend is not bearish."
+    )
+
+    view_model = presenter.present(
+        record=_record(
+            direction=SignalDirection.NONE,
+            strength=SignalStrength.NONE,
+            reason=reason,
+        ),
+    )
+
+    assert (
+        view_model.operational_summary_label
+        == "Resumen operativo: VIGILAR CALL — falta confirmación "
+        "completa de la estrategia."
+    )
+
+
+def test_presenter_builds_operational_summary_for_watch_put() -> None:
+
+    presenter = SignalRecordPresenter()
+
+    reason = (
+        "[visual_diagnostics] Diagnóstico visual:\n"
+        "  Tendencia: BEARISH\n"
+        "  Velas detectadas: 20\n"
+        "  Últimas: BEARISH, BULLISH, BEARISH\n"
+        "  Cerradas: BEARISH, BEARISH, BEARISH\n"
+        "  Direccionales: BEARISH, BEARISH, BEARISH\n"
+        "  Contexto: BEARISH_CONTINUATION\n"
+        "  Vigilancia: VIGILAR_PUT\n"
+        "  Estado: ESPERANDO_CONFIRMACION\n"
+        "OTC Precision 10S conditions were not fully confirmed. "
+        "CALL failed: trend is not bullish. "
+        "PUT failed: stochastic did not cross down."
+    )
+
+    view_model = presenter.present(
+        record=_record(
+            direction=SignalDirection.NONE,
+            strength=SignalStrength.NONE,
+            reason=reason,
+        ),
+    )
+
+    assert (
+        view_model.operational_summary_label
+        == "Resumen operativo: VIGILAR PUT — falta confirmación "
+        "completa de la estrategia."
+    )
+
+
+def test_presenter_builds_operational_summary_when_candles_are_missing() -> None:
+
+    presenter = SignalRecordPresenter()
+
+    reason = (
+        "Not enough visual candles to calculate indicators. "
+        "Detected candles: 9. Minimum visible required: 14. "
+        "Minimum closed required: 13."
+    )
+
+    view_model = presenter.present(
+        record=_record(
+            direction=SignalDirection.NONE,
+            strength=SignalStrength.NONE,
+            reason=reason,
+        ),
+    )
+
+    assert (
+        view_model.operational_summary_label
+        == "Resumen operativo: ESPERAR — faltan velas visibles "
+        "para calcular indicadores."
+    )

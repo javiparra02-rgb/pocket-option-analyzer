@@ -57,6 +57,9 @@ class SignalRecordPresenter:
                 prefix=self.INDICATOR_DIAGNOSTICS_PREFIX,
                 default="Diagnóstico de indicadores: -",
             ),
+            operational_summary_label=self._operational_summary_label(
+                record=record,
+            ),
         )
 
     def _direction_label(
@@ -294,7 +297,6 @@ class SignalRecordPresenter:
 
         return translated_reason
 
-
     def _translate_failure(
         self,
         failure: str,
@@ -352,3 +354,75 @@ class SignalRecordPresenter:
             failure,
             f"{failure}.",
         )
+    
+    def _operational_summary_label(
+        self,
+        record: SignalRecord,
+    ) -> str:
+
+        if record.signal.direction is SignalDirection.CALL:
+            return (
+                "Resumen operativo: ENTRADA CALL confirmada — "
+                "revisar gestión de riesgo antes de operar manualmente."
+            )
+
+        if record.signal.direction is SignalDirection.PUT:
+            return (
+                "Resumen operativo: ENTRADA PUT confirmada — "
+                "revisar gestión de riesgo antes de operar manualmente."
+            )
+
+        reason = record.signal.reason
+
+        if "Not enough visual candles" in reason:
+            return (
+                "Resumen operativo: ESPERAR — faltan velas visibles "
+                "para calcular indicadores."
+            )
+
+        visual_diagnostics = self._diagnostics_label(
+            reason=reason,
+            prefix=self.VISUAL_DIAGNOSTICS_PREFIX,
+            default="",
+        )
+
+        vigilance = self._extract_diagnostic_value(
+            diagnostics=visual_diagnostics,
+            key="Vigilancia:",
+        )
+
+        if vigilance == "VIGILAR_CALL":
+            return (
+                "Resumen operativo: VIGILAR CALL — falta confirmación "
+                "completa de la estrategia."
+            )
+
+        if vigilance == "VIGILAR_PUT":
+            return (
+                "Resumen operativo: VIGILAR PUT — falta confirmación "
+                "completa de la estrategia."
+            )
+
+        return (
+            "Resumen operativo: ESPERAR — no hay entrada confirmada."
+        )
+
+    def _extract_diagnostic_value(
+        self,
+        diagnostics: str,
+        key: str,
+    ) -> str:
+
+        for line in diagnostics.splitlines():
+            cleaned_line = line.strip()
+
+            if cleaned_line.startswith(
+                key,
+            ):
+                return cleaned_line.replace(
+                    key,
+                    "",
+                    1,
+                ).strip()
+
+        return ""
