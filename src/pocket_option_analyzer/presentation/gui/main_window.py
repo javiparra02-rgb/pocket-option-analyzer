@@ -70,8 +70,11 @@ class MainWindow(QMainWindow):
         )
 
         self._history_list = QListWidget()
-        self._history_list.setMinimumHeight(
+        self._history_list.setMaximumHeight(
             90,
+        )
+        self._history_list.setMinimumHeight(
+            70,
         )
         self._history_list.setSizePolicy(
             QSizePolicy.Policy.Expanding,
@@ -295,6 +298,10 @@ class MainWindow(QMainWindow):
         return item.text()
     
     @property
+    def signal_history_maximum_height(self) -> int:
+        return self._history_list.maximumHeight()
+
+    @property
     def operational_summary_text(self) -> str:
         return self._operational_summary_label.text()
     
@@ -429,6 +436,9 @@ class MainWindow(QMainWindow):
             self._strength_label,
         )
         layout.addWidget(
+            self._operational_summary_label,
+        )
+        layout.addWidget(
             self._visual_diagnostics_label,
         )
         layout.addWidget(
@@ -460,9 +470,6 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(
             self._run_once_button,
-        )
-        layout.addWidget(
-            self._operational_summary_label,
         )
 
         content_widget.setLayout(

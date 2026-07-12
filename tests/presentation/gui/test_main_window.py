@@ -693,3 +693,12 @@ def test_main_window_updates_operational_summary() -> None:
         == "Resumen operativo: VIGILAR PUT — falta confirmación "
         "completa de la estrategia."
     )
+
+
+def test_main_window_has_compact_signal_history() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert window.signal_history_maximum_height == 90
