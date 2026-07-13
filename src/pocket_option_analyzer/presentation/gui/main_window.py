@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
 from pocket_option_analyzer.presentation.signals import (
     SignalRecordViewModel,
 )
