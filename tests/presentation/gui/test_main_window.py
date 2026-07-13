@@ -738,3 +738,59 @@ def test_main_window_toggles_compact_mode() -> None:
     assert window.visual_diagnostics_visible is True
     assert window.indicator_diagnostics_visible is True
     assert window.signal_history_visible is True
+
+
+def test_main_window_uses_full_window_geometry_by_default() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert window.window_size == (
+        MainWindow.FULL_WINDOW_WIDTH,
+        MainWindow.FULL_WINDOW_HEIGHT,
+    )
+    assert window.minimum_window_size == (
+        MainWindow.FULL_MIN_WIDTH,
+        MainWindow.FULL_MIN_HEIGHT,
+    )
+    assert window.layout_spacing == MainWindow.FULL_LAYOUT_SPACING
+
+
+def test_main_window_resizes_when_compact_mode_is_enabled() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window._compact_mode_button.click()
+
+    assert window.window_size == (
+        MainWindow.COMPACT_WINDOW_WIDTH,
+        MainWindow.COMPACT_WINDOW_HEIGHT,
+    )
+    assert window.minimum_window_size == (
+        MainWindow.COMPACT_MIN_WIDTH,
+        MainWindow.COMPACT_MIN_HEIGHT,
+    )
+    assert window.layout_spacing == MainWindow.COMPACT_LAYOUT_SPACING
+
+
+def test_main_window_restores_full_geometry_when_compact_mode_is_disabled() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window._compact_mode_button.click()
+    window._compact_mode_button.click()
+
+    assert window.window_size == (
+        MainWindow.FULL_WINDOW_WIDTH,
+        MainWindow.FULL_WINDOW_HEIGHT,
+    )
+    assert window.minimum_window_size == (
+        MainWindow.FULL_MIN_WIDTH,
+        MainWindow.FULL_MIN_HEIGHT,
+    )
+    assert window.layout_spacing == MainWindow.FULL_LAYOUT_SPACING

@@ -41,6 +41,24 @@ class MainWindow(QMainWindow):
 
     MAX_SIGNAL_HISTORY_ITEMS = 50
 
+    FULL_WINDOW_WIDTH = 720
+    FULL_WINDOW_HEIGHT = 560
+
+    FULL_MIN_WIDTH = 520
+    FULL_MIN_HEIGHT = 520
+
+    COMPACT_WINDOW_WIDTH = 500
+    COMPACT_WINDOW_HEIGHT = 300
+
+    COMPACT_MIN_WIDTH = 420
+    COMPACT_MIN_HEIGHT = 260
+
+    FULL_LAYOUT_MARGIN = 12
+    COMPACT_LAYOUT_MARGIN = 8
+
+    FULL_LAYOUT_SPACING = 8
+    COMPACT_LAYOUT_SPACING = 4
+
     def __init__(
         self,
         on_start_requested: WindowAction | None = None,
@@ -57,12 +75,12 @@ class MainWindow(QMainWindow):
             "Pocket Option Analyzer",
         )
         self.resize(
-            720,
-            560,
+            self.FULL_WINDOW_WIDTH,
+            self.FULL_WINDOW_HEIGHT,
         )
         self.setMinimumSize(
-            520,
-            520,
+            self.FULL_MIN_WIDTH,
+            self.FULL_MIN_HEIGHT,
         )
 
         self._history_label = QLabel(
@@ -342,6 +360,25 @@ class MainWindow(QMainWindow):
     def signal_history_visible(self) -> bool:
         return not self._history_list.isHidden()
 
+    @property
+    def window_size(self) -> tuple[int, int]:
+        return (
+            self.width(),
+            self.height(),
+        )
+
+    @property
+    def minimum_window_size(self) -> tuple[int, int]:
+        return (
+            self.minimumWidth(),
+            self.minimumHeight(),
+        )
+
+    @property
+    def layout_spacing(self) -> int:
+        return self._main_layout.spacing()
+
+
     def set_running_state(
         self,
         is_running: bool,
@@ -448,6 +485,11 @@ class MainWindow(QMainWindow):
     def _setup_layout(self) -> None:
         content_widget = QWidget()
         layout = QVBoxLayout()
+        self._main_layout = layout
+
+        self._apply_layout_density(
+            compact=False,
+        )
 
         layout.addWidget(
             self._status_label,
@@ -621,7 +663,6 @@ class MainWindow(QMainWindow):
 
         self._trim_signal_history()
 
-
     def _trim_signal_history(
         self,
     ) -> None:
@@ -679,11 +720,68 @@ class MainWindow(QMainWindow):
         )
 
         if enabled:
+            self._apply_compact_geometry()
             self._compact_mode_button.setText(
                 "Vista completa",
             )
             return
 
+        self._apply_full_geometry()
         self._compact_mode_button.setText(
             "Modo compacto",
+        )
+
+    def _apply_compact_geometry(
+        self,
+    ) -> None:
+        self.setMinimumSize(
+            self.COMPACT_MIN_WIDTH,
+            self.COMPACT_MIN_HEIGHT,
+        )
+        self.resize(
+            self.COMPACT_WINDOW_WIDTH,
+            self.COMPACT_WINDOW_HEIGHT,
+        )
+        self._apply_layout_density(
+            compact=True,
+        )
+
+    def _apply_full_geometry(
+        self,
+    ) -> None:
+        self.setMinimumSize(
+            self.FULL_MIN_WIDTH,
+            self.FULL_MIN_HEIGHT,
+        )
+        self.resize(
+            self.FULL_WINDOW_WIDTH,
+            self.FULL_WINDOW_HEIGHT,
+        )
+        self._apply_layout_density(
+            compact=False,
+        )
+
+    def _apply_layout_density(
+        self,
+        compact: bool,
+    ) -> None:
+        margin = (
+            self.COMPACT_LAYOUT_MARGIN
+            if compact
+            else self.FULL_LAYOUT_MARGIN
+        )
+        spacing = (
+            self.COMPACT_LAYOUT_SPACING
+            if compact
+            else self.FULL_LAYOUT_SPACING
+        )
+
+        self._main_layout.setContentsMargins(
+            margin,
+            margin,
+            margin,
+            margin,
+        )
+        self._main_layout.setSpacing(
+            spacing,
         )
