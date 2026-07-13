@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QTextCursor, QTextOption
 from PySide6.QtWidgets import (
     QApplication,
@@ -60,17 +61,34 @@ class MainWindow(QMainWindow):
     FULL_LAYOUT_SPACING = 8
     COMPACT_LAYOUT_SPACING = 4
 
+    SETTINGS_ORGANIZATION = "PocketOptionAnalyzer"
+    SETTINGS_APPLICATION = "PocketOptionAnalyzer"
+
+    SETTINGS_GROUP = "main_window"
+    SETTING_COMPACT_MODE = "compact_mode"
+    SETTING_X = "x"
+    SETTING_Y = "y"
+    SETTING_WIDTH = "width"
+    SETTING_HEIGHT = "height"
+
     def __init__(
         self,
         on_start_requested: WindowAction | None = None,
         on_stop_requested: WindowAction | None = None,
         on_run_once_requested: WindowAction | None = None,
+        settings: QSettings | None = None,
+        restore_window_preferences: bool = False,
     ) -> None:
         super().__init__()
 
         self._on_start_requested = on_start_requested
         self._on_stop_requested = on_stop_requested
         self._on_run_once_requested = on_run_once_requested
+        self._settings = settings or QSettings(
+            self.SETTINGS_ORGANIZATION,
+            self.SETTINGS_APPLICATION,
+        )
+        self._restore_window_preferences_enabled = restore_window_preferences
 
         self.setWindowTitle(
             "Pocket Option Analyzer",
@@ -221,6 +239,9 @@ class MainWindow(QMainWindow):
         self.set_running_state(
             is_running=False,
         )
+
+        if self._restore_window_preferences_enabled:
+            self._restore_window_preferences()
 
     @property
     def status_text(self) -> str:
@@ -695,6 +716,7 @@ class MainWindow(QMainWindow):
     def _set_compact_mode(
         self,
         enabled: bool,
+        save_preferences: bool = True,
     ) -> None:
         self._compact_mode_enabled = enabled
 
@@ -725,12 +747,14 @@ class MainWindow(QMainWindow):
             self._compact_mode_button.setText(
                 "Vista completa",
             )
-            return
+        else:
+            self._apply_full_geometry()
+            self._compact_mode_button.setText(
+                "Modo compacto",
+            )
 
-        self._apply_full_geometry()
-        self._compact_mode_button.setText(
-            "Modo compacto",
-        )
+        if save_preferences:
+            self._save_window_preferences()
 
     def _apply_compact_geometry(
         self,
@@ -785,4 +809,99 @@ class MainWindow(QMainWindow):
         )
         self._main_layout.setSpacing(
             spacing,
+        )
+
+    def _save_window_preferences(
+        self,
+    ) -> None:
+        if not self._restore_window_preferences_enabled:
+            return
+
+        self._settings.beginGroup(
+            self.SETTINGS_GROUP,
+        )
+        self._settings.setValue(
+            self.SETTING_COMPACT_MODE,
+            self._compact_mode_enabled,
+        )
+        self._settings.setValue(
+            self.SETTING_X,
+            self.x(),
+        )
+        self._settings.setValue(
+            self.SETTING_Y,
+            self.y(),
+        )
+        self._settings.setValue(
+            self.SETTING_WIDTH,
+            self.width(),
+        )
+        self._settings.setValue(
+            self.SETTING_HEIGHT,
+            self.height(),
+        )
+        self._settings.endGroup()
+        self._settings.sync()
+
+
+    def _restore_window_preferences(
+        self,
+    ) -> None:
+        self._settings.beginGroup(
+            self.SETTINGS_GROUP,
+        )
+
+        compact_mode = self._settings.value(
+            self.SETTING_COMPACT_MODE,
+            False,
+            type=bool,
+        )
+        x = self._settings.value(
+            self.SETTING_X,
+            None,
+            type=int,
+        )
+        y = self._settings.value(
+            self.SETTING_Y,
+            None,
+            type=int,
+        )
+        width = self._settings.value(
+            self.SETTING_WIDTH,
+            None,
+            type=int,
+        )
+        height = self._settings.value(
+            self.SETTING_HEIGHT,
+            None,
+            type=int,
+        )
+
+        self._settings.endGroup()
+
+        self._set_compact_mode(
+            enabled=compact_mode,
+            save_preferences=False,
+        )
+
+        if width is not None and height is not None:
+            self.resize(
+                width,
+                height,
+            )
+
+        if x is not None and y is not None:
+            self.move(
+                x,
+                y,
+            )
+
+
+    def closeEvent(
+        self,
+        event,
+    ) -> None:
+        self._save_window_preferences()
+        super().closeEvent(
+            event,
         )

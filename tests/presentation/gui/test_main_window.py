@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sys
 
+from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QApplication, QPushButton
 
 from pocket_option_analyzer.presentation.gui import MainWindow
@@ -794,3 +795,139 @@ def test_main_window_restores_full_geometry_when_compact_mode_is_disabled() -> N
         MainWindow.FULL_MIN_HEIGHT,
     )
     assert window.layout_spacing == MainWindow.FULL_LAYOUT_SPACING
+
+
+def _temporary_settings(
+    tmp_path,
+) -> QSettings:
+    return QSettings(
+        str(
+            tmp_path / "window_settings.ini",
+        ),
+        QSettings.Format.IniFormat,
+    )
+
+
+def test_main_window_does_not_restore_preferences_by_default(
+    tmp_path,
+) -> None:
+
+    _application()
+
+    settings = _temporary_settings(
+        tmp_path,
+    )
+
+    settings.beginGroup(
+        MainWindow.SETTINGS_GROUP,
+    )
+    settings.setValue(
+        MainWindow.SETTING_COMPACT_MODE,
+        True,
+    )
+    settings.setValue(
+        MainWindow.SETTING_WIDTH,
+        430,
+    )
+    settings.setValue(
+        MainWindow.SETTING_HEIGHT,
+        280,
+    )
+    settings.endGroup()
+    settings.sync()
+
+    window = MainWindow(
+        settings=settings,
+    )
+
+    assert window.is_compact_mode_enabled is False
+    assert window.window_size == (
+        MainWindow.FULL_WINDOW_WIDTH,
+        MainWindow.FULL_WINDOW_HEIGHT,
+    )
+
+
+def test_main_window_restores_saved_compact_preferences(
+    tmp_path,
+) -> None:
+
+    _application()
+
+    settings = _temporary_settings(
+        tmp_path,
+    )
+
+    settings.beginGroup(
+        MainWindow.SETTINGS_GROUP,
+    )
+    settings.setValue(
+        MainWindow.SETTING_COMPACT_MODE,
+        True,
+    )
+    settings.setValue(
+        MainWindow.SETTING_X,
+        100,
+    )
+    settings.setValue(
+        MainWindow.SETTING_Y,
+        120,
+    )
+    settings.setValue(
+        MainWindow.SETTING_WIDTH,
+        430,
+    )
+    settings.setValue(
+        MainWindow.SETTING_HEIGHT,
+        280,
+    )
+    settings.endGroup()
+    settings.sync()
+
+    window = MainWindow(
+        settings=settings,
+        restore_window_preferences=True,
+    )
+
+    assert window.is_compact_mode_enabled is True
+    assert window.compact_mode_button_text == "Vista completa"
+    assert window.window_size == (
+        430,
+        280,
+    )
+
+
+def test_main_window_saves_window_preferences_when_enabled(
+    tmp_path,
+) -> None:
+
+    _application()
+
+    settings = _temporary_settings(
+        tmp_path,
+    )
+
+    window = MainWindow(
+        settings=settings,
+        restore_window_preferences=True,
+    )
+
+    window._compact_mode_button.click()
+
+    settings.beginGroup(
+        MainWindow.SETTINGS_GROUP,
+    )
+
+    assert settings.value(
+        MainWindow.SETTING_COMPACT_MODE,
+        type=bool,
+    ) is True
+    assert settings.value(
+        MainWindow.SETTING_WIDTH,
+        type=int,
+    ) == MainWindow.COMPACT_WINDOW_WIDTH
+    assert settings.value(
+        MainWindow.SETTING_HEIGHT,
+        type=int,
+    ) == MainWindow.COMPACT_WINDOW_HEIGHT
+
+    settings.endGroup()
