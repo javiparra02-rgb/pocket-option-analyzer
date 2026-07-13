@@ -702,3 +702,39 @@ def test_main_window_has_compact_signal_history() -> None:
     window = MainWindow()
 
     assert window.signal_history_maximum_height == 90
+
+
+def test_main_window_starts_with_full_view_mode() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert window.is_compact_mode_enabled is False
+    assert window.compact_mode_button_text == "Modo compacto"
+    assert window.visual_diagnostics_visible is True
+    assert window.indicator_diagnostics_visible is True
+    assert window.signal_history_visible is True
+
+
+def test_main_window_toggles_compact_mode() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is True
+    assert window.compact_mode_button_text == "Vista completa"
+    assert window.visual_diagnostics_visible is False
+    assert window.indicator_diagnostics_visible is False
+    assert window.signal_history_visible is False
+
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is False
+    assert window.compact_mode_button_text == "Modo compacto"
+    assert window.visual_diagnostics_visible is True
+    assert window.indicator_diagnostics_visible is True
+    assert window.signal_history_visible is True

@@ -185,6 +185,15 @@ class MainWindow(QMainWindow):
             "run_once_button",
         )
 
+        self._compact_mode_button = QPushButton(
+            "Modo compacto",
+        )
+        self._compact_mode_button.clicked.connect(
+            self._toggle_compact_mode,
+        )
+
+        self._compact_mode_enabled = False
+
         self._setup_layout()
         self._connect_events()
         self._apply_signal_style(
@@ -312,6 +321,26 @@ class MainWindow(QMainWindow):
     @property
     def indicator_diagnostics_text(self) -> str:
         return self._indicator_diagnostics_label.text()
+    
+    @property
+    def compact_mode_button_text(self) -> str:
+        return self._compact_mode_button.text()
+
+    @property
+    def is_compact_mode_enabled(self) -> bool:
+        return self._compact_mode_enabled
+
+    @property
+    def visual_diagnostics_visible(self) -> bool:
+        return not self._visual_diagnostics_label.isHidden()
+
+    @property
+    def indicator_diagnostics_visible(self) -> bool:
+        return not self._indicator_diagnostics_label.isHidden()
+
+    @property
+    def signal_history_visible(self) -> bool:
+        return not self._history_list.isHidden()
 
     def set_running_state(
         self,
@@ -458,6 +487,9 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(
             self._history_list,
+        )
+        layout.addWidget(
+            self._compact_mode_button,
         )
         layout.addWidget(
             self._clear_history_button,
@@ -610,3 +642,48 @@ class MainWindow(QMainWindow):
     def _handle_run_once_clicked(self) -> None:
         if self._on_run_once_requested is not None:
             self._on_run_once_requested()
+
+    def _toggle_compact_mode(
+        self,
+    ) -> None:
+        self._set_compact_mode(
+            enabled=not self._compact_mode_enabled,
+        )
+
+    def _set_compact_mode(
+        self,
+        enabled: bool,
+    ) -> None:
+        self._compact_mode_enabled = enabled
+
+        self._visual_diagnostics_label.setHidden(
+            enabled,
+        )
+        self._indicator_diagnostics_label.setHidden(
+            enabled,
+        )
+        self._source_label.setHidden(
+            enabled,
+        )
+        self._created_at_label.setHidden(
+            enabled,
+        )
+        self._history_label.setHidden(
+            enabled,
+        )
+        self._history_list.setHidden(
+            enabled,
+        )
+        self._clear_history_button.setHidden(
+            enabled,
+        )
+
+        if enabled:
+            self._compact_mode_button.setText(
+                "Vista completa",
+            )
+            return
+
+        self._compact_mode_button.setText(
+            "Modo compacto",
+        )
