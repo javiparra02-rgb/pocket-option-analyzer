@@ -111,6 +111,9 @@ class MainWindowController(QObject):
         self._thread: ThreadLike | None = None
 
         self._window = window or MainWindow(
+            on_start_requested=self.start,
+            on_stop_requested=self.stop,
+            on_run_once_requested=self.run_once,
             restore_window_preferences=True,
         )
 
