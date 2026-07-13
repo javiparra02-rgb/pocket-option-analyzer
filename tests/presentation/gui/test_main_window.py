@@ -1014,3 +1014,22 @@ def test_main_window_reset_view_saves_clean_preferences(
     ) == MainWindow.FULL_WINDOW_HEIGHT
 
     settings.endGroup()
+
+
+def test_main_window_compact_mode_prioritizes_live_summary() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is True
+
+    assert window.signal_label_visible is True
+    assert window.strength_label_visible is True
+    assert window.operational_summary_visible is True
+
+    assert window.visual_diagnostics_visible is False
+    assert window.indicator_diagnostics_visible is False
+    assert window.signal_history_visible is False

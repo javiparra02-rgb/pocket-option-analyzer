@@ -414,6 +414,18 @@ class MainWindow(QMainWindow):
     @property
     def layout_spacing(self) -> int:
         return self._main_layout.spacing()
+    
+    @property
+    def signal_label_visible(self) -> bool:
+        return not self._direction_label.isHidden()
+
+    @property
+    def strength_label_visible(self) -> bool:
+        return not self._strength_label.isHidden()
+
+    @property
+    def operational_summary_visible(self) -> bool:
+        return not self._operational_summary_label.isHidden()
 
 
     def set_running_state(
@@ -757,38 +769,78 @@ class MainWindow(QMainWindow):
     ) -> None:
         self._compact_mode_enabled = enabled
 
-        self._visual_diagnostics_label.setHidden(
-            enabled,
+        self._status_label.setVisible(
+            not enabled,
         )
-        self._indicator_diagnostics_label.setHidden(
-            enabled,
+        self._error_label.setVisible(
+            not enabled,
         )
-        self._source_label.setHidden(
-            enabled,
+        self._capture_note_label.setVisible(
+            not enabled,
         )
-        self._created_at_label.setHidden(
-            enabled,
+        self._visual_diagnostics_label.setVisible(
+            not enabled,
         )
-        self._history_label.setHidden(
-            enabled,
+        self._indicator_diagnostics_label.setVisible(
+            not enabled,
         )
-        self._history_list.setHidden(
-            enabled,
+        self._source_label.setVisible(
+            not enabled,
         )
-        self._clear_history_button.setHidden(
-            enabled,
+        self._created_at_label.setVisible(
+            not enabled,
+        )
+        self._history_label.setVisible(
+            not enabled,
+        )
+        self._history_list.setVisible(
+            not enabled,
+        )
+        self._clear_history_button.setVisible(
+            not enabled,
+        )
+
+        self._direction_label.setVisible(
+            True,
+        )
+        self._strength_label.setVisible(
+            True,
+        )
+        self._operational_summary_label.setVisible(
+            True,
+        )
+        self._compact_mode_button.setVisible(
+            True,
+        )
+        self._reset_view_button.setVisible(
+            True,
+        )
+        self._start_button.setVisible(
+            True,
+        )
+        self._stop_button.setVisible(
+            True,
+        )
+        self._run_once_button.setVisible(
+            True,
         )
 
         if enabled:
-            self._apply_compact_geometry()
             self._compact_mode_button.setText(
                 "Vista completa",
             )
+            self._apply_layout_density(
+                compact=True,
+            )
+            self._apply_compact_geometry()
         else:
-            self._apply_full_geometry()
             self._compact_mode_button.setText(
                 "Modo compacto",
             )
+            self._apply_layout_density(
+                compact=False,
+            )
+            self._apply_full_geometry()
 
         if save_preferences:
             self._save_window_preferences()
