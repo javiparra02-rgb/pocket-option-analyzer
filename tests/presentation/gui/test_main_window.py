@@ -931,3 +931,86 @@ def test_main_window_saves_window_preferences_when_enabled(
     ) == MainWindow.COMPACT_WINDOW_HEIGHT
 
     settings.endGroup()
+
+
+def test_main_window_has_reset_view_button() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert window.reset_view_button_text == "Restablecer vista"
+
+
+def test_main_window_reset_view_restores_full_mode() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is True
+
+    _button(
+        window=window,
+        object_name="reset_view_button",
+    ).click()
+
+    assert window.is_compact_mode_enabled is False
+    assert window.compact_mode_button_text == "Modo compacto"
+    assert window.window_size == (
+        MainWindow.FULL_WINDOW_WIDTH,
+        MainWindow.FULL_WINDOW_HEIGHT,
+    )
+    assert window.minimum_window_size == (
+        MainWindow.FULL_MIN_WIDTH,
+        MainWindow.FULL_MIN_HEIGHT,
+    )
+    assert window.visual_diagnostics_visible is True
+    assert window.indicator_diagnostics_visible is True
+    assert window.signal_history_visible is True
+
+
+def test_main_window_reset_view_saves_clean_preferences(
+    tmp_path,
+) -> None:
+
+    _application()
+
+    settings = _temporary_settings(
+        tmp_path,
+    )
+
+    window = MainWindow(
+        settings=settings,
+        restore_window_preferences=True,
+    )
+
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is True
+
+    _button(
+        window=window,
+        object_name="reset_view_button",
+    ).click()
+
+    settings.beginGroup(
+        MainWindow.SETTINGS_GROUP,
+    )
+
+    assert settings.value(
+        MainWindow.SETTING_COMPACT_MODE,
+        type=bool,
+    ) is False
+    assert settings.value(
+        MainWindow.SETTING_WIDTH,
+        type=int,
+    ) == MainWindow.FULL_WINDOW_WIDTH
+    assert settings.value(
+        MainWindow.SETTING_HEIGHT,
+        type=int,
+    ) == MainWindow.FULL_WINDOW_HEIGHT
+
+    settings.endGroup()

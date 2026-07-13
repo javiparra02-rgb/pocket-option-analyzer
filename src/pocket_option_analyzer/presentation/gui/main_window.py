@@ -61,6 +61,8 @@ class MainWindow(QMainWindow):
     FULL_LAYOUT_SPACING = 8
     COMPACT_LAYOUT_SPACING = 4
 
+    SAFE_WINDOW_MARGIN = 24
+
     SETTINGS_ORGANIZATION = "PocketOptionAnalyzer"
     SETTINGS_APPLICATION = "PocketOptionAnalyzer"
 
@@ -229,6 +231,15 @@ class MainWindow(QMainWindow):
             self._toggle_compact_mode,
         )
 
+        self._reset_view_button = QPushButton(
+            "Restablecer vista",
+        )
+        self._reset_view_button.setObjectName(
+            "reset_view_button",
+        )
+
+        self._compact_mode_enabled = False
+
         self._compact_mode_enabled = False
 
         self._setup_layout()
@@ -365,6 +376,10 @@ class MainWindow(QMainWindow):
     @property
     def compact_mode_button_text(self) -> str:
         return self._compact_mode_button.text()
+
+    @property
+    def reset_view_button_text(self) -> str:
+        return self._reset_view_button.text()
 
     @property
     def is_compact_mode_enabled(self) -> bool:
@@ -556,6 +571,9 @@ class MainWindow(QMainWindow):
             self._compact_mode_button,
         )
         layout.addWidget(
+            self._reset_view_button,
+        )
+        layout.addWidget(
             self._clear_history_button,
         )
         layout.addWidget(
@@ -596,6 +614,9 @@ class MainWindow(QMainWindow):
         )
         self._clear_history_button.clicked.connect(
             self.clear_signal_history,
+        )
+        self._reset_view_button.clicked.connect(
+            self.reset_view,
         )
 
     def _apply_button_state(
@@ -706,6 +727,22 @@ class MainWindow(QMainWindow):
         if self._on_run_once_requested is not None:
             self._on_run_once_requested()
 
+    def reset_view(self) -> None:
+        """
+        Restablece la ventana a una vista segura.
+
+        Sale del modo compacto, vuelve a la geometría completa,
+        posiciona la ventana dentro del área visible y guarda
+        las preferencias limpias.
+        """
+
+        self._set_compact_mode(
+            enabled=False,
+            save_preferences=False,
+        )
+        self._move_to_safe_position()
+        self._save_window_preferences()
+
     def _toggle_compact_mode(
         self,
     ) -> None:
@@ -784,6 +821,32 @@ class MainWindow(QMainWindow):
         )
         self._apply_layout_density(
             compact=False,
+        )
+
+    def _move_to_safe_position(
+        self,
+    ) -> None:
+        screen = QApplication.primaryScreen()
+
+        if screen is None:
+            return
+
+        available_geometry = screen.availableGeometry()
+
+        x = max(
+            available_geometry.left(),
+            available_geometry.right()
+            - self.width()
+            - self.SAFE_WINDOW_MARGIN,
+        )
+        y = max(
+            available_geometry.top(),
+            available_geometry.top() + self.SAFE_WINDOW_MARGIN,
+        )
+
+        self.move(
+            x,
+            y,
         )
 
     def _apply_layout_density(
