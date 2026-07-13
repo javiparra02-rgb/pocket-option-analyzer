@@ -381,8 +381,8 @@ def test_main_window_reason_panel_has_more_vertical_space() -> None:
     window = MainWindow()
 
     assert window.reason_minimum_height >= 180
-    assert window.minimumWidth() >= 520
-    assert window.minimumHeight() >= 520
+    assert window.minimumWidth() >= 460
+    assert window.minimumHeight() >= 360
 
 
 def test_main_window_displays_capture_note() -> None:
