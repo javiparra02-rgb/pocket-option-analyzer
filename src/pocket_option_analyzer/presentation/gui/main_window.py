@@ -63,6 +63,33 @@ class MainWindow(QMainWindow):
 
     SAFE_WINDOW_MARGIN = 24
 
+    OPERATIONAL_SUMMARY_CALL_STYLE = (
+        "font-weight: bold; "
+        "color: #0f9d58; "
+        "background-color: #eefaf3; "
+        "border: 1px solid #0f9d58; "
+        "border-radius: 4px; "
+        "padding: 4px;"
+    )
+
+    OPERATIONAL_SUMMARY_PUT_STYLE = (
+        "font-weight: bold; "
+        "color: #d93025; "
+        "background-color: #fff0f0; "
+        "border: 1px solid #d93025; "
+        "border-radius: 4px; "
+        "padding: 4px;"
+    )
+
+    OPERATIONAL_SUMMARY_NEUTRAL_STYLE = (
+        "font-weight: bold; "
+        "color: #5f6368; "
+        "background-color: #f8f9fa; "
+        "border: 1px solid #9aa0a6; "
+        "border-radius: 4px; "
+        "padding: 4px;"
+    )
+
     SETTINGS_ORGANIZATION = "PocketOptionAnalyzer"
     SETTINGS_APPLICATION = "PocketOptionAnalyzer"
 
@@ -157,7 +184,7 @@ class MainWindow(QMainWindow):
             True,
         )
         self._operational_summary_label.setStyleSheet(
-            "font-weight: bold; color: #1f2937;"
+            self.OPERATIONAL_SUMMARY_NEUTRAL_STYLE,
         )
         self._visual_diagnostics_label = QLabel(
             "Diagnóstico visual: -",
@@ -366,6 +393,10 @@ class MainWindow(QMainWindow):
         return self._operational_summary_label.text()
     
     @property
+    def operational_summary_style(self) -> str:
+        return self._operational_summary_label.styleSheet()
+    
+    @property
     def visual_diagnostics_text(self) -> str:
         return self._visual_diagnostics_label.text()
     
@@ -530,6 +561,7 @@ class MainWindow(QMainWindow):
         self._operational_summary_label.setText(
             view_model.operational_summary_label,
         )
+        self._apply_operational_summary_style()
 
     def _setup_layout(self) -> None:
         content_widget = QWidget()
@@ -689,6 +721,27 @@ class MainWindow(QMainWindow):
         )
         self._reason_text.setStyleSheet(
             reason_style,
+        )
+
+    def _apply_operational_summary_style(
+        self,
+    ) -> None:
+        summary_text = self._operational_summary_label.text().upper()
+
+        if "VIGILAR CALL" in summary_text or "ENTRADA CALL" in summary_text:
+            self._operational_summary_label.setStyleSheet(
+                self.OPERATIONAL_SUMMARY_CALL_STYLE,
+            )
+            return
+
+        if "VIGILAR PUT" in summary_text or "ENTRADA PUT" in summary_text:
+            self._operational_summary_label.setStyleSheet(
+                self.OPERATIONAL_SUMMARY_PUT_STYLE,
+            )
+            return
+
+        self._operational_summary_label.setStyleSheet(
+            self.OPERATIONAL_SUMMARY_NEUTRAL_STYLE,
         )
     
     def clear_signal_history(self) -> None:
