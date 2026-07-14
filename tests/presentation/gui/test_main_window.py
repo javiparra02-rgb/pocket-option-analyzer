@@ -1170,3 +1170,116 @@ def test_main_window_styles_operational_summary_for_confirmed_put_entry() -> Non
 
     assert "#d93025" in window.operational_summary_style
     assert "#fff0f0" in window.operational_summary_style
+
+
+def test_main_window_hides_entry_alert_by_default() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert window.entry_alert_visible is False
+    assert window.entry_alert_text == ""
+
+
+def test_main_window_shows_call_entry_alert_when_signal_is_actionable() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="CALL",
+        strength_label="ALTA",
+        reason="CALL setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=True,
+        css_class="signal-call",
+        operational_summary_label=(
+            "Resumen operativo: ENTRADA CALL confirmada — revisar gestión "
+            "de riesgo antes de operar manualmente."
+        ),
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert window.entry_alert_visible is True
+    assert window.entry_alert_text == "ENTRADA CALL CONFIRMADA"
+    assert "#0f9d58" in window.entry_alert_style
+
+
+def test_main_window_shows_put_entry_alert_when_signal_is_actionable() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="PUT",
+        strength_label="ALTA",
+        reason="PUT setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=True,
+        css_class="signal-put",
+        operational_summary_label=(
+            "Resumen operativo: ENTRADA PUT confirmada — revisar gestión "
+            "de riesgo antes de operar manualmente."
+        ),
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert window.entry_alert_visible is True
+    assert window.entry_alert_text == "ENTRADA PUT CONFIRMADA"
+    assert "#d93025" in window.entry_alert_style
+
+
+def test_main_window_hides_entry_alert_when_signal_is_not_actionable() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    actionable_view_model = SignalRecordViewModel(
+        direction_label="PUT",
+        strength_label="ALTA",
+        reason="PUT setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=True,
+        css_class="signal-put",
+        operational_summary_label=(
+            "Resumen operativo: ENTRADA PUT confirmada — revisar gestión "
+            "de riesgo antes de operar manualmente."
+        ),
+    )
+
+    neutral_view_model = SignalRecordViewModel(
+        direction_label="SIN SEÑAL",
+        strength_label="NINGUNA",
+        reason="No setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:31:45",
+        is_actionable=False,
+        css_class="signal-neutral",
+        operational_summary_label="Resumen operativo: ESPERAR",
+    )
+
+    window.update_signal(
+        view_model=actionable_view_model,
+    )
+
+    assert window.entry_alert_visible is True
+
+    window.update_signal(
+        view_model=neutral_view_model,
+    )
+
+    assert window.entry_alert_visible is False
+    assert window.entry_alert_text == ""

@@ -90,6 +90,26 @@ class MainWindow(QMainWindow):
         "padding: 4px;"
     )
 
+    ENTRY_ALERT_CALL_STYLE = (
+        "font-weight: bold; "
+        "font-size: 16px; "
+        "color: #0f9d58; "
+        "background-color: #dff5e8; "
+        "border: 2px solid #0f9d58; "
+        "border-radius: 6px; "
+        "padding: 8px;"
+    )
+
+    ENTRY_ALERT_PUT_STYLE = (
+        "font-weight: bold; "
+        "font-size: 16px; "
+        "color: #d93025; "
+        "background-color: #ffe5e5; "
+        "border: 2px solid #d93025; "
+        "border-radius: 6px; "
+        "padding: 8px;"
+    )
+
     SETTINGS_ORGANIZATION = "PocketOptionAnalyzer"
     SETTINGS_APPLICATION = "PocketOptionAnalyzer"
 
@@ -170,7 +190,16 @@ class MainWindow(QMainWindow):
         self._capture_note_label.setStyleSheet(
             "color: #5f6368; font-style: italic;"
         )
-
+        
+        self._entry_alert_label = QLabel(
+            "",
+        )
+        self._entry_alert_label.setWordWrap(
+            True,
+        )
+        self._entry_alert_label.setHidden(
+            True,
+        )
         self._direction_label = QLabel(
             "Señal: SIN SEÑAL",
         )
@@ -457,6 +486,18 @@ class MainWindow(QMainWindow):
     @property
     def operational_summary_visible(self) -> bool:
         return not self._operational_summary_label.isHidden()
+    
+    @property
+    def entry_alert_text(self) -> str:
+        return self._entry_alert_label.text()
+
+    @property
+    def entry_alert_visible(self) -> bool:
+        return not self._entry_alert_label.isHidden()
+
+    @property
+    def entry_alert_style(self) -> str:
+        return self._entry_alert_label.styleSheet()
 
 
     def set_running_state(
@@ -555,6 +596,9 @@ class MainWindow(QMainWindow):
         self._apply_signal_style(
             css_class=view_model.css_class,
         )
+        self._apply_entry_alert(
+            view_model=view_model,
+        )
         self._append_signal_history(
             view_model=view_model,
         )
@@ -580,6 +624,9 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(
             self._capture_note_label,
+        )
+        layout.addWidget(
+            self._entry_alert_label,
         )
         layout.addWidget(
             self._direction_label,
@@ -743,6 +790,52 @@ class MainWindow(QMainWindow):
         self._operational_summary_label.setStyleSheet(
             self.OPERATIONAL_SUMMARY_NEUTRAL_STYLE,
         )
+
+    def _apply_entry_alert(
+        self,
+        view_model: SignalRecordViewModel,
+    ) -> None:
+        direction = view_model.direction_label.upper()
+
+        if not view_model.is_actionable:
+            self._entry_alert_label.setHidden(
+                True,
+            )
+            self._entry_alert_label.setText(
+                "",
+            )
+            return
+
+        if direction == "CALL":
+            self._entry_alert_label.setText(
+                "ENTRADA CALL CONFIRMADA",
+            )
+            self._entry_alert_label.setStyleSheet(
+                self.ENTRY_ALERT_CALL_STYLE,
+            )
+            self._entry_alert_label.setHidden(
+                False,
+            )
+            return
+
+        if direction == "PUT":
+            self._entry_alert_label.setText(
+                "ENTRADA PUT CONFIRMADA",
+            )
+            self._entry_alert_label.setStyleSheet(
+                self.ENTRY_ALERT_PUT_STYLE,
+            )
+            self._entry_alert_label.setHidden(
+                False,
+            )
+            return
+
+        self._entry_alert_label.setHidden(
+            True,
+        )
+        self._entry_alert_label.setText(
+            "",
+        )
     
     def clear_signal_history(self) -> None:
         """
@@ -852,7 +945,10 @@ class MainWindow(QMainWindow):
         self._clear_history_button.setVisible(
             not enabled,
         )
-
+        
+        self._entry_alert_label.setVisible(
+            not self._entry_alert_label.isHidden(),
+        )
         self._direction_label.setVisible(
             True,
         )
