@@ -1283,3 +1283,255 @@ def test_main_window_hides_entry_alert_when_signal_is_not_actionable() -> None:
 
     assert window.entry_alert_visible is False
     assert window.entry_alert_text == ""
+
+
+def test_main_window_displays_initial_confirmation_checklist() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert (
+        window.confirmation_checklist_text
+        == "Visual: ❌ | EMA: ❌ | RSI: ❌ | Stoch: ❌ | Entrada: ESPERAR"
+    )
+    assert window.confirmation_checklist_visible is True
+
+
+def test_main_window_updates_confirmation_checklist_for_put_watch() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="SIN SEÑAL",
+        strength_label="NINGUNA",
+        reason="Waiting for PUT confirmation.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=False,
+        css_class="signal-neutral",
+        visual_diagnostics_label=(
+            "Diagnóstico visual:\n"
+            "  Tendencia: BEARISH\n"
+            "  Contexto: BEARISH_CONTINUATION\n"
+            "  Vigilancia: VIGILAR_PUT\n"
+            "  Estado: ESPERANDO_CONFIRMACION"
+        ),
+        indicator_diagnostics_label=(
+            "Diagnóstico de indicadores:\n"
+            "  EMA: bajista | rápida=89.09 | lenta=161.44 | "
+            "separación=8/3 suficiente\n"
+            "  RSI: 36.64 | CALL fuera de rango | PUT en rango\n"
+            "  Stochastic: sin cruce | K=70.00 | D=60.00\n"
+            "  Estado: esperando confirmación de estrategia"
+        ),
+        operational_summary_label=(
+            "Resumen operativo: VIGILAR PUT — falta confirmación "
+            "completa de la estrategia."
+        ),
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert (
+        window.confirmation_checklist_text
+        == "Visual: ❌ | EMA: ✅ | RSI: ✅ | Stoch: ❌ | Entrada: ESPERAR"
+    )
+
+
+def test_main_window_updates_confirmation_checklist_for_confirmed_put() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="PUT",
+        strength_label="ALTA",
+        reason="PUT setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=True,
+        css_class="signal-put",
+        visual_diagnostics_label=(
+            "Diagnóstico visual:\n"
+            "  Tendencia: BEARISH\n"
+            "  Contexto: BEARISH_CONTINUATION\n"
+            "  Vigilancia: VIGILAR_PUT\n"
+            "  Estado: SEÑAL_CONFIRMADA"
+        ),
+        indicator_diagnostics_label=(
+            "Diagnóstico de indicadores:\n"
+            "  EMA: bajista | rápida=89.09 | lenta=161.44 | "
+            "separación=8/3 suficiente\n"
+            "  RSI: 36.64 | CALL fuera de rango | PUT en rango\n"
+            "  Stochastic: cruce bajista | K=70.00 | D=80.00\n"
+            "  Estado: esperando confirmación de estrategia"
+        ),
+        operational_summary_label=(
+            "Resumen operativo: ENTRADA PUT confirmada — revisar gestión "
+            "de riesgo antes de operar manualmente."
+        ),
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert (
+        window.confirmation_checklist_text
+        == "Visual: ✅ | EMA: ✅ | RSI: ✅ | Stoch: ✅ | Entrada: PUT"
+    )
+    assert "#d93025" in window.confirmation_checklist_style
+
+
+def test_main_window_keeps_confirmation_checklist_visible_in_compact_mode() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is True
+    assert window.confirmation_checklist_visible is True
+
+
+def test_main_window_marks_call_ema_as_missing_when_separation_is_insufficient() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="SIN SEÑAL",
+        strength_label="NINGUNA",
+        reason="Waiting for CALL confirmation.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=False,
+        css_class="signal-neutral",
+        visual_diagnostics_label=(
+            "Diagnóstico visual:\n"
+            "  Tendencia: BULLISH\n"
+            "  Contexto: BULLISH_CONTINUATION\n"
+            "  Vigilancia: VIGILAR_CALL\n"
+            "  Estado: ESPERANDO_CONFIRMACION"
+        ),
+        indicator_diagnostics_label=(
+            "Diagnóstico de indicadores:\n"
+            "  EMA: alcista | rápida=318.00 | lenta=227.10 | "
+            "separación=1/3 insuficiente\n"
+            "  RSI: 57.00 | CALL en rango | PUT fuera de rango\n"
+            "  Stochastic: cruce alcista | K=70.00 | D=60.00\n"
+            "  Estado: esperando confirmación de estrategia"
+        ),
+        operational_summary_label=(
+            "Resumen operativo: VIGILAR CALL — falta confirmación "
+            "completa de la estrategia."
+        ),
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert (
+        window.confirmation_checklist_text
+        == "Visual: ❌ | EMA: ❌ | RSI: ✅ | Stoch: ✅ | Entrada: ESPERAR"
+    )
+
+
+def test_main_window_marks_put_ema_as_missing_when_separation_is_insufficient() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="SIN SEÑAL",
+        strength_label="NINGUNA",
+        reason="Waiting for PUT confirmation.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=False,
+        css_class="signal-neutral",
+        visual_diagnostics_label=(
+            "Diagnóstico visual:\n"
+            "  Tendencia: BEARISH\n"
+            "  Contexto: BEARISH_CONTINUATION\n"
+            "  Vigilancia: VIGILAR_PUT\n"
+            "  Estado: ESPERANDO_CONFIRMACION"
+        ),
+        indicator_diagnostics_label=(
+            "Diagnóstico de indicadores:\n"
+            "  EMA: bajista | rápida=309.10 | lenta=365.78 | "
+            "separación=2/3 insuficiente\n"
+            "  RSI: 69.11 | CALL fuera de rango | PUT fuera de rango\n"
+            "  Stochastic: cruce bajista | K=33.33 | D=14.75\n"
+            "  Estado: esperando confirmación de estrategia"
+        ),
+        operational_summary_label=(
+            "Resumen operativo: VIGILAR PUT — falta confirmación "
+            "completa de la estrategia."
+        ),
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert (
+        window.confirmation_checklist_text
+        == "Visual: ❌ | EMA: ❌ | RSI: ❌ | Stoch: ✅ | Entrada: ESPERAR"
+    )
+
+
+def test_main_window_keeps_visual_missing_when_all_indicators_are_ready_but_signal_is_not_confirmed() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="SIN SEÑAL",
+        strength_label="NINGUNA",
+        reason="Waiting for final visual confirmation.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=False,
+        css_class="signal-neutral",
+        visual_diagnostics_label=(
+            "Diagnóstico visual:\n"
+            "  Tendencia: BEARISH\n"
+            "  Contexto: BEARISH_CONTINUATION\n"
+            "  Vigilancia: VIGILAR_PUT\n"
+            "  Estado: ESPERANDO_CONFIRMACION"
+        ),
+        indicator_diagnostics_label=(
+            "Diagnóstico de indicadores:\n"
+            "  EMA: bajista | rápida=108.14 | lenta=183.32 | "
+            "separación=9/3 suficiente\n"
+            "  RSI: 39.62 | CALL fuera de rango | PUT en rango\n"
+            "  Stochastic: cruce bajista | K=12.60 | D=15.25 | "
+            "prevK=16.58 | prevD=16.58\n"
+            "  Estado: esperando confirmación de estrategia"
+        ),
+        operational_summary_label=(
+            "Resumen operativo: VIGILAR PUT — falta confirmación "
+            "completa de la estrategia."
+        ),
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert (
+        window.confirmation_checklist_text
+        == "Visual: ❌ | EMA: ✅ | RSI: ✅ | Stoch: ✅ | Entrada: ESPERAR"
+    )

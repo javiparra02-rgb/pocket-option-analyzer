@@ -90,6 +90,33 @@ class MainWindow(QMainWindow):
         "padding: 4px;"
     )
 
+    CONFIRMATION_CHECKLIST_NEUTRAL_STYLE = (
+        "font-weight: bold; "
+        "color: #374151; "
+        "background-color: #f8f9fa; "
+        "border: 1px solid #c7cdd4; "
+        "border-radius: 4px; "
+        "padding: 4px;"
+    )
+
+    CONFIRMATION_CHECKLIST_CALL_STYLE = (
+        "font-weight: bold; "
+        "color: #0f9d58; "
+        "background-color: #eefaf3; "
+        "border: 1px solid #0f9d58; "
+        "border-radius: 4px; "
+        "padding: 4px;"
+    )
+
+    CONFIRMATION_CHECKLIST_PUT_STYLE = (
+        "font-weight: bold; "
+        "color: #d93025; "
+        "background-color: #fff0f0; "
+        "border: 1px solid #d93025; "
+        "border-radius: 4px; "
+        "padding: 4px;"
+    )
+
     ENTRY_ALERT_CALL_STYLE = (
         "font-weight: bold; "
         "font-size: 16px; "
@@ -211,6 +238,15 @@ class MainWindow(QMainWindow):
         )
         self._operational_summary_label.setWordWrap(
             True,
+        )
+        self._confirmation_checklist_label = QLabel(
+            "Visual: ❌ | EMA: ❌ | RSI: ❌ | Stoch: ❌ | Entrada: ESPERAR",
+        )
+        self._confirmation_checklist_label.setWordWrap(
+            True,
+        )
+        self._confirmation_checklist_label.setStyleSheet(
+            self.CONFIRMATION_CHECKLIST_NEUTRAL_STYLE,
         )
         self._operational_summary_label.setStyleSheet(
             self.OPERATIONAL_SUMMARY_NEUTRAL_STYLE,
@@ -488,6 +524,18 @@ class MainWindow(QMainWindow):
         return not self._operational_summary_label.isHidden()
     
     @property
+    def confirmation_checklist_text(self) -> str:
+        return self._confirmation_checklist_label.text()
+
+    @property
+    def confirmation_checklist_visible(self) -> bool:
+        return not self._confirmation_checklist_label.isHidden()
+
+    @property
+    def confirmation_checklist_style(self) -> str:
+        return self._confirmation_checklist_label.styleSheet()
+
+    @property
     def entry_alert_text(self) -> str:
         return self._entry_alert_label.text()
 
@@ -606,6 +654,9 @@ class MainWindow(QMainWindow):
             view_model.operational_summary_label,
         )
         self._apply_operational_summary_style()
+        self._update_confirmation_checklist(
+            view_model=view_model,
+        )
 
     def _setup_layout(self) -> None:
         content_widget = QWidget()
@@ -636,6 +687,9 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(
             self._operational_summary_label,
+        )
+        layout.addWidget(
+            self._confirmation_checklist_label,
         )
         layout.addWidget(
             self._visual_diagnostics_label,
@@ -836,6 +890,169 @@ class MainWindow(QMainWindow):
         self._entry_alert_label.setText(
             "",
         )
+
+    def _update_confirmation_checklist(
+        self,
+        view_model: SignalRecordViewModel,
+    ) -> None:
+        summary_text = view_model.operational_summary_label.upper()
+        visual_text = view_model.visual_diagnostics_label.upper()
+        indicator_text = view_model.indicator_diagnostics_label.upper()
+        direction = view_model.direction_label.upper()
+
+        target_direction = self._resolve_checklist_direction(
+            summary_text=summary_text,
+            visual_text=visual_text,
+            direction=direction,
+            is_actionable=view_model.is_actionable,
+        )
+
+        visual_ok = self._check_visual_confirmation(
+            target_direction=target_direction,
+            visual_text=visual_text,
+            is_actionable=view_model.is_actionable,
+        )
+        ema_ok = self._check_ema_confirmation(
+            target_direction=target_direction,
+            indicator_text=indicator_text,
+        )
+        rsi_ok = self._check_rsi_confirmation(
+            target_direction=target_direction,
+            indicator_text=indicator_text,
+        )
+        stochastic_ok = self._check_stochastic_confirmation(
+            target_direction=target_direction,
+            indicator_text=indicator_text,
+        )
+
+        entry_label = (
+            target_direction
+            if view_model.is_actionable and target_direction in {"CALL", "PUT"}
+            else "ESPERAR"
+        )
+
+        checklist_text = (
+            f"Visual: {self._check_icon(visual_ok)} | "
+            f"EMA: {self._check_icon(ema_ok)} | "
+            f"RSI: {self._check_icon(rsi_ok)} | "
+            f"Stoch: {self._check_icon(stochastic_ok)} | "
+            f"Entrada: {entry_label}"
+        )
+
+        self._confirmation_checklist_label.setText(
+            checklist_text,
+        )
+        self._apply_confirmation_checklist_style(
+            target_direction=target_direction,
+            is_actionable=view_model.is_actionable,
+        )
+
+    def _resolve_checklist_direction(
+        self,
+        summary_text: str,
+        visual_text: str,
+        direction: str,
+        is_actionable: bool,
+    ) -> str:
+        if is_actionable and direction in {"CALL", "PUT"}:
+            return direction
+
+        if "CALL" in summary_text or "VIGILAR_CALL" in visual_text:
+            return "CALL"
+
+        if "PUT" in summary_text or "VIGILAR_PUT" in visual_text:
+            return "PUT"
+
+        return "NONE"
+
+    def _check_visual_confirmation(
+        self,
+        target_direction: str,
+        visual_text: str,
+        is_actionable: bool,
+    ) -> bool:
+        if is_actionable:
+            return True
+
+        if "SEÑAL_CONFIRMADA" in visual_text:
+            return True
+
+        return False
+
+    def _check_ema_confirmation(
+        self,
+        target_direction: str,
+        indicator_text: str,
+    ) -> bool:
+        if "INSUFICIENTE" in indicator_text:
+            return False
+
+        if target_direction == "CALL":
+            return (
+                "EMA: ALCISTA" in indicator_text
+                and "SUFICIENTE" in indicator_text
+            )
+
+        if target_direction == "PUT":
+            return (
+                "EMA: BAJISTA" in indicator_text
+                and "SUFICIENTE" in indicator_text
+            )
+
+        return False
+
+    def _check_rsi_confirmation(
+        self,
+        target_direction: str,
+        indicator_text: str,
+    ) -> bool:
+        if target_direction == "CALL":
+            return "CALL EN RANGO" in indicator_text
+
+        if target_direction == "PUT":
+            return "PUT EN RANGO" in indicator_text
+
+        return False
+
+    def _check_stochastic_confirmation(
+        self,
+        target_direction: str,
+        indicator_text: str,
+    ) -> bool:
+        if target_direction == "CALL":
+            return "CRUCE ALCISTA" in indicator_text
+
+        if target_direction == "PUT":
+            return "CRUCE BAJISTA" in indicator_text
+
+        return False
+
+    def _check_icon(
+        self,
+        confirmed: bool,
+    ) -> str:
+        return "✅" if confirmed else "❌"
+
+    def _apply_confirmation_checklist_style(
+        self,
+        target_direction: str,
+        is_actionable: bool,
+    ) -> None:
+        if is_actionable and target_direction == "CALL":
+            self._confirmation_checklist_label.setStyleSheet(
+                self.CONFIRMATION_CHECKLIST_CALL_STYLE,
+            )
+            return
+
+        if is_actionable and target_direction == "PUT":
+            self._confirmation_checklist_label.setStyleSheet(
+                self.CONFIRMATION_CHECKLIST_PUT_STYLE,
+            )
+            return
+
+        self._confirmation_checklist_label.setStyleSheet(
+            self.CONFIRMATION_CHECKLIST_NEUTRAL_STYLE,
+        )
     
     def clear_signal_history(self) -> None:
         """
@@ -956,6 +1173,9 @@ class MainWindow(QMainWindow):
             True,
         )
         self._operational_summary_label.setVisible(
+            True,
+        )
+        self._confirmation_checklist_label.setVisible(
             True,
         )
         self._compact_mode_button.setVisible(
@@ -1107,7 +1327,6 @@ class MainWindow(QMainWindow):
         self._settings.endGroup()
         self._settings.sync()
 
-
     def _restore_window_preferences(
         self,
     ) -> None:
@@ -1159,7 +1378,6 @@ class MainWindow(QMainWindow):
                 x,
                 y,
             )
-
 
     def closeEvent(
         self,
