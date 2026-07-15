@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 
 from pocket_option_analyzer.presentation.signals import (
+    ConfirmationChecklistPresenter,
     SignalRecordViewModel,
 )
 
@@ -165,6 +166,7 @@ class MainWindow(QMainWindow):
             self.SETTINGS_APPLICATION,
         )
         self._restore_window_preferences_enabled = restore_window_preferences
+        self._confirmation_checklist_presenter = ConfirmationChecklistPresenter()
 
         self.setWindowTitle(
             "Pocket Option Analyzer",
@@ -895,143 +897,18 @@ class MainWindow(QMainWindow):
         self,
         view_model: SignalRecordViewModel,
     ) -> None:
-        summary_text = view_model.operational_summary_label.upper()
-        visual_text = view_model.visual_diagnostics_label.upper()
-        indicator_text = view_model.indicator_diagnostics_label.upper()
-        direction = view_model.direction_label.upper()
-
-        target_direction = self._resolve_checklist_direction(
-            summary_text=summary_text,
-            visual_text=visual_text,
-            direction=direction,
-            is_actionable=view_model.is_actionable,
-        )
-
-        visual_ok = self._check_visual_confirmation(
-            target_direction=target_direction,
-            visual_text=visual_text,
-            is_actionable=view_model.is_actionable,
-        )
-        ema_ok = self._check_ema_confirmation(
-            target_direction=target_direction,
-            indicator_text=indicator_text,
-        )
-        rsi_ok = self._check_rsi_confirmation(
-            target_direction=target_direction,
-            indicator_text=indicator_text,
-        )
-        stochastic_ok = self._check_stochastic_confirmation(
-            target_direction=target_direction,
-            indicator_text=indicator_text,
-        )
-
-        entry_label = (
-            target_direction
-            if view_model.is_actionable and target_direction in {"CALL", "PUT"}
-            else "ESPERAR"
-        )
-
-        checklist_text = (
-            f"Visual: {self._check_icon(visual_ok)} | "
-            f"EMA: {self._check_icon(ema_ok)} | "
-            f"RSI: {self._check_icon(rsi_ok)} | "
-            f"Stoch: {self._check_icon(stochastic_ok)} | "
-            f"Entrada: {entry_label}"
+        checklist_view_model = self._confirmation_checklist_presenter.present(
+            view_model=view_model,
         )
 
         self._confirmation_checklist_label.setText(
-            checklist_text,
+            checklist_view_model.text,
         )
         self._apply_confirmation_checklist_style(
-            target_direction=target_direction,
-            is_actionable=view_model.is_actionable,
+            target_direction=checklist_view_model.target_direction,
+            is_actionable=checklist_view_model.is_actionable,
         )
 
-    def _resolve_checklist_direction(
-        self,
-        summary_text: str,
-        visual_text: str,
-        direction: str,
-        is_actionable: bool,
-    ) -> str:
-        if is_actionable and direction in {"CALL", "PUT"}:
-            return direction
-
-        if "CALL" in summary_text or "VIGILAR_CALL" in visual_text:
-            return "CALL"
-
-        if "PUT" in summary_text or "VIGILAR_PUT" in visual_text:
-            return "PUT"
-
-        return "NONE"
-
-    def _check_visual_confirmation(
-        self,
-        target_direction: str,
-        visual_text: str,
-        is_actionable: bool,
-    ) -> bool:
-        if is_actionable:
-            return True
-
-        if "SEÑAL_CONFIRMADA" in visual_text:
-            return True
-
-        return False
-
-    def _check_ema_confirmation(
-        self,
-        target_direction: str,
-        indicator_text: str,
-    ) -> bool:
-        if "INSUFICIENTE" in indicator_text:
-            return False
-
-        if target_direction == "CALL":
-            return (
-                "EMA: ALCISTA" in indicator_text
-                and "SUFICIENTE" in indicator_text
-            )
-
-        if target_direction == "PUT":
-            return (
-                "EMA: BAJISTA" in indicator_text
-                and "SUFICIENTE" in indicator_text
-            )
-
-        return False
-
-    def _check_rsi_confirmation(
-        self,
-        target_direction: str,
-        indicator_text: str,
-    ) -> bool:
-        if target_direction == "CALL":
-            return "CALL EN RANGO" in indicator_text
-
-        if target_direction == "PUT":
-            return "PUT EN RANGO" in indicator_text
-
-        return False
-
-    def _check_stochastic_confirmation(
-        self,
-        target_direction: str,
-        indicator_text: str,
-    ) -> bool:
-        if target_direction == "CALL":
-            return "CRUCE ALCISTA" in indicator_text
-
-        if target_direction == "PUT":
-            return "CRUCE BAJISTA" in indicator_text
-
-        return False
-
-    def _check_icon(
-        self,
-        confirmed: bool,
-    ) -> str:
-        return "✅" if confirmed else "❌"
 
     def _apply_confirmation_checklist_style(
         self,
