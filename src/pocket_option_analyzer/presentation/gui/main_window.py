@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from pocket_option_analyzer.presentation.signals import (
     ConfirmationChecklistPresenter,
     EntryAlertPresenter,
+    OperationalSummaryPresenter,
     SignalRecordViewModel,
 )
 
@@ -169,6 +170,7 @@ class MainWindow(QMainWindow):
         self._restore_window_preferences_enabled = restore_window_preferences
         self._confirmation_checklist_presenter = ConfirmationChecklistPresenter()
         self._entry_alert_presenter = EntryAlertPresenter()
+        self._operational_summary_presenter = OperationalSummaryPresenter()
 
         self.setWindowTitle(
             "Pocket Option Analyzer",
@@ -654,10 +656,16 @@ class MainWindow(QMainWindow):
         self._append_signal_history(
             view_model=view_model,
         )
-        self._operational_summary_label.setText(
-            view_model.operational_summary_label,
+        operational_summary = self._operational_summary_presenter.present(
+            view_model=view_model,
         )
-        self._apply_operational_summary_style()
+
+        self._operational_summary_label.setText(
+            operational_summary.text,
+        )
+        self._apply_operational_summary_style(
+            target_direction=operational_summary.target_direction,
+        )
         self._update_confirmation_checklist(
             view_model=view_model,
         )
@@ -830,16 +838,15 @@ class MainWindow(QMainWindow):
 
     def _apply_operational_summary_style(
         self,
+        target_direction: str,
     ) -> None:
-        summary_text = self._operational_summary_label.text().upper()
-
-        if "VIGILAR CALL" in summary_text or "ENTRADA CALL" in summary_text:
+        if target_direction == "CALL":
             self._operational_summary_label.setStyleSheet(
                 self.OPERATIONAL_SUMMARY_CALL_STYLE,
             )
             return
 
-        if "VIGILAR PUT" in summary_text or "ENTRADA PUT" in summary_text:
+        if target_direction == "PUT":
             self._operational_summary_label.setStyleSheet(
                 self.OPERATIONAL_SUMMARY_PUT_STYLE,
             )
