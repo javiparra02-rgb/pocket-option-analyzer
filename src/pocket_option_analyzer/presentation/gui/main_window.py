@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from pocket_option_analyzer.presentation.signals import (
     ConfirmationChecklistPresenter,
+    EntryAlertPresenter,
     SignalRecordViewModel,
 )
 
@@ -167,6 +168,7 @@ class MainWindow(QMainWindow):
         )
         self._restore_window_preferences_enabled = restore_window_preferences
         self._confirmation_checklist_presenter = ConfirmationChecklistPresenter()
+        self._entry_alert_presenter = EntryAlertPresenter()
 
         self.setWindowTitle(
             "Pocket Option Analyzer",
@@ -851,47 +853,27 @@ class MainWindow(QMainWindow):
         self,
         view_model: SignalRecordViewModel,
     ) -> None:
-        direction = view_model.direction_label.upper()
+        entry_alert = self._entry_alert_presenter.present(
+            view_model=view_model,
+        )
 
-        if not view_model.is_actionable:
-            self._entry_alert_label.setHidden(
-                True,
-            )
-            self._entry_alert_label.setText(
-                "",
-            )
-            return
+        self._entry_alert_label.setText(
+            entry_alert.text,
+        )
+        self._entry_alert_label.setHidden(
+            not entry_alert.is_visible,
+        )
 
-        if direction == "CALL":
-            self._entry_alert_label.setText(
-                "ENTRADA CALL CONFIRMADA",
-            )
+        if entry_alert.target_direction == "CALL":
             self._entry_alert_label.setStyleSheet(
                 self.ENTRY_ALERT_CALL_STYLE,
             )
-            self._entry_alert_label.setHidden(
-                False,
-            )
             return
 
-        if direction == "PUT":
-            self._entry_alert_label.setText(
-                "ENTRADA PUT CONFIRMADA",
-            )
+        if entry_alert.target_direction == "PUT":
             self._entry_alert_label.setStyleSheet(
                 self.ENTRY_ALERT_PUT_STYLE,
             )
-            self._entry_alert_label.setHidden(
-                False,
-            )
-            return
-
-        self._entry_alert_label.setHidden(
-            True,
-        )
-        self._entry_alert_label.setText(
-            "",
-        )
 
     def _update_confirmation_checklist(
         self,
