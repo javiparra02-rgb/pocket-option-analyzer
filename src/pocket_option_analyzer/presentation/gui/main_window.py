@@ -269,6 +269,12 @@ class MainWindow(QMainWindow):
         self._session_counter_label.setStyleSheet(
             self.SESSION_COUNTER_STYLE,
         )
+        self._reset_session_button = QPushButton(
+            "Reiniciar sesión",
+        )
+        self._reset_session_button.setObjectName(
+            "reset_session_button",
+        )
         self._confirmation_checklist_label.setWordWrap(
             True,
         )
@@ -593,6 +599,14 @@ class MainWindow(QMainWindow):
     @property
     def session_total_count(self) -> int:
         return self._session_call_count + self._session_put_count
+    
+    @property
+    def reset_session_button_text(self) -> str:
+        return self._reset_session_button.text()
+
+    @property
+    def reset_session_button_visible(self) -> bool:
+        return not self._reset_session_button.isHidden()
 
 
     def set_running_state(
@@ -751,6 +765,9 @@ class MainWindow(QMainWindow):
             self._session_counter_label,
         )
         layout.addWidget(
+            self._reset_session_button,
+        )
+        layout.addWidget(
             self._visual_diagnostics_label,
         )
         layout.addWidget(
@@ -821,6 +838,9 @@ class MainWindow(QMainWindow):
         )
         self._reset_view_button.clicked.connect(
             self.reset_view,
+        )
+        self._reset_session_button.clicked.connect(
+            self.reset_session_counter,
         )
 
     def _apply_button_state(
@@ -1033,6 +1053,19 @@ class MainWindow(QMainWindow):
 
         self._history_list.clear()
 
+    def reset_session_counter(self) -> None:
+        """
+        Reinicia el contador visual de señales confirmadas de la sesión.
+
+        No borra el historial visible.
+        No borra logs/signals.jsonl.
+        """
+
+        self._session_call_count = 0
+        self._session_put_count = 0
+        self._counted_session_signal_keys.clear()
+        self._refresh_session_counter_label()
+
     def _append_signal_history(
         self,
         view_model: SignalRecordViewModel,
@@ -1149,6 +1182,9 @@ class MainWindow(QMainWindow):
             True,
         )
         self._session_counter_label.setVisible(
+            True,
+        )
+        self._reset_session_button.setVisible(
             True,
         )
         self._compact_mode_button.setVisible(

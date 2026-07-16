@@ -1675,3 +1675,101 @@ def test_main_window_keeps_session_counter_visible_in_compact_mode() -> None:
 
     assert window.is_compact_mode_enabled is True
     assert window.session_counter_visible is True
+
+
+def test_main_window_has_reset_session_button() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert window.reset_session_button_text == "Reiniciar sesión"
+
+
+def test_main_window_reset_session_counter_clears_session_counts() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="PUT",
+        strength_label="ALTA",
+        reason="PUT setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=True,
+        css_class="signal-put",
+        operational_summary_label=(
+            "Resumen operativo: ENTRADA PUT confirmada — revisar gestión "
+            "de riesgo antes de operar manualmente."
+        ),
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert window.session_counter_text == "Sesión: 0 CALL | 1 PUT | 1 total"
+
+    window.reset_session_counter()
+
+    assert window.session_counter_text == "Sesión: 0 CALL | 0 PUT | 0 total"
+    assert window.session_call_count == 0
+    assert window.session_put_count == 0
+    assert window.session_total_count == 0
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert window.session_counter_text == "Sesión: 0 CALL | 1 PUT | 1 total"
+
+
+def test_main_window_reset_session_button_does_not_clear_signal_history() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="CALL",
+        strength_label="ALTA",
+        reason="CALL setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=True,
+        css_class="signal-call",
+        operational_summary_label=(
+            "Resumen operativo: ENTRADA CALL confirmada — revisar gestión "
+            "de riesgo antes de operar manualmente."
+        ),
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert window.signal_history_count == 1
+    assert window.session_total_count == 1
+
+    _button(
+        window=window,
+        object_name="reset_session_button",
+    ).click()
+
+    assert window.signal_history_count == 1
+    assert window.session_total_count == 0
+    assert window.session_counter_text == "Sesión: 0 CALL | 0 PUT | 0 total"
+
+
+def test_main_window_keeps_reset_session_button_visible_in_compact_mode() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is True
+    assert window.reset_session_button_visible is True
