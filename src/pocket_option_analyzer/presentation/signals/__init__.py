@@ -10,6 +10,9 @@ from pocket_option_analyzer.presentation.signals.operational_summary_presenter i
     OperationalSummaryPresenter,
     OperationalSummaryViewModel,
 )
+from pocket_option_analyzer.presentation.signals.session_signal_counter import (
+    SessionSignalCounter,
+)
 
 from .signal_record_presenter import SignalRecordPresenter
 from .signal_record_view_model import SignalRecordViewModel
@@ -23,4 +26,5 @@ __all__ = [
     "EntryAlertViewModel",
     "OperationalSummaryPresenter",
     "OperationalSummaryViewModel",
+    "SessionSignalCounter",
 ]

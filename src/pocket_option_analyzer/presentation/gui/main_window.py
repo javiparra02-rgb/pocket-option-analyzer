@@ -21,6 +21,7 @@ from pocket_option_analyzer.presentation.signals import (
     ConfirmationChecklistPresenter,
     EntryAlertPresenter,
     OperationalSummaryPresenter,
+    SessionSignalCounter,
     SignalRecordViewModel,
 )
 
@@ -180,9 +181,7 @@ class MainWindow(QMainWindow):
         self._confirmation_checklist_presenter = ConfirmationChecklistPresenter()
         self._entry_alert_presenter = EntryAlertPresenter()
         self._operational_summary_presenter = OperationalSummaryPresenter()
-        self._session_call_count = 0
-        self._session_put_count = 0
-        self._counted_session_signal_keys: set[str] = set()
+        self._session_signal_counter = SessionSignalCounter()
 
         self.setWindowTitle(
             "Pocket Option Analyzer",
@@ -590,15 +589,17 @@ class MainWindow(QMainWindow):
 
     @property
     def session_call_count(self) -> int:
-        return self._session_call_count
+        return self._session_signal_counter.call_count
+
 
     @property
     def session_put_count(self) -> int:
-        return self._session_put_count
+        return self._session_signal_counter.put_count
+
 
     @property
     def session_total_count(self) -> int:
-        return self._session_call_count + self._session_put_count
+        return self._session_signal_counter.total_count
     
     @property
     def reset_session_button_text(self) -> str:
@@ -969,58 +970,16 @@ class MainWindow(QMainWindow):
         self,
         view_model: SignalRecordViewModel,
     ) -> None:
-        if not view_model.is_actionable:
-            self._refresh_session_counter_label()
-            return
-
-        direction = view_model.direction_label.upper()
-
-        if direction not in {"CALL", "PUT"}:
-            self._refresh_session_counter_label()
-            return
-
-        signal_key = self._build_session_signal_key(
+        self._session_signal_counter.update(
             view_model=view_model,
         )
-
-        if signal_key in self._counted_session_signal_keys:
-            self._refresh_session_counter_label()
-            return
-
-        self._counted_session_signal_keys.add(
-            signal_key,
-        )
-
-        if direction == "CALL":
-            self._session_call_count += 1
-
-        if direction == "PUT":
-            self._session_put_count += 1
-
         self._refresh_session_counter_label()
-
-    def _build_session_signal_key(
-        self,
-        view_model: SignalRecordViewModel,
-    ) -> str:
-        return "|".join(
-            (
-                view_model.created_at_label,
-                view_model.direction_label,
-                view_model.source,
-                view_model.operational_summary_label,
-            )
-        )
 
     def _refresh_session_counter_label(
         self,
     ) -> None:
-        total = self._session_call_count + self._session_put_count
-
         self._session_counter_label.setText(
-            f"Sesión: {self._session_call_count} CALL | "
-            f"{self._session_put_count} PUT | "
-            f"{total} total"
+            self._session_signal_counter.text,
         )
 
     def _apply_confirmation_checklist_style(
@@ -1061,9 +1020,7 @@ class MainWindow(QMainWindow):
         No borra logs/signals.jsonl.
         """
 
-        self._session_call_count = 0
-        self._session_put_count = 0
-        self._counted_session_signal_keys.clear()
+        self._session_signal_counter.reset()
         self._refresh_session_counter_label()
 
     def _append_signal_history(
