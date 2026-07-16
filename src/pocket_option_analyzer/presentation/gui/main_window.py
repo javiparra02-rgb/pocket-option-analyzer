@@ -140,6 +140,15 @@ class MainWindow(QMainWindow):
         "padding: 8px;"
     )
 
+    SESSION_COUNTER_STYLE = (
+        "font-weight: bold; "
+        "color: #374151; "
+        "background-color: #f8f9fa; "
+        "border: 1px solid #c7cdd4; "
+        "border-radius: 4px; "
+        "padding: 4px;"
+    )
+
     SETTINGS_ORGANIZATION = "PocketOptionAnalyzer"
     SETTINGS_APPLICATION = "PocketOptionAnalyzer"
 
@@ -171,6 +180,9 @@ class MainWindow(QMainWindow):
         self._confirmation_checklist_presenter = ConfirmationChecklistPresenter()
         self._entry_alert_presenter = EntryAlertPresenter()
         self._operational_summary_presenter = OperationalSummaryPresenter()
+        self._session_call_count = 0
+        self._session_put_count = 0
+        self._counted_session_signal_keys: set[str] = set()
 
         self.setWindowTitle(
             "Pocket Option Analyzer",
@@ -247,6 +259,15 @@ class MainWindow(QMainWindow):
         )
         self._confirmation_checklist_label = QLabel(
             "Visual: ❌ | EMA: ❌ | RSI: ❌ | Stoch: ❌ | Entrada: ESPERAR",
+        )
+        self._session_counter_label = QLabel(
+            "Sesión: 0 CALL | 0 PUT | 0 total",
+        )
+        self._session_counter_label.setWordWrap(
+            True,
+        )
+        self._session_counter_label.setStyleSheet(
+            self.SESSION_COUNTER_STYLE,
         )
         self._confirmation_checklist_label.setWordWrap(
             True,
@@ -552,6 +573,26 @@ class MainWindow(QMainWindow):
     @property
     def entry_alert_style(self) -> str:
         return self._entry_alert_label.styleSheet()
+    
+    @property
+    def session_counter_text(self) -> str:
+        return self._session_counter_label.text()
+
+    @property
+    def session_counter_visible(self) -> bool:
+        return not self._session_counter_label.isHidden()
+
+    @property
+    def session_call_count(self) -> int:
+        return self._session_call_count
+
+    @property
+    def session_put_count(self) -> int:
+        return self._session_put_count
+
+    @property
+    def session_total_count(self) -> int:
+        return self._session_call_count + self._session_put_count
 
 
     def set_running_state(
@@ -669,6 +710,9 @@ class MainWindow(QMainWindow):
         self._update_confirmation_checklist(
             view_model=view_model,
         )
+        self._update_session_counter(
+            view_model=view_model,
+        )
 
     def _setup_layout(self) -> None:
         content_widget = QWidget()
@@ -702,6 +746,9 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(
             self._confirmation_checklist_label,
+        )
+        layout.addWidget(
+            self._session_counter_label,
         )
         layout.addWidget(
             self._visual_diagnostics_label,
@@ -898,6 +945,63 @@ class MainWindow(QMainWindow):
             is_actionable=checklist_view_model.is_actionable,
         )
 
+    def _update_session_counter(
+        self,
+        view_model: SignalRecordViewModel,
+    ) -> None:
+        if not view_model.is_actionable:
+            self._refresh_session_counter_label()
+            return
+
+        direction = view_model.direction_label.upper()
+
+        if direction not in {"CALL", "PUT"}:
+            self._refresh_session_counter_label()
+            return
+
+        signal_key = self._build_session_signal_key(
+            view_model=view_model,
+        )
+
+        if signal_key in self._counted_session_signal_keys:
+            self._refresh_session_counter_label()
+            return
+
+        self._counted_session_signal_keys.add(
+            signal_key,
+        )
+
+        if direction == "CALL":
+            self._session_call_count += 1
+
+        if direction == "PUT":
+            self._session_put_count += 1
+
+        self._refresh_session_counter_label()
+
+    def _build_session_signal_key(
+        self,
+        view_model: SignalRecordViewModel,
+    ) -> str:
+        return "|".join(
+            (
+                view_model.created_at_label,
+                view_model.direction_label,
+                view_model.source,
+                view_model.operational_summary_label,
+            )
+        )
+
+    def _refresh_session_counter_label(
+        self,
+    ) -> None:
+        total = self._session_call_count + self._session_put_count
+
+        self._session_counter_label.setText(
+            f"Sesión: {self._session_call_count} CALL | "
+            f"{self._session_put_count} PUT | "
+            f"{total} total"
+        )
 
     def _apply_confirmation_checklist_style(
         self,
@@ -1042,6 +1146,9 @@ class MainWindow(QMainWindow):
             True,
         )
         self._confirmation_checklist_label.setVisible(
+            True,
+        )
+        self._session_counter_label.setVisible(
             True,
         )
         self._compact_mode_button.setVisible(

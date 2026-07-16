@@ -1535,3 +1535,143 @@ def test_main_window_keeps_visual_missing_when_all_indicators_are_ready_but_sign
         window.confirmation_checklist_text
         == "Visual: ❌ | EMA: ✅ | RSI: ✅ | Stoch: ✅ | Entrada: ESPERAR"
     )
+
+
+def test_main_window_displays_initial_session_counter() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert window.session_counter_text == "Sesión: 0 CALL | 0 PUT | 0 total"
+    assert window.session_call_count == 0
+    assert window.session_put_count == 0
+    assert window.session_total_count == 0
+
+
+def test_main_window_counts_confirmed_call_signal_in_session() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="CALL",
+        strength_label="ALTA",
+        reason="CALL setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=True,
+        css_class="signal-call",
+        operational_summary_label=(
+            "Resumen operativo: ENTRADA CALL confirmada — revisar gestión "
+            "de riesgo antes de operar manualmente."
+        ),
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert window.session_counter_text == "Sesión: 1 CALL | 0 PUT | 1 total"
+    assert window.session_call_count == 1
+    assert window.session_put_count == 0
+    assert window.session_total_count == 1
+
+
+def test_main_window_counts_confirmed_put_signal_in_session() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="PUT",
+        strength_label="ALTA",
+        reason="PUT setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=True,
+        css_class="signal-put",
+        operational_summary_label=(
+            "Resumen operativo: ENTRADA PUT confirmada — revisar gestión "
+            "de riesgo antes de operar manualmente."
+        ),
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert window.session_counter_text == "Sesión: 0 CALL | 1 PUT | 1 total"
+    assert window.session_call_count == 0
+    assert window.session_put_count == 1
+    assert window.session_total_count == 1
+
+
+def test_main_window_does_not_count_non_actionable_signal_in_session() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="SIN SEÑAL",
+        strength_label="NINGUNA",
+        reason="No setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=False,
+        css_class="signal-neutral",
+        operational_summary_label="Resumen operativo: ESPERAR",
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert window.session_counter_text == "Sesión: 0 CALL | 0 PUT | 0 total"
+    assert window.session_total_count == 0
+
+
+def test_main_window_does_not_count_same_signal_twice_in_session() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    view_model = SignalRecordViewModel(
+        direction_label="PUT",
+        strength_label="ALTA",
+        reason="PUT setup confirmed.",
+        source="test_source",
+        created_at_label="2026-01-01 10:30:45",
+        is_actionable=True,
+        css_class="signal-put",
+        operational_summary_label=(
+            "Resumen operativo: ENTRADA PUT confirmada — revisar gestión "
+            "de riesgo antes de operar manualmente."
+        ),
+    )
+
+    window.update_signal(
+        view_model=view_model,
+    )
+    window.update_signal(
+        view_model=view_model,
+    )
+
+    assert window.session_counter_text == "Sesión: 0 CALL | 1 PUT | 1 total"
+    assert window.session_total_count == 1
+
+
+def test_main_window_keeps_session_counter_visible_in_compact_mode() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is True
+    assert window.session_counter_visible is True
