@@ -21,6 +21,7 @@ from pocket_option_analyzer.presentation.signals import (
     ConfirmationChecklistPresenter,
     EntryAlertPresenter,
     OperationalSummaryPresenter,
+    SessionRiskPresenter,
     SessionSignalCounter,
     SignalRecordViewModel,
 )
@@ -150,6 +151,33 @@ class MainWindow(QMainWindow):
         "padding: 4px;"
     )
 
+    SESSION_RISK_OK_STYLE = (
+        "font-weight: bold; "
+        "color: #374151; "
+        "background-color: #f8f9fa; "
+        "border: 1px solid #c7cdd4; "
+        "border-radius: 4px; "
+        "padding: 4px;"
+    )
+
+    SESSION_RISK_WARNING_STYLE = (
+        "font-weight: bold; "
+        "color: #b45309; "
+        "background-color: #fff7ed; "
+        "border: 1px solid #f59e0b; "
+        "border-radius: 4px; "
+        "padding: 4px;"
+    )
+
+    SESSION_RISK_LIMIT_STYLE = (
+        "font-weight: bold; "
+        "color: #d93025; "
+        "background-color: #fff0f0; "
+        "border: 1px solid #d93025; "
+        "border-radius: 4px; "
+        "padding: 4px;"
+    )
+
     SETTINGS_ORGANIZATION = "PocketOptionAnalyzer"
     SETTINGS_APPLICATION = "PocketOptionAnalyzer"
 
@@ -182,6 +210,7 @@ class MainWindow(QMainWindow):
         self._entry_alert_presenter = EntryAlertPresenter()
         self._operational_summary_presenter = OperationalSummaryPresenter()
         self._session_signal_counter = SessionSignalCounter()
+        self._session_risk_presenter = SessionRiskPresenter()
 
         self.setWindowTitle(
             "Pocket Option Analyzer",
@@ -261,6 +290,18 @@ class MainWindow(QMainWindow):
         )
         self._session_counter_label = QLabel(
             "Sesión: 0 CALL | 0 PUT | 0 total",
+        )
+        initial_session_risk = self._session_risk_presenter.present(
+            total_confirmed_signals=0,
+        )
+        self._session_risk_label = QLabel(
+            initial_session_risk.text,
+        )
+        self._session_risk_label.setWordWrap(
+            True,
+        )
+        self._session_risk_label.setStyleSheet(
+            self.SESSION_RISK_OK_STYLE,
         )
         self._session_counter_label.setWordWrap(
             True,
@@ -608,6 +649,18 @@ class MainWindow(QMainWindow):
     @property
     def reset_session_button_visible(self) -> bool:
         return not self._reset_session_button.isHidden()
+    
+    @property
+    def session_risk_text(self) -> str:
+        return self._session_risk_label.text()
+
+    @property
+    def session_risk_visible(self) -> bool:
+        return not self._session_risk_label.isHidden()
+
+    @property
+    def session_risk_style(self) -> str:
+        return self._session_risk_label.styleSheet()
 
 
     def set_running_state(
@@ -764,6 +817,9 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(
             self._session_counter_label,
+        )
+        layout.addWidget(
+            self._session_risk_label,
         )
         layout.addWidget(
             self._reset_session_button,
@@ -981,6 +1037,42 @@ class MainWindow(QMainWindow):
         self._session_counter_label.setText(
             self._session_signal_counter.text,
         )
+        self._refresh_session_risk_label()
+
+    def _refresh_session_risk_label(
+        self,
+    ) -> None:
+        risk_view_model = self._session_risk_presenter.present(
+            total_confirmed_signals=self._session_signal_counter.total_count,
+        )
+
+        self._session_risk_label.setText(
+            risk_view_model.text,
+        )
+        self._apply_session_risk_style(
+            state=risk_view_model.state,
+        )
+
+
+    def _apply_session_risk_style(
+        self,
+        state: str,
+    ) -> None:
+        if state == SessionRiskPresenter.STATE_LIMIT_REACHED:
+            self._session_risk_label.setStyleSheet(
+                self.SESSION_RISK_LIMIT_STYLE,
+            )
+            return
+
+        if state == SessionRiskPresenter.STATE_WARNING:
+            self._session_risk_label.setStyleSheet(
+                self.SESSION_RISK_WARNING_STYLE,
+            )
+            return
+
+        self._session_risk_label.setStyleSheet(
+            self.SESSION_RISK_OK_STYLE,
+        )
 
     def _apply_confirmation_checklist_style(
         self,
@@ -1139,6 +1231,9 @@ class MainWindow(QMainWindow):
             True,
         )
         self._session_counter_label.setVisible(
+            True,
+        )
+        self._session_risk_label.setVisible(
             True,
         )
         self._reset_session_button.setVisible(

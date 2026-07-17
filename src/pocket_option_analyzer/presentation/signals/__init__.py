@@ -10,6 +10,10 @@ from pocket_option_analyzer.presentation.signals.operational_summary_presenter i
     OperationalSummaryPresenter,
     OperationalSummaryViewModel,
 )
+from pocket_option_analyzer.presentation.signals.session_risk_presenter import (
+    SessionRiskPresenter,
+    SessionRiskViewModel,
+)
 from pocket_option_analyzer.presentation.signals.session_signal_counter import (
     SessionSignalCounter,
 )
@@ -27,4 +31,6 @@ __all__ = [
     "OperationalSummaryPresenter",
     "OperationalSummaryViewModel",
     "SessionSignalCounter",
+    "SessionRiskPresenter",
+    "SessionRiskViewModel",
 ]
