@@ -178,6 +178,16 @@ class MainWindow(QMainWindow):
         "padding: 4px;"
     )
 
+    SESSION_PAUSE_ALERT_STYLE = (
+        "font-weight: bold; "
+        "font-size: 16px; "
+        "color: #d93025; "
+        "background-color: #fff0f0; "
+        "border: 2px solid #d93025; "
+        "border-radius: 6px; "
+        "padding: 8px;"
+    )
+
     SETTINGS_ORGANIZATION = "PocketOptionAnalyzer"
     SETTINGS_APPLICATION = "PocketOptionAnalyzer"
 
@@ -302,6 +312,18 @@ class MainWindow(QMainWindow):
         )
         self._session_risk_label.setStyleSheet(
             self.SESSION_RISK_OK_STYLE,
+        )
+        self._session_pause_alert_label = QLabel(
+            "",
+        )
+        self._session_pause_alert_label.setWordWrap(
+            True,
+        )
+        self._session_pause_alert_label.setStyleSheet(
+            self.SESSION_PAUSE_ALERT_STYLE,
+        )
+        self._session_pause_alert_label.setHidden(
+            True,
         )
         self._session_counter_label.setWordWrap(
             True,
@@ -662,6 +684,17 @@ class MainWindow(QMainWindow):
     def session_risk_style(self) -> str:
         return self._session_risk_label.styleSheet()
 
+    @property
+    def session_pause_alert_text(self) -> str:
+        return self._session_pause_alert_label.text()
+
+    @property
+    def session_pause_alert_visible(self) -> bool:
+        return not self._session_pause_alert_label.isHidden()
+
+    @property
+    def session_pause_alert_style(self) -> str:
+        return self._session_pause_alert_label.styleSheet()
 
     def set_running_state(
         self,
@@ -820,6 +853,9 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(
             self._session_risk_label,
+        )
+        layout.addWidget(
+            self._session_pause_alert_label,
         )
         layout.addWidget(
             self._reset_session_button,
@@ -1052,7 +1088,9 @@ class MainWindow(QMainWindow):
         self._apply_session_risk_style(
             state=risk_view_model.state,
         )
-
+        self._apply_session_pause_alert(
+            state=risk_view_model.state,
+        )
 
     def _apply_session_risk_style(
         self,
@@ -1072,6 +1110,28 @@ class MainWindow(QMainWindow):
 
         self._session_risk_label.setStyleSheet(
             self.SESSION_RISK_OK_STYLE,
+        )
+
+    def _apply_session_pause_alert(
+        self,
+        state: str,
+    ) -> None:
+        if state == SessionRiskPresenter.STATE_LIMIT_REACHED:
+            self._session_pause_alert_label.setText(
+                "PAUSA RECOMENDADA\n"
+                "Límite de señales alcanzado\n"
+                "No buscar más entradas en esta sesión"
+            )
+            self._session_pause_alert_label.setHidden(
+                False,
+            )
+            return
+
+        self._session_pause_alert_label.setText(
+            "",
+        )
+        self._session_pause_alert_label.setHidden(
+            True,
         )
 
     def _apply_confirmation_checklist_style(
@@ -1235,6 +1295,9 @@ class MainWindow(QMainWindow):
         )
         self._session_risk_label.setVisible(
             True,
+        )
+        self._session_pause_alert_label.setVisible(
+            not self._session_pause_alert_label.isHidden(),
         )
         self._reset_session_button.setVisible(
             True,
