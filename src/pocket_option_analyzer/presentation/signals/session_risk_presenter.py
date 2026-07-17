@@ -14,6 +14,7 @@ class SessionRiskViewModel:
     """
 
     text: str
+    compact_text: str
     state: str
 
 
@@ -56,6 +57,10 @@ class SessionRiskPresenter:
                     f"{self._max_session_signals} | "
                     "No buscar más entradas en esta sesión"
                 ),
+                compact_text=(
+                    "Riesgo: LÍMITE "
+                    f"{total_confirmed_signals}/{self._max_session_signals}"
+                ),
                 state=self.STATE_LIMIT_REACHED,
             )
 
@@ -67,6 +72,10 @@ class SessionRiskPresenter:
                     f"{self._max_session_signals} | "
                     "Considera reducir operaciones"
                 ),
+                compact_text=(
+                    "Riesgo: ATENCIÓN "
+                    f"{total_confirmed_signals}/{self._max_session_signals}"
+                ),
                 state=self.STATE_WARNING,
             )
 
@@ -76,6 +85,10 @@ class SessionRiskPresenter:
                 f"Señales confirmadas: {total_confirmed_signals}/"
                 f"{self._max_session_signals} | "
                 f"{self.MANUAL_LOSS_REMINDER}"
+            ),
+            compact_text=(
+                "Riesgo: OK "
+                f"{total_confirmed_signals}/{self._max_session_signals}"
             ),
             state=self.STATE_OK,
         )

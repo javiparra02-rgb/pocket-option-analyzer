@@ -12,6 +12,7 @@ def test_session_risk_presenter_starts_with_ok_state() -> None:
         total_confirmed_signals=0,
     )
 
+    assert risk.compact_text == "Riesgo: OK 0/12"
     assert risk.state == "OK"
     assert risk.text == (
         "Riesgo sesión: OK | Señales confirmadas: 0/12 | "
@@ -26,6 +27,7 @@ def test_session_risk_presenter_uses_warning_state_near_limit() -> None:
         total_confirmed_signals=10,
     )
 
+    assert risk.compact_text == "Riesgo: ATENCIÓN 10/12"
     assert risk.state == "WARNING"
     assert risk.text == (
         "Riesgo sesión: ATENCIÓN | Señales confirmadas: 10/12 | "
@@ -40,6 +42,7 @@ def test_session_risk_presenter_uses_limit_state_at_limit() -> None:
         total_confirmed_signals=12,
     )
 
+    assert risk.compact_text == "Riesgo: LÍMITE 12/12"
     assert risk.state == "LIMIT_REACHED"
     assert risk.text == (
         "Riesgo sesión: LÍMITE ALCANZADO | "
@@ -72,6 +75,8 @@ def test_session_risk_presenter_allows_custom_limits() -> None:
         total_confirmed_signals=5,
     )
 
+    assert warning.compact_text == "Riesgo: ATENCIÓN 4/5"
+    assert limit.compact_text == "Riesgo: LÍMITE 5/5"
     assert warning.state == "WARNING"
     assert "4/5" in warning.text
     assert limit.state == "LIMIT_REACHED"

@@ -2012,3 +2012,94 @@ def test_main_window_keeps_session_pause_alert_visible_in_compact_mode_when_limi
 
     assert window.is_compact_mode_enabled is True
     assert window.session_pause_alert_visible is True
+
+
+def test_main_window_uses_compact_session_risk_text_in_compact_mode() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is True
+    assert window.session_risk_text == "Riesgo: OK 0/12"
+
+
+def test_main_window_restores_full_session_risk_text_when_leaving_compact_mode() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window._compact_mode_button.click()
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is False
+    assert window.session_risk_text == (
+        "Riesgo sesión: OK | Señales confirmadas: 0/12 | "
+        "Recordatorio: detener si acumulas 3 pérdidas manuales"
+    )
+
+
+def test_main_window_uses_compact_warning_session_risk_text() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    for index in range(10):
+        view_model = SignalRecordViewModel(
+            direction_label="CALL",
+            strength_label="ALTA",
+            reason="CALL setup confirmed.",
+            source="test_source",
+            created_at_label=f"2026-01-01 10:50:{index:02d}",
+            is_actionable=True,
+            css_class="signal-call",
+            operational_summary_label=(
+                "Resumen operativo: ENTRADA CALL confirmada — revisar gestión "
+                "de riesgo antes de operar manualmente."
+            ),
+        )
+
+        window.update_signal(
+            view_model=view_model,
+        )
+
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is True
+    assert window.session_risk_text == "Riesgo: ATENCIÓN 10/12"
+
+
+def test_main_window_uses_compact_limit_session_risk_text() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    for index in range(12):
+        view_model = SignalRecordViewModel(
+            direction_label="PUT",
+            strength_label="ALTA",
+            reason="PUT setup confirmed.",
+            source="test_source",
+            created_at_label=f"2026-01-01 10:51:{index:02d}",
+            is_actionable=True,
+            css_class="signal-put",
+            operational_summary_label=(
+                "Resumen operativo: ENTRADA PUT confirmada — revisar gestión "
+                "de riesgo antes de operar manualmente."
+            ),
+        )
+
+        window.update_signal(
+            view_model=view_model,
+        )
+
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is True
+    assert window.session_risk_text == "Riesgo: LÍMITE 12/12"
+    assert window.session_pause_alert_visible is True

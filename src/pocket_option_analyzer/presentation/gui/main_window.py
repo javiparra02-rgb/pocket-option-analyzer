@@ -1082,8 +1082,14 @@ class MainWindow(QMainWindow):
             total_confirmed_signals=self._session_signal_counter.total_count,
         )
 
+        risk_text = (
+            risk_view_model.compact_text
+            if self._compact_mode_enabled
+            else risk_view_model.text
+        )
+
         self._session_risk_label.setText(
-            risk_view_model.text,
+            risk_text,
         )
         self._apply_session_risk_style(
             state=risk_view_model.state,
@@ -1334,6 +1340,8 @@ class MainWindow(QMainWindow):
                 compact=False,
             )
             self._apply_full_geometry()
+        
+        self._refresh_session_risk_label()
 
         if save_preferences:
             self._save_window_preferences()
