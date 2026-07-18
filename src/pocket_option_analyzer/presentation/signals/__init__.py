@@ -17,6 +17,10 @@ from pocket_option_analyzer.presentation.signals.session_risk_presenter import (
 from pocket_option_analyzer.presentation.signals.session_signal_counter import (
     SessionSignalCounter,
 )
+from pocket_option_analyzer.presentation.signals.voice_signal_notifier import (
+    SpeechEngine,
+    VoiceSignalNotifier,
+)
 
 from .signal_record_presenter import SignalRecordPresenter
 from .signal_record_view_model import SignalRecordViewModel
@@ -33,4 +37,6 @@ __all__ = [
     "SessionSignalCounter",
     "SessionRiskPresenter",
     "SessionRiskViewModel",
+    "SpeechEngine",
+    "VoiceSignalNotifier",
 ]
