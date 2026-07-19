@@ -178,6 +178,20 @@ class FakeWindow:
         self.show_after_capture_calls += 1
 
 
+class FakeVoiceNotifier:
+
+    def __init__(self) -> None:
+        self.view_models = []
+
+    def notify(
+        self,
+        view_model,
+    ) -> None:
+        self.view_models.append(
+            view_model,
+        )
+
+
 def _record() -> SignalRecord:
 
     return SignalRecord(
@@ -416,3 +430,50 @@ def test_controller_receives_worker_running_state_through_controller_slot() -> N
     )
 
     assert window.running_states[-1] is False
+
+
+def test_controller_notifies_voice_when_record_is_ready() -> None:
+
+    runtime = FakeRuntimeService(
+        record=_record(),
+    )
+    window = FakeWindow()
+    voice_notifier = FakeVoiceNotifier()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        voice_notifier=voice_notifier,
+        window=window,
+    )
+
+    record = controller.run_once()
+
+    assert record is runtime.record
+    assert len(window.view_models) == 1
+    assert len(voice_notifier.view_models) == 1
+    assert voice_notifier.view_models[0] is window.view_models[0]
+    assert voice_notifier.view_models[0].direction_label == "CALL"
+    assert voice_notifier.view_models[0].is_actionable is True
+
+
+def test_controller_does_not_notify_voice_when_record_is_missing() -> None:
+
+    runtime = FakeRuntimeService(
+        record=None,
+    )
+    window = FakeWindow()
+    voice_notifier = FakeVoiceNotifier()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        voice_notifier=voice_notifier,
+        window=window,
+    )
+
+    record = controller.run_once()
+
+    assert record is None
+    assert window.view_models == []
+    assert voice_notifier.view_models == []

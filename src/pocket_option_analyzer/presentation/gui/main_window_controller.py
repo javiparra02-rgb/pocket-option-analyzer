@@ -15,6 +15,7 @@ from pocket_option_analyzer.presentation.gui.analysis_worker import (
 from pocket_option_analyzer.presentation.gui.main_window import MainWindow
 from pocket_option_analyzer.presentation.signals import (
     SignalRecordPresenter,
+    SignalRecordViewModel,
 )
 
 
@@ -72,6 +73,21 @@ class ThreadLike(Protocol):
         """
 
 
+class VoiceNotifierLike(Protocol):
+    """
+    Contrato mínimo para notificadores de voz utilizados
+    por el controlador.
+    """
+
+    def notify(
+        self,
+        view_model: SignalRecordViewModel,
+    ) -> None:
+        """
+        Anuncia verbalmente una señal cuando corresponde.
+        """
+
+
 WorkerFactory = Callable[[AnalysisRuntimeService], WorkerLike]
 ThreadFactory = Callable[[], ThreadLike]
 
@@ -93,6 +109,7 @@ class MainWindowController(QObject):
         self,
         runtime_service: AnalysisRuntimeService,
         presenter: SignalRecordPresenter | None = None,
+        voice_notifier: VoiceNotifierLike | None = None,
         window: MainWindow | None = None,
         worker_factory: WorkerFactory | None = None,
         thread_factory: ThreadFactory | None = None,
@@ -102,6 +119,7 @@ class MainWindowController(QObject):
 
         self._runtime_service = runtime_service
         self._presenter = presenter or SignalRecordPresenter()
+        self._voice_notifier = voice_notifier
         self._worker_interval_seconds = worker_interval_seconds
 
         self._worker_factory = worker_factory or self._create_worker
@@ -301,6 +319,11 @@ class MainWindowController(QObject):
         self._window.update_signal(
             view_model=view_model,
         )
+
+        if self._voice_notifier is not None:
+            self._voice_notifier.notify(
+                view_model=view_model,
+            )
 
     @Slot(str)
     def _handle_error_occurred(

@@ -5,12 +5,18 @@ from collections.abc import Sequence
 
 from PySide6.QtWidgets import QApplication
 
+from pocket_option_analyzer.infrastructure.audio import (
+    QtTextToSpeechAdapter,
+)
 from pocket_option_analyzer.infrastructure.bootstrap import (
     PocketOptionRuntimeFactory,
 )
 from pocket_option_analyzer.presentation.gui import (
     GuiApplication,
     MainWindowController,
+)
+from pocket_option_analyzer.presentation.signals import (
+    VoiceSignalNotifier,
 )
 
 
@@ -62,6 +68,7 @@ def ensure_qapplication(
 def build_gui_application(
     argv: Sequence[str] | None = None,
     runtime_service=None,
+    voice_notifier: VoiceSignalNotifier | None = None,
 ) -> GuiApplication:
     """
     Construye la aplicación gráfica.
@@ -80,8 +87,16 @@ def build_gui_application(
         else PocketOptionRuntimeFactory.create_runtime_service()
     )
 
+    resolved_voice_notifier = voice_notifier
+
+    if resolved_voice_notifier is None and runtime_service is None:
+        resolved_voice_notifier = VoiceSignalNotifier(
+            speech_engine=QtTextToSpeechAdapter(),
+        )
+
     controller = MainWindowController(
         runtime_service=resolved_runtime_service,
+        voice_notifier=resolved_voice_notifier,
     )
 
     return GuiApplication(
