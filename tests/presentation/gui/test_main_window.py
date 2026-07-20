@@ -2103,3 +2103,176 @@ def test_main_window_uses_compact_limit_session_risk_text() -> None:
     assert window.is_compact_mode_enabled is True
     assert window.session_risk_text == "Riesgo: LÍMITE 12/12"
     assert window.session_pause_alert_visible is True
+
+
+def test_main_window_starts_with_voice_enabled() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert window.voice_enabled is True
+    assert window.voice_toggle_button_checked is True
+    assert window.voice_toggle_button_text == "Voz activada"
+    assert window.test_voice_button_text == "Probar voz"
+    assert window.test_voice_button_enabled is True
+
+
+def test_main_window_voice_toggle_notifies_callback() -> None:
+
+    _application()
+
+    changes: list[bool] = []
+
+    window = MainWindow(
+        on_voice_enabled_changed=changes.append,
+    )
+
+    _button(
+        window=window,
+        object_name="voice_toggle_button",
+    ).click()
+
+    assert window.voice_enabled is False
+    assert window.voice_toggle_button_checked is False
+    assert window.voice_toggle_button_text == "Voz desactivada"
+    assert window.test_voice_button_enabled is False
+    assert changes == [
+        False,
+    ]
+
+    _button(
+        window=window,
+        object_name="voice_toggle_button",
+    ).click()
+
+    assert window.voice_enabled is True
+    assert window.voice_toggle_button_checked is True
+    assert window.voice_toggle_button_text == "Voz activada"
+    assert window.test_voice_button_enabled is True
+    assert changes == [
+        False,
+        True,
+    ]
+
+
+def test_main_window_test_voice_button_calls_callback() -> None:
+
+    _application()
+
+    callback = CallbackSpy()
+
+    window = MainWindow(
+        on_test_voice_requested=callback,
+    )
+
+    _button(
+        window=window,
+        object_name="test_voice_button",
+    ).click()
+
+    assert callback.calls == 1
+
+
+def test_main_window_disabled_voice_prevents_test_callback() -> None:
+
+    _application()
+
+    callback = CallbackSpy()
+
+    window = MainWindow(
+        on_test_voice_requested=callback,
+    )
+
+    _button(
+        window=window,
+        object_name="voice_toggle_button",
+    ).click()
+    _button(
+        window=window,
+        object_name="test_voice_button",
+    ).click()
+
+    assert window.voice_enabled is False
+    assert window.test_voice_button_enabled is False
+    assert callback.calls == 0
+
+
+def test_main_window_restores_saved_voice_preference(
+    tmp_path,
+) -> None:
+
+    _application()
+
+    settings = _temporary_settings(
+        tmp_path,
+    )
+    changes: list[bool] = []
+
+    settings.beginGroup(
+        MainWindow.SETTINGS_GROUP,
+    )
+    settings.setValue(
+        MainWindow.SETTING_VOICE_ENABLED,
+        False,
+    )
+    settings.endGroup()
+    settings.sync()
+
+    window = MainWindow(
+        settings=settings,
+        restore_window_preferences=True,
+        on_voice_enabled_changed=changes.append,
+    )
+
+    assert window.voice_enabled is False
+    assert window.voice_toggle_button_text == "Voz desactivada"
+    assert window.test_voice_button_enabled is False
+    assert changes == [
+        False,
+    ]
+
+
+def test_main_window_saves_voice_preference(
+    tmp_path,
+) -> None:
+
+    _application()
+
+    settings = _temporary_settings(
+        tmp_path,
+    )
+
+    window = MainWindow(
+        settings=settings,
+        restore_window_preferences=True,
+    )
+
+    _button(
+        window=window,
+        object_name="voice_toggle_button",
+    ).click()
+
+    settings.beginGroup(
+        MainWindow.SETTINGS_GROUP,
+    )
+
+    assert settings.value(
+        MainWindow.SETTING_VOICE_ENABLED,
+        type=bool,
+    ) is False
+
+    settings.endGroup()
+
+
+def test_main_window_keeps_voice_controls_visible_in_compact_mode() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is True
+    assert window.voice_toggle_button_visible is True
+    assert window.test_voice_button_visible is True

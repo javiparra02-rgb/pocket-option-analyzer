@@ -38,6 +38,8 @@ class VoiceSignalNotifier:
     CALL_MESSAGE = "Compra"
     PUT_MESSAGE = "Vende"
 
+    TEST_MESSAGE = "Notificaciones activadas"
+
     VALID_DIRECTIONS = {
         "CALL",
         "PUT",
@@ -106,6 +108,22 @@ class VoiceSignalNotifier:
 
         self._speech_engine.speak(
             self.PUT_MESSAGE,
+        )
+
+    def test_voice(
+        self,
+    ) -> None:
+        """
+        Reproduce un mensaje para verificar el funcionamiento del audio.
+
+        No altera la dirección activa ni el control de duplicados.
+        """
+
+        if not self._enabled:
+            return
+
+        self._speech_engine.speak(
+            self.TEST_MESSAGE,
         )
 
     def reset(self) -> None:

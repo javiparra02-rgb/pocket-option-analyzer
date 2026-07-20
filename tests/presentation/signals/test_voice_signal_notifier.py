@@ -210,3 +210,30 @@ def test_voice_signal_notifier_can_be_disabled_and_enabled() -> None:
     assert engine.spoken_messages == [
         "Compra",
     ]
+
+
+def test_voice_signal_notifier_reproduces_test_message_when_enabled() -> None:
+    engine = FakeSpeechEngine()
+    notifier = VoiceSignalNotifier(
+        speech_engine=engine,
+    )
+
+    notifier.test_voice()
+
+    assert engine.spoken_messages == [
+        "Notificaciones activadas",
+    ]
+    assert notifier.active_direction is None
+
+
+def test_voice_signal_notifier_does_not_test_voice_when_disabled() -> None:
+    engine = FakeSpeechEngine()
+    notifier = VoiceSignalNotifier(
+        speech_engine=engine,
+        enabled=False,
+    )
+
+    notifier.test_voice()
+
+    assert engine.spoken_messages == []
+    assert notifier.active_direction is None

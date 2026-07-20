@@ -87,6 +87,21 @@ class VoiceNotifierLike(Protocol):
         Anuncia verbalmente una señal cuando corresponde.
         """
 
+    def set_enabled(
+        self,
+        enabled: bool,
+    ) -> None:
+        """
+        Activa o desactiva las notificaciones.
+        """
+
+    def test_voice(
+        self,
+    ) -> None:
+        """
+        Reproduce el mensaje de prueba.
+        """
+
 
 WorkerFactory = Callable[[AnalysisRuntimeService], WorkerLike]
 ThreadFactory = Callable[[], ThreadLike]
@@ -132,6 +147,8 @@ class MainWindowController(QObject):
             on_start_requested=self.start,
             on_stop_requested=self.stop,
             on_run_once_requested=self.run_once,
+            on_voice_enabled_changed=self.set_voice_enabled,
+            on_test_voice_requested=self.test_voice,
             restore_window_preferences=True,
         )
 
@@ -142,6 +159,34 @@ class MainWindowController(QObject):
     @property
     def window(self) -> MainWindow:
         return self._window
+    
+    def set_voice_enabled(
+        self,
+        enabled: bool,
+    ) -> None:
+        """
+        Activa o desactiva el notificador de voz.
+        """
+
+        if self._voice_notifier is None:
+            return
+
+        self._voice_notifier.set_enabled(
+            enabled,
+        )
+
+
+    def test_voice(
+        self,
+    ) -> None:
+        """
+        Solicita al notificador reproducir el mensaje de prueba.
+        """
+
+        if self._voice_notifier is None:
+            return
+
+        self._voice_notifier.test_voice()
 
     def start(
         self,

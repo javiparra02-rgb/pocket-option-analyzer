@@ -182,6 +182,8 @@ class FakeVoiceNotifier:
 
     def __init__(self) -> None:
         self.view_models = []
+        self.enabled_changes: list[bool] = []
+        self.test_voice_calls = 0
 
     def notify(
         self,
@@ -190,6 +192,19 @@ class FakeVoiceNotifier:
         self.view_models.append(
             view_model,
         )
+
+    def set_enabled(
+        self,
+        enabled: bool,
+    ) -> None:
+        self.enabled_changes.append(
+            enabled,
+        )
+
+    def test_voice(
+        self,
+    ) -> None:
+        self.test_voice_calls += 1
 
 
 def _record() -> SignalRecord:
@@ -477,3 +492,47 @@ def test_controller_does_not_notify_voice_when_record_is_missing() -> None:
     assert record is None
     assert window.view_models == []
     assert voice_notifier.view_models == []
+
+
+def test_controller_delegates_voice_enabled_change() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    voice_notifier = FakeVoiceNotifier()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        voice_notifier=voice_notifier,
+        window=window,
+    )
+
+    controller.set_voice_enabled(
+        False,
+    )
+    controller.set_voice_enabled(
+        True,
+    )
+
+    assert voice_notifier.enabled_changes == [
+        False,
+        True,
+    ]
+
+
+def test_controller_delegates_voice_test() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    voice_notifier = FakeVoiceNotifier()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        voice_notifier=voice_notifier,
+        window=window,
+    )
+
+    controller.test_voice()
+
+    assert voice_notifier.test_voice_calls == 1

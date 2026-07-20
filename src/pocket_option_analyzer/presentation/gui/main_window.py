@@ -27,6 +27,7 @@ from pocket_option_analyzer.presentation.signals import (
 )
 
 WindowAction = Callable[[], None]
+BooleanWindowAction = Callable[[bool], None]
 
 
 class MainWindow(QMainWindow):
@@ -198,11 +199,15 @@ class MainWindow(QMainWindow):
     SETTING_WIDTH = "width"
     SETTING_HEIGHT = "height"
 
+    SETTING_VOICE_ENABLED = "voice_enabled"
+
     def __init__(
         self,
         on_start_requested: WindowAction | None = None,
         on_stop_requested: WindowAction | None = None,
         on_run_once_requested: WindowAction | None = None,
+        on_voice_enabled_changed: BooleanWindowAction | None = None,
+        on_test_voice_requested: WindowAction | None = None,
         settings: QSettings | None = None,
         restore_window_preferences: bool = False,
     ) -> None:
@@ -211,6 +216,9 @@ class MainWindow(QMainWindow):
         self._on_start_requested = on_start_requested
         self._on_stop_requested = on_stop_requested
         self._on_run_once_requested = on_run_once_requested
+        self._on_voice_enabled_changed = on_voice_enabled_changed
+        self._on_test_voice_requested = on_test_voice_requested
+        self._voice_enabled = True
         self._settings = settings or QSettings(
             self.SETTINGS_ORGANIZATION,
             self.SETTINGS_APPLICATION,
@@ -425,7 +433,25 @@ class MainWindow(QMainWindow):
             "reset_view_button",
         )
 
-        self._compact_mode_enabled = False
+        self._voice_toggle_button = QPushButton(
+            "Voz activada",
+        )
+        self._voice_toggle_button.setObjectName(
+            "voice_toggle_button",
+        )
+        self._voice_toggle_button.setCheckable(
+            True,
+        )
+        self._voice_toggle_button.setChecked(
+            True,
+        )
+
+        self._test_voice_button = QPushButton(
+            "Probar voz",
+        )
+        self._test_voice_button.setObjectName(
+            "test_voice_button",
+        )
 
         self._compact_mode_enabled = False
 
@@ -695,6 +721,34 @@ class MainWindow(QMainWindow):
     @property
     def session_pause_alert_style(self) -> str:
         return self._session_pause_alert_label.styleSheet()
+    
+    @property
+    def voice_enabled(self) -> bool:
+        return self._voice_enabled
+
+    @property
+    def voice_toggle_button_text(self) -> str:
+        return self._voice_toggle_button.text()
+
+    @property
+    def voice_toggle_button_checked(self) -> bool:
+        return self._voice_toggle_button.isChecked()
+
+    @property
+    def voice_toggle_button_visible(self) -> bool:
+        return not self._voice_toggle_button.isHidden()
+
+    @property
+    def test_voice_button_text(self) -> str:
+        return self._test_voice_button.text()
+
+    @property
+    def test_voice_button_enabled(self) -> bool:
+        return self._test_voice_button.isEnabled()
+
+    @property
+    def test_voice_button_visible(self) -> bool:
+        return not self._test_voice_button.isHidden()
 
     def set_running_state(
         self,
@@ -888,6 +942,12 @@ class MainWindow(QMainWindow):
             self._reset_view_button,
         )
         layout.addWidget(
+            self._voice_toggle_button,
+        )
+        layout.addWidget(
+            self._test_voice_button,
+        )
+        layout.addWidget(
             self._clear_history_button,
         )
         layout.addWidget(
@@ -935,6 +995,12 @@ class MainWindow(QMainWindow):
         self._reset_session_button.clicked.connect(
             self.reset_session_counter,
         )
+        self._voice_toggle_button.clicked.connect(
+            self._handle_voice_toggle_clicked,
+        )
+        self._test_voice_button.clicked.connect(
+            self._handle_test_voice_clicked,
+        )
 
     def _apply_button_state(
         self,
@@ -950,6 +1016,50 @@ class MainWindow(QMainWindow):
         self._run_once_button.setEnabled(
             not is_running,
         )
+
+    def _handle_voice_toggle_clicked(
+        self,
+    ) -> None:
+        self._set_voice_enabled(
+            enabled=self._voice_toggle_button.isChecked(),
+        )
+
+    def _handle_test_voice_clicked(
+        self,
+    ) -> None:
+        if not self._voice_enabled:
+            return
+
+        if self._on_test_voice_requested is not None:
+            self._on_test_voice_requested()
+
+    def _set_voice_enabled(
+        self,
+        enabled: bool,
+        save_preferences: bool = True,
+        notify_callback: bool = True,
+    ) -> None:
+        self._voice_enabled = enabled
+
+        self._voice_toggle_button.setChecked(
+            enabled,
+        )
+        self._voice_toggle_button.setText(
+            "Voz activada"
+            if enabled
+            else "Voz desactivada",
+        )
+        self._test_voice_button.setEnabled(
+            enabled,
+        )
+
+        if notify_callback and self._on_voice_enabled_changed is not None:
+            self._on_voice_enabled_changed(
+                enabled,
+            )
+
+        if save_preferences:
+            self._save_window_preferences()
 
     def _apply_signal_style(
         self,
@@ -1323,6 +1433,12 @@ class MainWindow(QMainWindow):
         self._run_once_button.setVisible(
             True,
         )
+        self._voice_toggle_button.setVisible(
+            True,
+        )
+        self._test_voice_button.setVisible(
+            True,
+        )
 
         if enabled:
             self._compact_mode_button.setText(
@@ -1456,6 +1572,10 @@ class MainWindow(QMainWindow):
             self.SETTING_HEIGHT,
             self.height(),
         )
+        self._settings.setValue(
+            self.SETTING_VOICE_ENABLED,
+            self._voice_enabled,
+        )
         self._settings.endGroup()
         self._settings.sync()
 
@@ -1491,8 +1611,19 @@ class MainWindow(QMainWindow):
             None,
             type=int,
         )
+        voice_enabled = self._settings.value(
+            self.SETTING_VOICE_ENABLED,
+            True,
+            type=bool,
+        )
 
         self._settings.endGroup()
+
+        self._set_voice_enabled(
+            enabled=voice_enabled,
+            save_preferences=False,
+            notify_callback=True,
+        )
 
         self._set_compact_mode(
             enabled=compact_mode,
