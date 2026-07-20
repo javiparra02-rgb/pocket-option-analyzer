@@ -47,6 +47,29 @@ def _button(
     return button
 
 
+def _confirmed_signal(
+    index: int,
+    direction: str = "CALL",
+) -> SignalRecordViewModel:
+    return SignalRecordViewModel(
+        direction_label=direction,
+        strength_label="ALTA",
+        reason=f"{direction} setup confirmed.",
+        source="test_source",
+        created_at_label=f"2026-01-01 11:00:{index:02d}",
+        is_actionable=True,
+        css_class=(
+            "signal-call"
+            if direction == "CALL"
+            else "signal-put"
+        ),
+        operational_summary_label=(
+            f"Resumen operativo: ENTRADA {direction} confirmada — "
+            "revisar gestión de riesgo antes de operar manualmente."
+        ),
+    )
+
+
 def test_main_window_has_initial_state() -> None:
 
     _application()
@@ -2276,3 +2299,332 @@ def test_main_window_keeps_voice_controls_visible_in_compact_mode() -> None:
     assert window.is_compact_mode_enabled is True
     assert window.voice_toggle_button_visible is True
     assert window.test_voice_button_visible is True
+
+
+def test_main_window_displays_initial_manual_results() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert window.session_result_text == (
+        "Resultados: 0 ganadas | 0 perdidas | "
+        "Tasa observada: - | Racha de pérdidas: 0/3"
+    )
+    assert window.session_result_wins == 0
+    assert window.session_result_losses == 0
+    assert window.session_result_total == 0
+    assert window.session_consecutive_losses == 0
+    assert window.session_result_pause_alert_visible is False
+
+
+def test_main_window_disables_result_buttons_without_confirmed_signal() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    assert window.register_win_button_enabled is False
+    assert window.register_loss_button_enabled is False
+    assert window.undo_result_button_enabled is False
+
+
+def test_main_window_enables_result_buttons_after_confirmed_signal() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window.update_signal(
+        view_model=_confirmed_signal(
+            index=0,
+        ),
+    )
+
+    assert window.session_total_count == 1
+    assert window.register_win_button_enabled is True
+    assert window.register_loss_button_enabled is True
+    assert window.undo_result_button_enabled is False
+
+
+def test_main_window_registers_manual_win() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window.update_signal(
+        view_model=_confirmed_signal(
+            index=0,
+        ),
+    )
+
+    _button(
+        window=window,
+        object_name="register_win_button",
+    ).click()
+
+    assert window.session_result_wins == 1
+    assert window.session_result_losses == 0
+    assert window.session_result_total == 1
+    assert window.session_win_rate_percentage == 100.0
+    assert window.session_result_text == (
+        "Resultados: 1 ganadas | 0 perdidas | "
+        "Tasa observada: 100,0 % | Racha de pérdidas: 0/3"
+    )
+    assert window.register_win_button_enabled is False
+    assert window.register_loss_button_enabled is False
+    assert window.undo_result_button_enabled is True
+
+
+def test_main_window_registers_manual_loss() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window.update_signal(
+        view_model=_confirmed_signal(
+            index=0,
+            direction="PUT",
+        ),
+    )
+
+    _button(
+        window=window,
+        object_name="register_loss_button",
+    ).click()
+
+    assert window.session_result_wins == 0
+    assert window.session_result_losses == 1
+    assert window.session_result_total == 1
+    assert window.session_consecutive_losses == 1
+    assert window.session_win_rate_percentage == 0.0
+
+
+def test_main_window_prevents_extra_result_without_new_signal() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window.update_signal(
+        view_model=_confirmed_signal(
+            index=0,
+        ),
+    )
+
+    win_button = _button(
+        window=window,
+        object_name="register_win_button",
+    )
+
+    win_button.click()
+    win_button.click()
+
+    assert window.session_total_count == 1
+    assert window.session_result_total == 1
+    assert window.session_result_wins == 1
+
+
+def test_main_window_reenables_result_buttons_after_new_signal() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window.update_signal(
+        view_model=_confirmed_signal(
+            index=0,
+        ),
+    )
+
+    _button(
+        window=window,
+        object_name="register_win_button",
+    ).click()
+
+    assert window.register_win_button_enabled is False
+
+    window.update_signal(
+        view_model=_confirmed_signal(
+            index=1,
+            direction="PUT",
+        ),
+    )
+
+    assert window.session_total_count == 2
+    assert window.session_result_total == 1
+    assert window.register_win_button_enabled is True
+    assert window.register_loss_button_enabled is True
+
+
+def test_main_window_undoes_last_manual_result() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window.update_signal(
+        view_model=_confirmed_signal(
+            index=0,
+        ),
+    )
+
+    _button(
+        window=window,
+        object_name="register_loss_button",
+    ).click()
+    _button(
+        window=window,
+        object_name="undo_result_button",
+    ).click()
+
+    assert window.session_result_total == 0
+    assert window.session_result_losses == 0
+    assert window.session_consecutive_losses == 0
+    assert window.register_win_button_enabled is True
+    assert window.register_loss_button_enabled is True
+    assert window.undo_result_button_enabled is False
+
+
+def test_main_window_shows_pause_alert_after_three_manual_losses() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    for index in range(3):
+        window.update_signal(
+            view_model=_confirmed_signal(
+                index=index,
+                direction="PUT",
+            ),
+        )
+
+        _button(
+            window=window,
+            object_name="register_loss_button",
+        ).click()
+
+    assert window.session_result_losses == 3
+    assert window.session_consecutive_losses == 3
+    assert window.session_result_pause_alert_visible is True
+    assert window.session_result_pause_alert_text == (
+        "PAUSA RECOMENDADA\n"
+        "Se alcanzaron 3 pérdidas consecutivas\n"
+        "Detén la sesión y revisa las operaciones"
+    )
+    assert "#d93025" in window.session_result_pause_alert_style
+
+
+def test_main_window_hides_loss_pause_alert_after_manual_win() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    for index in range(3):
+        window.update_signal(
+            view_model=_confirmed_signal(
+                index=index,
+                direction="PUT",
+            ),
+        )
+
+        _button(
+            window=window,
+            object_name="register_loss_button",
+        ).click()
+
+    assert window.session_result_pause_alert_visible is True
+
+    window.update_signal(
+        view_model=_confirmed_signal(
+            index=3,
+            direction="CALL",
+        ),
+    )
+
+    _button(
+        window=window,
+        object_name="register_win_button",
+    ).click()
+
+    assert window.session_consecutive_losses == 0
+    assert window.session_result_pause_alert_visible is False
+    assert window.session_result_pause_alert_text == ""
+
+
+def test_main_window_reset_session_clears_signals_and_results() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window.update_signal(
+        view_model=_confirmed_signal(
+            index=0,
+        ),
+    )
+    _button(
+        window=window,
+        object_name="register_win_button",
+    ).click()
+
+    window.update_signal(
+        view_model=_confirmed_signal(
+            index=1,
+            direction="PUT",
+        ),
+    )
+    _button(
+        window=window,
+        object_name="register_loss_button",
+    ).click()
+
+    assert window.session_total_count == 2
+    assert window.session_result_total == 2
+
+    _button(
+        window=window,
+        object_name="reset_session_button",
+    ).click()
+
+    assert window.session_total_count == 0
+    assert window.session_result_total == 0
+    assert window.session_result_wins == 0
+    assert window.session_result_losses == 0
+    assert window.session_consecutive_losses == 0
+    assert window.session_result_pause_alert_visible is False
+    assert window.register_win_button_enabled is False
+    assert window.register_loss_button_enabled is False
+    assert window.undo_result_button_enabled is False
+
+
+def test_main_window_uses_compact_result_view_and_keeps_controls_visible() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window.update_signal(
+        view_model=_confirmed_signal(
+            index=0,
+        ),
+    )
+    _button(
+        window=window,
+        object_name="register_win_button",
+    ).click()
+
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is True
+    assert window.session_result_text == (
+        "Resultados: 1G | 0P | 100,0 % | Racha: 0/3"
+    )
+    assert window.session_result_visible is True
+    assert window.register_win_button_visible is True
+    assert window.register_loss_button_visible is True
+    assert window.undo_result_button_visible is True

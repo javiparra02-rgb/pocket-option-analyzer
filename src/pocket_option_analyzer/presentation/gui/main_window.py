@@ -6,6 +6,7 @@ from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QTextCursor, QTextOption
 from PySide6.QtWidgets import (
     QApplication,
+    QHBoxLayout,
     QLabel,
     QListWidget,
     QMainWindow,
@@ -21,6 +22,8 @@ from pocket_option_analyzer.presentation.signals import (
     ConfirmationChecklistPresenter,
     EntryAlertPresenter,
     OperationalSummaryPresenter,
+    SessionResultPresenter,
+    SessionResultTracker,
     SessionRiskPresenter,
     SessionSignalCounter,
     SignalRecordViewModel,
@@ -152,6 +155,25 @@ class MainWindow(QMainWindow):
         "padding: 4px;"
     )
 
+    SESSION_RESULT_STYLE = (
+        "font-weight: bold; "
+        "color: #374151; "
+        "background-color: #f8f9fa; "
+        "border: 1px solid #c7cdd4; "
+        "border-radius: 4px; "
+        "padding: 4px;"
+    )
+
+    SESSION_RESULT_PAUSE_ALERT_STYLE = (
+        "font-weight: bold; "
+        "font-size: 16px; "
+        "color: #d93025; "
+        "background-color: #fff0f0; "
+        "border: 2px solid #d93025; "
+        "border-radius: 6px; "
+        "padding: 8px;"
+    )
+
     SESSION_RISK_OK_STYLE = (
         "font-weight: bold; "
         "color: #374151; "
@@ -229,6 +251,8 @@ class MainWindow(QMainWindow):
         self._operational_summary_presenter = OperationalSummaryPresenter()
         self._session_signal_counter = SessionSignalCounter()
         self._session_risk_presenter = SessionRiskPresenter()
+        self._session_result_tracker = SessionResultTracker()
+        self._session_result_presenter = SessionResultPresenter()
 
         self.setWindowTitle(
             "Pocket Option Analyzer",
@@ -332,6 +356,62 @@ class MainWindow(QMainWindow):
         )
         self._session_pause_alert_label.setHidden(
             True,
+        )
+        initial_session_result = self._session_result_presenter.present(
+            snapshot=self._session_result_tracker.snapshot(),
+        )
+
+        self._session_result_label = QLabel(
+            initial_session_result.text,
+        )
+        self._session_result_label.setWordWrap(
+            True,
+        )
+        self._session_result_label.setStyleSheet(
+            self.SESSION_RESULT_STYLE,
+        )
+
+        self._session_result_pause_alert_label = QLabel(
+            "",
+        )
+        self._session_result_pause_alert_label.setWordWrap(
+            True,
+        )
+        self._session_result_pause_alert_label.setStyleSheet(
+            self.SESSION_RESULT_PAUSE_ALERT_STYLE,
+        )
+        self._session_result_pause_alert_label.setHidden(
+            True,
+        )
+
+        self._register_win_button = QPushButton(
+            "Registrar ganada",
+        )
+        self._register_win_button.setObjectName(
+            "register_win_button",
+        )
+        self._register_win_button.setEnabled(
+            False,
+        )
+
+        self._register_loss_button = QPushButton(
+            "Registrar perdida",
+        )
+        self._register_loss_button.setObjectName(
+            "register_loss_button",
+        )
+        self._register_loss_button.setEnabled(
+            False,
+        )
+
+        self._undo_result_button = QPushButton(
+            "Deshacer resultado",
+        )
+        self._undo_result_button.setObjectName(
+            "undo_result_button",
+        )
+        self._undo_result_button.setEnabled(
+            False,
         )
         self._session_counter_label.setWordWrap(
             True,
@@ -463,6 +543,7 @@ class MainWindow(QMainWindow):
         self.set_running_state(
             is_running=False,
         )
+        self._refresh_session_result_ui()
 
         if self._restore_window_preferences_enabled:
             self._restore_window_preferences()
@@ -749,6 +830,74 @@ class MainWindow(QMainWindow):
     @property
     def test_voice_button_visible(self) -> bool:
         return not self._test_voice_button.isHidden()
+    
+    @property
+    def session_result_text(self) -> str:
+        return self._session_result_label.text()
+
+    @property
+    def session_result_visible(self) -> bool:
+        return not self._session_result_label.isHidden()
+
+    @property
+    def session_result_style(self) -> str:
+        return self._session_result_label.styleSheet()
+
+    @property
+    def session_result_wins(self) -> int:
+        return self._session_result_tracker.wins
+
+    @property
+    def session_result_losses(self) -> int:
+        return self._session_result_tracker.losses
+
+    @property
+    def session_result_total(self) -> int:
+        return self._session_result_tracker.total
+
+    @property
+    def session_consecutive_losses(self) -> int:
+        return self._session_result_tracker.consecutive_losses
+
+    @property
+    def session_win_rate_percentage(self) -> float | None:
+        return self._session_result_tracker.win_rate_percentage
+
+    @property
+    def session_result_pause_alert_text(self) -> str:
+        return self._session_result_pause_alert_label.text()
+
+    @property
+    def session_result_pause_alert_visible(self) -> bool:
+        return not self._session_result_pause_alert_label.isHidden()
+
+    @property
+    def session_result_pause_alert_style(self) -> str:
+        return self._session_result_pause_alert_label.styleSheet()
+
+    @property
+    def register_win_button_enabled(self) -> bool:
+        return self._register_win_button.isEnabled()
+
+    @property
+    def register_loss_button_enabled(self) -> bool:
+        return self._register_loss_button.isEnabled()
+
+    @property
+    def undo_result_button_enabled(self) -> bool:
+        return self._undo_result_button.isEnabled()
+
+    @property
+    def register_win_button_visible(self) -> bool:
+        return not self._register_win_button.isHidden()
+
+    @property
+    def register_loss_button_visible(self) -> bool:
+        return not self._register_loss_button.isHidden()
+
+    @property
+    def undo_result_button_visible(self) -> bool:
+        return not self._undo_result_button.isHidden()
 
     def set_running_state(
         self,
@@ -912,6 +1061,27 @@ class MainWindow(QMainWindow):
             self._session_pause_alert_label,
         )
         layout.addWidget(
+            self._session_result_label,
+        )
+        layout.addWidget(
+            self._session_result_pause_alert_label,
+        )
+
+        result_buttons_layout = QHBoxLayout()
+        result_buttons_layout.addWidget(
+            self._register_win_button,
+        )
+        result_buttons_layout.addWidget(
+            self._register_loss_button,
+        )
+        result_buttons_layout.addWidget(
+            self._undo_result_button,
+        )
+
+        layout.addLayout(
+            result_buttons_layout,
+        )
+        layout.addWidget(
             self._reset_session_button,
         )
         layout.addWidget(
@@ -993,13 +1163,22 @@ class MainWindow(QMainWindow):
             self.reset_view,
         )
         self._reset_session_button.clicked.connect(
-            self.reset_session_counter,
+            self.reset_session,
         )
         self._voice_toggle_button.clicked.connect(
             self._handle_voice_toggle_clicked,
         )
         self._test_voice_button.clicked.connect(
             self._handle_test_voice_clicked,
+        )
+        self._register_win_button.clicked.connect(
+            self.register_session_win,
+        )
+        self._register_loss_button.clicked.connect(
+            self.register_session_loss,
+        )
+        self._undo_result_button.clicked.connect(
+            self.undo_last_session_result,
         )
 
     def _apply_button_state(
@@ -1184,6 +1363,7 @@ class MainWindow(QMainWindow):
             self._session_signal_counter.text,
         )
         self._refresh_session_risk_label()
+        self._refresh_session_result_ui()
 
     def _refresh_session_risk_label(
         self,
@@ -1280,16 +1460,124 @@ class MainWindow(QMainWindow):
 
         self._history_list.clear()
 
-    def reset_session_counter(self) -> None:
+    def reset_session(
+        self,
+    ) -> None:
         """
-        Reinicia el contador visual de señales confirmadas de la sesión.
+        Reinicia completamente el estado temporal de la sesión.
+
+        Reinicia:
+        - señales confirmadas;
+        - resultados manuales;
+        - tasa observada;
+        - racha de pérdidas;
+        - alertas de pausa.
 
         No borra el historial visible.
-        No borra logs/signals.jsonl.
+        No elimina logs/signals.jsonl.
         """
 
         self._session_signal_counter.reset()
+        self._session_result_tracker.reset()
         self._refresh_session_counter_label()
+
+
+    def reset_session_counter(
+        self,
+    ) -> None:
+        """
+        Alias conservado por compatibilidad con código y tests anteriores.
+        """
+
+        self.reset_session()
+
+    def register_session_win(
+        self,
+    ) -> None:
+        """
+        Registra una operación ganada para una señal confirmada pendiente.
+        """
+
+        if not self._has_pending_session_result():
+            return
+
+        self._session_result_tracker.register_win()
+        self._refresh_session_result_ui()
+
+
+    def register_session_loss(
+        self,
+    ) -> None:
+        """
+        Registra una operación perdida para una señal confirmada pendiente.
+        """
+
+        if not self._has_pending_session_result():
+            return
+
+        self._session_result_tracker.register_loss()
+        self._refresh_session_result_ui()
+
+
+    def undo_last_session_result(
+        self,
+    ) -> None:
+        """
+        Elimina el último resultado registrado manualmente.
+        """
+
+        self._session_result_tracker.undo_last_result()
+        self._refresh_session_result_ui()
+
+
+    def _has_pending_session_result(
+        self,
+    ) -> bool:
+        """
+        Indica si existe una señal confirmada que aún no tiene resultado.
+        """
+
+        return (
+            self._session_result_tracker.total
+            < self._session_signal_counter.total_count
+        )
+
+
+    def _refresh_session_result_ui(
+        self,
+    ) -> None:
+        result_view_model = self._session_result_presenter.present(
+            snapshot=self._session_result_tracker.snapshot(),
+        )
+
+        result_text = (
+            result_view_model.compact_text
+            if self._compact_mode_enabled
+            else result_view_model.text
+        )
+
+        self._session_result_label.setText(
+            result_text,
+        )
+
+        self._session_result_pause_alert_label.setText(
+            result_view_model.pause_alert_text,
+        )
+        self._session_result_pause_alert_label.setHidden(
+            not result_view_model.pause_recommended,
+        )
+
+        has_pending_result = self._has_pending_session_result()
+
+        self._register_win_button.setEnabled(
+            has_pending_result,
+        )
+        self._register_loss_button.setEnabled(
+            has_pending_result,
+        )
+        self._undo_result_button.setEnabled(
+            self._session_result_tracker.total > 0,
+        )
 
     def _append_signal_history(
         self,
@@ -1415,6 +1703,18 @@ class MainWindow(QMainWindow):
         self._session_pause_alert_label.setVisible(
             not self._session_pause_alert_label.isHidden(),
         )
+        self._session_result_label.setVisible(
+            True,
+        )
+        self._register_win_button.setVisible(
+            True,
+        )
+        self._register_loss_button.setVisible(
+            True,
+        )
+        self._undo_result_button.setVisible(
+            True,
+        )
         self._reset_session_button.setVisible(
             True,
         )
@@ -1458,6 +1758,7 @@ class MainWindow(QMainWindow):
             self._apply_full_geometry()
         
         self._refresh_session_risk_label()
+        self._refresh_session_result_ui()
 
         if save_preferences:
             self._save_window_preferences()
