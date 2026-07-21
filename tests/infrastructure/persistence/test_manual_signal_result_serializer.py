@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from pocket_option_analyzer.domain.session_results import (
     ManualSignalResult,
+    ManualSignalResultEventType,
     ManualSignalResultRecord,
 )
 from pocket_option_analyzer.domain.signals import (
@@ -43,6 +44,7 @@ def _record(
             47,
             tzinfo=timezone.utc,
         ),
+        event_id="event-001",
         source="captured_frame_visual_analysis",
         reason="CALL strategy conditions confirmed.",
     )
@@ -56,7 +58,10 @@ def test_manual_signal_result_serializer_builds_expected_payload() -> None:
     )
 
     assert payload == {
-        "schema_version": 1,
+        "schema_version": 2,
+        "event_id": "event-001",
+        "event_type": "RECORDED",
+        "reverses_event_id": None,
         "strategy": "OTC_PRECISION_10S",
         "signal_created_at": "2026-07-20T16:03:25Z",
         "direction": SignalDirection.CALL.value,
@@ -130,3 +135,43 @@ def test_manual_signal_result_serializer_preserves_unicode() -> None:
 
     assert payload["source"] == "análisis_visual"
     assert payload["reason"] == "Señal bajista confirmada."
+
+
+def test_manual_signal_result_serializer_serializes_reversal_event() -> None:
+    serializer = ManualSignalResultSerializer()
+
+    record = ManualSignalResultRecord(
+        signal_created_at=datetime(
+            2026,
+            7,
+            20,
+            16,
+            3,
+            25,
+            tzinfo=timezone.utc,
+        ),
+        direction=SignalDirection.PUT,
+        strength=SignalStrength.HIGH,
+        result=ManualSignalResult.LOSS,
+        registered_at=datetime(
+            2026,
+            7,
+            20,
+            16,
+            5,
+            0,
+            tzinfo=timezone.utc,
+        ),
+        source="test_source",
+        event_id="reversal-001",
+        event_type=ManualSignalResultEventType.REVERSED,
+        reverses_event_id="original-001",
+    )
+
+    payload = serializer.serialize(
+        record=record,
+    )
+
+    assert payload["event_type"] == "REVERSED"
+    assert payload["event_id"] == "reversal-001"
+    assert payload["reverses_event_id"] == "original-001"

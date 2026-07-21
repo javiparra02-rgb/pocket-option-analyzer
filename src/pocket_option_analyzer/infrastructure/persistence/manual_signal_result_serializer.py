@@ -10,13 +10,12 @@ from pocket_option_analyzer.domain.session_results import (
 
 class ManualSignalResultSerializer:
     """
-    Convierte resultados manuales a una estructura compatible con JSON.
+    Convierte eventos de resultados manuales a JSON.
 
-    Todas las fechas se normalizan a UTC para facilitar análisis
-    posteriores y evitar ambigüedades de zona horaria.
+    Las fechas se normalizan a UTC.
     """
 
-    SCHEMA_VERSION = 1
+    SCHEMA_VERSION = 2
 
     def serialize(
         self,
@@ -24,6 +23,9 @@ class ManualSignalResultSerializer:
     ) -> dict[str, Any]:
         return {
             "schema_version": self.SCHEMA_VERSION,
+            "event_id": record.event_id,
+            "event_type": record.event_type.value,
+            "reverses_event_id": record.reverses_event_id,
             "strategy": record.strategy_name,
             "signal_created_at": self._format_datetime(
                 value=record.signal_created_at,

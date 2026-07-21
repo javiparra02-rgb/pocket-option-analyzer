@@ -22,6 +22,7 @@ from pocket_option_analyzer.presentation.signals import (
     ConfirmationChecklistPresenter,
     EntryAlertPresenter,
     OperationalSummaryPresenter,
+    SessionResult,
     SessionResultPresenter,
     SessionResultTracker,
     SessionRiskPresenter,
@@ -31,6 +32,8 @@ from pocket_option_analyzer.presentation.signals import (
 
 WindowAction = Callable[[], None]
 BooleanWindowAction = Callable[[bool], None]
+SessionResultWindowAction = Callable[[SessionResult], bool]
+ConfirmedResultWindowAction = Callable[[], bool]
 
 
 class MainWindow(QMainWindow):
@@ -230,6 +233,9 @@ class MainWindow(QMainWindow):
         on_run_once_requested: WindowAction | None = None,
         on_voice_enabled_changed: BooleanWindowAction | None = None,
         on_test_voice_requested: WindowAction | None = None,
+        on_session_result_registered: SessionResultWindowAction | None = None,
+        on_session_result_undone: ConfirmedResultWindowAction | None = None,
+        on_session_reset_requested: WindowAction | None = None,
         settings: QSettings | None = None,
         restore_window_preferences: bool = False,
     ) -> None:
@@ -241,6 +247,9 @@ class MainWindow(QMainWindow):
         self._on_voice_enabled_changed = on_voice_enabled_changed
         self._on_test_voice_requested = on_test_voice_requested
         self._voice_enabled = True
+        self._on_session_result_registered = on_session_result_registered
+        self._on_session_result_undone = on_session_result_undone
+        self._on_session_reset_requested = on_session_reset_requested
         self._settings = settings or QSettings(
             self.SETTINGS_ORGANIZATION,
             self.SETTINGS_APPLICATION,
@@ -960,10 +969,12 @@ class MainWindow(QMainWindow):
     def update_signal(
         self,
         view_model: SignalRecordViewModel,
-    ) -> None:
+    ) -> bool:
         """
         Actualiza la información visible de la última señal.
         """
+
+        previous_session_total = self._session_signal_counter.total_count
 
         self._direction_label.setText(
             f"Señal: {view_model.direction_label}",
@@ -1016,6 +1027,10 @@ class MainWindow(QMainWindow):
         )
         self._update_session_counter(
             view_model=view_model,
+        )
+        return (
+            self._session_signal_counter.total_count
+            > previous_session_total
         )
 
     def _setup_layout(self) -> None:
@@ -1464,18 +1479,13 @@ class MainWindow(QMainWindow):
         self,
     ) -> None:
         """
-        Reinicia completamente el estado temporal de la sesión.
+        Reinicia el estado temporal de señales y resultados.
 
-        Reinicia:
-        - señales confirmadas;
-        - resultados manuales;
-        - tasa observada;
-        - racha de pérdidas;
-        - alertas de pausa.
-
-        No borra el historial visible.
-        No elimina logs/signals.jsonl.
+        Los eventos persistidos en JSONL no se eliminan.
         """
+
+        if self._on_session_reset_requested is not None:
+            self._on_session_reset_requested()
 
         self._session_signal_counter.reset()
         self._session_result_tracker.reset()
@@ -1495,11 +1505,21 @@ class MainWindow(QMainWindow):
         self,
     ) -> None:
         """
-        Registra una operación ganada para una señal confirmada pendiente.
+        Registra una operación ganada para una señal pendiente.
+
+        El estado visual solo cambia cuando la persistencia fue exitosa.
         """
 
         if not self._has_pending_session_result():
             return
+
+        if self._on_session_result_registered is not None:
+            was_persisted = self._on_session_result_registered(
+                SessionResult.WIN,
+            )
+
+            if was_persisted is not True:
+                return
 
         self._session_result_tracker.register_win()
         self._refresh_session_result_ui()
@@ -1509,11 +1529,21 @@ class MainWindow(QMainWindow):
         self,
     ) -> None:
         """
-        Registra una operación perdida para una señal confirmada pendiente.
+        Registra una operación perdida para una señal pendiente.
+
+        El estado visual solo cambia cuando la persistencia fue exitosa.
         """
 
         if not self._has_pending_session_result():
             return
+
+        if self._on_session_result_registered is not None:
+            was_persisted = self._on_session_result_registered(
+                SessionResult.LOSS,
+            )
+
+            if was_persisted is not True:
+                return
 
         self._session_result_tracker.register_loss()
         self._refresh_session_result_ui()
@@ -1523,8 +1553,19 @@ class MainWindow(QMainWindow):
         self,
     ) -> None:
         """
-        Elimina el último resultado registrado manualmente.
+        Revierte el último resultado registrado.
+
+        El estado visual solo cambia cuando la reversión fue persistida.
         """
+
+        if self._session_result_tracker.total == 0:
+            return
+
+        if self._on_session_result_undone is not None:
+            was_reversed = self._on_session_result_undone()
+
+            if was_reversed is not True:
+                return
 
         self._session_result_tracker.undo_last_result()
         self._refresh_session_result_ui()

@@ -6,6 +6,7 @@ import pytest
 
 from pocket_option_analyzer.domain.session_results import (
     ManualSignalResult,
+    ManualSignalResultEventType,
     ManualSignalResultRecord,
 )
 from pocket_option_analyzer.domain.signals import (
@@ -102,4 +103,78 @@ def test_manual_signal_result_record_rejects_blank_source() -> None:
     ):
         _record(
             source="   ",
+        )
+
+
+def test_manual_signal_result_record_defaults_to_recorded_event() -> None:
+    record = _record()
+
+    assert record.event_id
+    assert record.event_type == ManualSignalResultEventType.RECORDED
+    assert record.reverses_event_id is None
+
+
+def test_manual_signal_result_reversal_requires_original_event_id() -> None:
+    with pytest.raises(
+        ValueError,
+        match="REVERSED debe indicar reverses_event_id",
+    ):
+        ManualSignalResultRecord(
+            signal_created_at=datetime(
+                2026,
+                7,
+                20,
+                16,
+                3,
+                25,
+                tzinfo=timezone.utc,
+            ),
+            direction=SignalDirection.PUT,
+            strength=SignalStrength.HIGH,
+            result=ManualSignalResult.LOSS,
+            registered_at=datetime(
+                2026,
+                7,
+                20,
+                16,
+                4,
+                0,
+                tzinfo=timezone.utc,
+            ),
+            source="test_source",
+            event_type=ManualSignalResultEventType.REVERSED,
+        )
+
+
+def test_recorded_event_rejects_reversal_reference() -> None:
+    with pytest.raises(
+        ValueError,
+        match="RECORDED no puede indicar reverses_event_id",
+    ):
+        ManualSignalResultRecord(
+            signal_created_at=datetime(
+                2026,
+                7,
+                20,
+                16,
+                3,
+                25,
+                tzinfo=timezone.utc,
+            ),
+            direction=SignalDirection.CALL,
+            strength=SignalStrength.HIGH,
+            result=ManualSignalResult.WIN,
+            registered_at=datetime(
+                2026,
+                7,
+                20,
+                16,
+                4,
+                0,
+                tzinfo=timezone.utc,
+            ),
+            source="test_source",
+            event_id="event-1",
+            event_type=ManualSignalResultEventType.RECORDED,
+            reverses_event_id="event-original",
         )

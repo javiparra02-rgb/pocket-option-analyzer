@@ -8,12 +8,19 @@ from PySide6.QtCore import QObject, QThread, Slot
 from pocket_option_analyzer.application.runtime import (
     AnalysisRuntimeService,
 )
+from pocket_option_analyzer.application.session_results import (
+    ManualSignalResultSessionService,
+)
+from pocket_option_analyzer.domain.session_results import (
+    ManualSignalResult,
+)
 from pocket_option_analyzer.domain.signals import SignalRecord
 from pocket_option_analyzer.presentation.gui.analysis_worker import (
     AnalysisWorker,
 )
 from pocket_option_analyzer.presentation.gui.main_window import MainWindow
 from pocket_option_analyzer.presentation.signals import (
+    SessionResult,
     SignalRecordPresenter,
     SignalRecordViewModel,
 )
@@ -125,6 +132,7 @@ class MainWindowController(QObject):
         runtime_service: AnalysisRuntimeService,
         presenter: SignalRecordPresenter | None = None,
         voice_notifier: VoiceNotifierLike | None = None,
+        manual_result_session: ManualSignalResultSessionService | None = None,
         window: MainWindow | None = None,
         worker_factory: WorkerFactory | None = None,
         thread_factory: ThreadFactory | None = None,
@@ -135,6 +143,7 @@ class MainWindowController(QObject):
         self._runtime_service = runtime_service
         self._presenter = presenter or SignalRecordPresenter()
         self._voice_notifier = voice_notifier
+        self._manual_result_session = manual_result_session
         self._worker_interval_seconds = worker_interval_seconds
 
         self._worker_factory = worker_factory or self._create_worker
@@ -149,6 +158,9 @@ class MainWindowController(QObject):
             on_run_once_requested=self.run_once,
             on_voice_enabled_changed=self.set_voice_enabled,
             on_test_voice_requested=self.test_voice,
+            on_session_result_registered=self.register_manual_result,
+            on_session_result_undone=self.undo_manual_result,
+            on_session_reset_requested=self.reset_manual_result_session,
             restore_window_preferences=True,
         )
 
@@ -361,9 +373,17 @@ class MainWindowController(QObject):
             record=record,
         )
 
-        self._window.update_signal(
+        was_counted_as_new_signal = self._window.update_signal(
             view_model=view_model,
         )
+
+        if (
+            was_counted_as_new_signal
+            and self._manual_result_session is not None
+        ):
+            self._manual_result_session.track_confirmed_signal(
+                record=record,
+            )
 
         if self._voice_notifier is not None:
             self._voice_notifier.notify(
@@ -409,3 +429,77 @@ class MainWindowController(QObject):
 
         self._worker = None
         self._thread = None
+
+    def register_manual_result(
+        self,
+        result: SessionResult,
+    ) -> bool:
+        """
+        Persiste WIN o LOSS para la señal confirmada pendiente.
+        """
+
+        if self._manual_result_session is None:
+            return True
+
+        try:
+            persisted_record = self._manual_result_session.register_result(
+                result=ManualSignalResult(
+                    result.value,
+                ),
+            )
+        except Exception as error:
+            self._window.set_error_message(
+                "No fue posible guardar el resultado manual: "
+                f"{error}"
+            )
+            return False
+
+        if persisted_record is None:
+            self._window.set_error_message(
+                "No existe una señal confirmada pendiente de resultado."
+            )
+            return False
+
+        self._window.set_error_message(
+            None,
+        )
+        return True
+
+
+    def undo_manual_result(
+        self,
+    ) -> bool:
+        """
+        Persiste la reversión del último resultado manual.
+        """
+
+        if self._manual_result_session is None:
+            return True
+
+        try:
+            reversal_record = self._manual_result_session.undo_last_result()
+        except Exception as error:
+            self._window.set_error_message(
+                "No fue posible deshacer el resultado manual: "
+                f"{error}"
+            )
+            return False
+
+        if reversal_record is None:
+            return False
+
+        self._window.set_error_message(
+            None,
+        )
+        return True
+
+
+    def reset_manual_result_session(
+        self,
+    ) -> None:
+        """
+        Reinicia la cola temporal sin borrar el archivo JSONL.
+        """
+
+        if self._manual_result_session is not None:
+            self._manual_result_session.reset()

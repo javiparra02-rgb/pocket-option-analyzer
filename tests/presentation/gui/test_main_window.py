@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QApplication, QPushButton
 
 from pocket_option_analyzer.presentation.gui import MainWindow
 from pocket_option_analyzer.presentation.signals import (
+    SessionResult,
     SignalRecordViewModel,
 )
 
@@ -2628,3 +2629,102 @@ def test_main_window_uses_compact_result_view_and_keeps_controls_visible() -> No
     assert window.register_win_button_visible is True
     assert window.register_loss_button_visible is True
     assert window.undo_result_button_visible is True
+
+
+def test_main_window_reports_when_signal_is_counted_as_new() -> None:
+
+    _application()
+
+    window = MainWindow()
+    signal = _confirmed_signal(
+        index=0,
+    )
+
+    first_result = window.update_signal(
+        view_model=signal,
+    )
+    duplicate_result = window.update_signal(
+        view_model=signal,
+    )
+
+    assert first_result is True
+    assert duplicate_result is False
+    assert window.session_total_count == 1
+
+
+def test_main_window_notifies_successful_manual_result_callback() -> None:
+
+    _application()
+
+    received_results = []
+
+    window = MainWindow(
+        on_session_result_registered=lambda result: (
+            received_results.append(result)
+            or True
+        ),
+    )
+
+    window.update_signal(
+        view_model=_confirmed_signal(
+            index=0,
+        ),
+    )
+    window.register_session_win()
+
+    assert received_results == [
+        SessionResult.WIN,
+    ]
+    assert window.session_result_wins == 1
+
+
+def test_main_window_does_not_change_result_when_callback_fails() -> None:
+
+    _application()
+
+    window = MainWindow(
+        on_session_result_registered=lambda result: False,
+    )
+
+    window.update_signal(
+        view_model=_confirmed_signal(
+            index=0,
+        ),
+    )
+    window.register_session_loss()
+
+    assert window.session_result_total == 0
+    assert window.register_loss_button_enabled is True
+
+
+def test_main_window_notifies_undo_and_reset_callbacks() -> None:
+
+    _application()
+
+    undo_calls = []
+    reset_calls = []
+
+    window = MainWindow(
+        on_session_result_registered=lambda result: True,
+        on_session_result_undone=lambda: (
+            undo_calls.append(True)
+            or True
+        ),
+        on_session_reset_requested=lambda: reset_calls.append(True),
+    )
+
+    window.update_signal(
+        view_model=_confirmed_signal(
+            index=0,
+        ),
+    )
+    window.register_session_win()
+    window.undo_last_session_result()
+    window.reset_session()
+
+    assert undo_calls == [
+        True,
+    ]
+    assert reset_calls == [
+        True,
+    ]

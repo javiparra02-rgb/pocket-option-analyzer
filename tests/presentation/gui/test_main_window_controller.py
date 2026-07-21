@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from pocket_option_analyzer.domain.session_results import (
+    ManualSignalResult,
+)
 from pocket_option_analyzer.domain.signals import (
     MarketSignal,
     SignalDirection,
@@ -12,6 +15,7 @@ from pocket_option_analyzer.presentation.gui import (
     MainWindowController,
 )
 from pocket_option_analyzer.presentation.signals import (
+    SessionResult,
     SignalRecordPresenter,
 )
 
@@ -146,35 +150,54 @@ class FakeThread:
 
 class FakeWindow:
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        accept_signal: bool = True,
+    ) -> None:
         self.running_states: list[bool] = []
         self.view_models = []
         self.error_messages: list[str | None] = []
         self.hide_for_capture_calls = 0
         self.show_after_capture_calls = 0
+        self.accept_signal = accept_signal
 
     def set_running_state(
         self,
         is_running: bool,
     ) -> None:
-        self.running_states.append(is_running)
+        self.running_states.append(
+            is_running,
+        )
 
     def update_signal(
         self,
         view_model,
-    ) -> None:
-        self.view_models.append(view_model)
+    ) -> bool:
+        self.view_models.append(
+            view_model,
+        )
+
+        return (
+            self.accept_signal
+            and view_model.is_actionable
+        )
 
     def set_error_message(
         self,
         message: str | None,
     ) -> None:
-        self.error_messages.append(message)
-    
-    def hide_for_capture(self) -> None:
+        self.error_messages.append(
+            message,
+        )
+
+    def hide_for_capture(
+        self,
+    ) -> None:
         self.hide_for_capture_calls += 1
 
-    def show_after_capture(self) -> None:
+    def show_after_capture(
+        self,
+    ) -> None:
         self.show_after_capture_calls += 1
 
 
@@ -205,6 +228,50 @@ class FakeVoiceNotifier:
         self,
     ) -> None:
         self.test_voice_calls += 1
+
+
+class FakeManualResultSession:
+
+    def __init__(
+        self,
+        error: Exception | None = None,
+    ) -> None:
+        self.tracked_records = []
+        self.registered_results = []
+        self.undo_calls = 0
+        self.reset_calls = 0
+        self.error = error
+
+    def track_confirmed_signal(
+        self,
+        record,
+    ) -> bool:
+        self.tracked_records.append(
+            record,
+        )
+        return True
+
+    def register_result(
+        self,
+        result,
+    ):
+        if self.error is not None:
+            raise self.error
+
+        self.registered_results.append(
+            result,
+        )
+        return object()
+
+    def undo_last_result(self):
+        if self.error is not None:
+            raise self.error
+
+        self.undo_calls += 1
+        return object()
+
+    def reset(self) -> None:
+        self.reset_calls += 1
 
 
 def _record() -> SignalRecord:
@@ -536,3 +603,118 @@ def test_controller_delegates_voice_test() -> None:
     controller.test_voice()
 
     assert voice_notifier.test_voice_calls == 1
+
+
+def test_controller_tracks_record_when_window_counts_new_signal() -> None:
+
+    runtime = FakeRuntimeService(
+        record=_record(),
+    )
+    window = FakeWindow()
+    result_session = FakeManualResultSession()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        manual_result_session=result_session,
+        window=window,
+    )
+
+    controller.run_once()
+
+    assert result_session.tracked_records == [
+        runtime.record,
+    ]
+
+
+def test_controller_does_not_track_rejected_or_duplicate_signal() -> None:
+
+    runtime = FakeRuntimeService(
+        record=_record(),
+    )
+    window = FakeWindow(
+        accept_signal=False,
+    )
+    result_session = FakeManualResultSession()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        manual_result_session=result_session,
+        window=window,
+    )
+
+    controller.run_once()
+
+    assert result_session.tracked_records == []
+
+
+def test_controller_persists_manual_result() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    result_session = FakeManualResultSession()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        manual_result_session=result_session,
+        window=window,
+    )
+
+    success = controller.register_manual_result(
+        SessionResult.WIN,
+    )
+
+    assert success is True
+    assert result_session.registered_results == [
+        ManualSignalResult.WIN,
+    ]
+
+
+def test_controller_delegates_undo_and_reset() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    result_session = FakeManualResultSession()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        manual_result_session=result_session,
+        window=window,
+    )
+
+    assert controller.undo_manual_result() is True
+
+    controller.reset_manual_result_session()
+
+    assert result_session.undo_calls == 1
+    assert result_session.reset_calls == 1
+
+
+def test_controller_preserves_gui_state_when_result_persistence_fails() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    result_session = FakeManualResultSession(
+        error=OSError("disk unavailable"),
+    )
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        manual_result_session=result_session,
+        window=window,
+    )
+
+    success = controller.register_manual_result(
+        SessionResult.LOSS,
+    )
+
+    assert success is False
+    assert (
+        window.error_messages[-1]
+        == "No fue posible guardar el resultado manual: "
+        "disk unavailable"
+    )

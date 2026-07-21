@@ -2,14 +2,21 @@ from __future__ import annotations
 
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
+from pocket_option_analyzer.application.session_results import (
+    ManualSignalResultSessionService,
+)
 from pocket_option_analyzer.infrastructure.audio import (
     QtTextToSpeechAdapter,
 )
 from pocket_option_analyzer.infrastructure.bootstrap import (
     PocketOptionRuntimeFactory,
+)
+from pocket_option_analyzer.infrastructure.persistence import (
+    JsonlManualSignalResultWriter,
 )
 from pocket_option_analyzer.presentation.gui import (
     GuiApplication,
@@ -64,11 +71,16 @@ def ensure_qapplication(
         )
     )
 
+DEFAULT_MANUAL_RESULT_FILE_PATH = (
+    Path("logs")
+    / "manual_signal_results.jsonl"
+)
 
 def build_gui_application(
     argv: Sequence[str] | None = None,
     runtime_service=None,
     voice_notifier: VoiceSignalNotifier | None = None,
+    manual_result_session: ManualSignalResultSessionService | None = None,
 ) -> GuiApplication:
     """
     Construye la aplicación gráfica.
@@ -94,9 +106,22 @@ def build_gui_application(
             speech_engine=QtTextToSpeechAdapter(),
         )
 
+    resolved_manual_result_session = manual_result_session
+
+    if (
+        resolved_manual_result_session is None
+        and runtime_service is None
+    ):
+        resolved_manual_result_session = ManualSignalResultSessionService(
+            writer=JsonlManualSignalResultWriter(
+                output_path=DEFAULT_MANUAL_RESULT_FILE_PATH,
+            ),
+        )
+
     controller = MainWindowController(
         runtime_service=resolved_runtime_service,
         voice_notifier=resolved_voice_notifier,
+        manual_result_session=resolved_manual_result_session,
     )
 
     return GuiApplication(
