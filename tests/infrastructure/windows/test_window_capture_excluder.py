@@ -107,3 +107,60 @@ def test_window_capture_excluder_does_not_call_win32_outside_windows() -> None:
     assert result is False
     assert calls == 0
     assert excluder.last_error_code is None
+
+
+def test_window_capture_excluder_allows_capture_with_wda_none() -> None:
+
+    calls: list[
+        tuple[
+            int,
+            int,
+        ]
+    ] = []
+
+    def set_affinity(
+        window_handle: int,
+        affinity: int,
+    ) -> bool:
+        calls.append(
+            (
+                window_handle,
+                affinity,
+            )
+        )
+        return True
+
+    excluder = WindowsWindowCaptureExcluder(
+        set_window_display_affinity=set_affinity,
+        platform_name="win32",
+    )
+
+    result = excluder.allow_capture(
+        window_handle=12345,
+    )
+
+    assert result is True
+    assert calls == [
+        (
+            12345,
+            WindowsWindowCaptureExcluder.WDA_NONE,
+        ),
+    ]
+
+
+def test_window_capture_excluder_records_allow_capture_error() -> None:
+
+    excluder = WindowsWindowCaptureExcluder(
+        set_window_display_affinity=(
+            lambda window_handle, affinity: False
+        ),
+        last_error_reader=lambda: 87,
+        platform_name="win32",
+    )
+
+    result = excluder.allow_capture(
+        window_handle=12345,
+    )
+
+    assert result is False
+    assert excluder.last_error_code == 87

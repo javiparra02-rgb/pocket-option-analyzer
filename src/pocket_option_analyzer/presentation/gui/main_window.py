@@ -34,6 +34,12 @@ WindowAction = Callable[[], None]
 BooleanWindowAction = Callable[[bool], None]
 SessionResultWindowAction = Callable[[SessionResult], bool]
 ConfirmedResultWindowAction = Callable[[], bool]
+BooleanResultWindowAction = Callable[
+    [
+        bool,
+    ],
+    bool,
+]
 
 
 class MainWindow(QMainWindow):
@@ -233,6 +239,7 @@ class MainWindow(QMainWindow):
         on_run_once_requested: WindowAction | None = None,
         on_voice_enabled_changed: BooleanWindowAction | None = None,
         on_test_voice_requested: WindowAction | None = None,
+        on_evidence_mode_changed: BooleanResultWindowAction | None = None,
         on_session_result_registered: SessionResultWindowAction | None = None,
         on_session_result_undone: ConfirmedResultWindowAction | None = None,
         on_session_reset_requested: WindowAction | None = None,
@@ -247,6 +254,8 @@ class MainWindow(QMainWindow):
         self._on_voice_enabled_changed = on_voice_enabled_changed
         self._on_test_voice_requested = on_test_voice_requested
         self._voice_enabled = True
+        self._on_evidence_mode_changed = on_evidence_mode_changed
+        self._evidence_mode_enabled = False
         self._on_session_result_registered = on_session_result_registered
         self._on_session_result_undone = on_session_result_undone
         self._on_session_reset_requested = on_session_reset_requested
@@ -540,6 +549,18 @@ class MainWindow(QMainWindow):
         )
         self._test_voice_button.setObjectName(
             "test_voice_button",
+        )
+        self._evidence_mode_button = QPushButton(
+            "Modo evidencia",
+        )
+        self._evidence_mode_button.setObjectName(
+            "evidence_mode_button",
+        )
+        self._evidence_mode_button.setCheckable(
+            True,
+        )
+        self._evidence_mode_button.setChecked(
+            False,
         )
 
         self._compact_mode_enabled = False
@@ -920,6 +941,25 @@ class MainWindow(QMainWindow):
     def undo_result_button_visible(self) -> bool:
         return not self._undo_result_button.isHidden()
 
+    @property
+    def evidence_mode_enabled(self) -> bool:
+        return self._evidence_mode_enabled
+
+
+    @property
+    def evidence_mode_button_text(self) -> str:
+        return self._evidence_mode_button.text()
+
+
+    @property
+    def evidence_mode_button_checked(self) -> bool:
+        return self._evidence_mode_button.isChecked()
+
+
+    @property
+    def evidence_mode_button_visible(self) -> bool:
+        return not self._evidence_mode_button.isHidden()
+
     def set_running_state(
         self,
         is_running: bool,
@@ -1145,6 +1185,9 @@ class MainWindow(QMainWindow):
             self._test_voice_button,
         )
         layout.addWidget(
+            self._evidence_mode_button,
+        )
+        layout.addWidget(
             self._clear_history_button,
         )
         layout.addWidget(
@@ -1207,6 +1250,9 @@ class MainWindow(QMainWindow):
         self._undo_result_button.clicked.connect(
             self.undo_last_session_result,
         )
+        self._evidence_mode_button.clicked.connect(
+            self._handle_evidence_mode_clicked,
+        )
 
     def _apply_button_state(
         self,
@@ -1266,6 +1312,46 @@ class MainWindow(QMainWindow):
 
         if save_preferences:
             self._save_window_preferences()
+
+    def _handle_evidence_mode_clicked(
+        self,
+    ) -> None:
+        requested_enabled = (
+            self._evidence_mode_button.isChecked()
+        )
+
+        was_applied = True
+
+        if self._on_evidence_mode_changed is not None:
+            was_applied = self._on_evidence_mode_changed(
+                requested_enabled,
+            )
+
+        if not was_applied:
+            self._evidence_mode_button.setChecked(
+                self._evidence_mode_enabled,
+            )
+            return
+
+        self._set_evidence_mode_enabled(
+            enabled=requested_enabled,
+        )
+
+
+    def _set_evidence_mode_enabled(
+        self,
+        enabled: bool,
+    ) -> None:
+        self._evidence_mode_enabled = enabled
+
+        self._evidence_mode_button.setChecked(
+            enabled,
+        )
+        self._evidence_mode_button.setText(
+            "Restaurar protección"
+            if enabled
+            else "Modo evidencia",
+        )
 
     def _apply_signal_style(
         self,
@@ -1790,6 +1876,9 @@ class MainWindow(QMainWindow):
             True,
         )
         self._test_voice_button.setVisible(
+            True,
+        )
+        self._evidence_mode_button.setVisible(
             True,
         )
 

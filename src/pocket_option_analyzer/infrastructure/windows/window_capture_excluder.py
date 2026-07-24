@@ -25,6 +25,7 @@ class WindowsWindowCaptureExcluder:
     No interactúa con Pocket Option.
     """
 
+    WDA_NONE = 0x00000000
     WDA_EXCLUDEFROMCAPTURE = 0x00000011
 
     def __init__(
@@ -62,38 +63,13 @@ class WindowsWindowCaptureExcluder:
         window_handle: int,
     ) -> bool:
         """
-        Aplica WDA_EXCLUDEFROMCAPTURE al identificador recibido.
-
-        Devuelve True cuando Windows acepta la configuración.
+        Excluye la ventana de capturas de pantalla.
         """
 
-        self._last_error_code = None
-
-        if not self.is_supported:
-            return False
-
-        if window_handle <= 0:
-            raise ValueError(
-                "window_handle debe ser mayor que cero."
-            )
-
-        setter = self._resolve_setter()
-
-        was_applied = bool(
-            setter(
-                window_handle,
-                self.WDA_EXCLUDEFROMCAPTURE,
-            )
+        return self._apply_affinity(
+            window_handle=window_handle,
+            affinity=self.WDA_EXCLUDEFROMCAPTURE,
         )
-
-        if was_applied:
-            return True
-
-        self._last_error_code = int(
-            self._last_error_reader()
-        )
-
-        return False
 
     def _resolve_setter(
         self,
@@ -155,3 +131,52 @@ class WindowsWindowCaptureExcluder:
         return int(
             reader()
         )
+
+    def allow_capture(
+        self,
+        window_handle: int,
+    ) -> bool:
+        """
+        Elimina temporalmente la exclusión de captura.
+
+        Se utiliza únicamente para obtener evidencias visuales mientras
+        el análisis continuo está detenido.
+        """
+
+        return self._apply_affinity(
+            window_handle=window_handle,
+            affinity=self.WDA_NONE,
+        )
+
+    def _apply_affinity(
+        self,
+        window_handle: int,
+        affinity: int,
+    ) -> bool:
+        self._last_error_code = None
+
+        if not self.is_supported:
+            return False
+
+        if window_handle <= 0:
+            raise ValueError(
+                "window_handle debe ser mayor que cero."
+            )
+
+        setter = self._resolve_setter()
+
+        was_applied = bool(
+            setter(
+                window_handle,
+                affinity,
+            )
+        )
+
+        if was_applied:
+            return True
+
+        self._last_error_code = int(
+            self._last_error_reader()
+        )
+
+        return False

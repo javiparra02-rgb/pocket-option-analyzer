@@ -47,8 +47,9 @@ class FakeRuntimeService:
         self,
         record: SignalRecord | None = None,
         error: Exception | None = None,
+        is_running: bool = False,
     ) -> None:
-        self._is_running = False
+        self._is_running = is_running
         self.record = record
         self.error = error
         self.run_once_calls = 0
@@ -242,7 +243,8 @@ class FakeWindowCaptureExcluder:
         self.result = result
         self._last_error_code = error_code
         self.error = error
-        self.received_handles: list[int] = []
+        self.excluded_handles: list[int] = []
+        self.allowed_handles: list[int] = []
 
     @property
     def last_error_code(self) -> int | None:
@@ -252,7 +254,20 @@ class FakeWindowCaptureExcluder:
         self,
         window_handle: int,
     ) -> bool:
-        self.received_handles.append(
+        self.excluded_handles.append(
+            window_handle,
+        )
+
+        if self.error is not None:
+            raise self.error
+
+        return self.result
+
+    def allow_capture(
+        self,
+        window_handle: int,
+    ) -> bool:
+        self.allowed_handles.append(
             window_handle,
         )
 
@@ -773,7 +788,7 @@ def test_controller_excludes_window_before_continuous_analysis() -> None:
 
     controller.start()
 
-    assert excluder.received_handles == [
+    assert excluder.excluded_handles == [
         window.native_window_handle,
     ]
     assert thread.start_calls == 1
@@ -804,7 +819,7 @@ def test_controller_does_not_start_when_capture_exclusion_fails() -> None:
 
     controller.start()
 
-    assert excluder.received_handles == [
+    assert excluder.excluded_handles == [
         window.native_window_handle,
     ]
     assert thread.start_calls == 0
@@ -849,4 +864,93 @@ def test_controller_does_not_start_when_capture_excluder_raises() -> None:
     assert window.error_messages[-1] == (
         "No fue posible configurar la protección de captura: "
         "affinity unavailable"
+    )
+
+
+def test_controller_enables_and_disables_evidence_mode() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    excluder = FakeWindowCaptureExcluder()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window_capture_excluder=excluder,
+        window=window,
+    )
+
+    assert controller.set_evidence_mode(
+        True,
+    ) is True
+
+    assert excluder.allowed_handles == [
+        window.native_window_handle,
+    ]
+
+    assert controller.set_evidence_mode(
+        False,
+    ) is True
+
+    assert excluder.excluded_handles == [
+        window.native_window_handle,
+    ]
+
+
+def test_controller_rejects_evidence_mode_while_analysis_is_running() -> None:
+
+    runtime = FakeRuntimeService(
+        is_running=True,
+    )
+
+    window = FakeWindow()
+    excluder = FakeWindowCaptureExcluder()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window_capture_excluder=excluder,
+        window=window,
+    )
+
+    success = controller.set_evidence_mode(
+        True,
+    )
+
+    assert success is False
+    assert excluder.allowed_handles == []
+    assert window.error_messages[-1] == (
+        "Detén el análisis antes de activar el modo evidencia."
+    )
+
+
+def test_controller_blocks_start_while_evidence_mode_is_enabled() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    worker = FakeWorker(
+        auto_finish=False,
+    )
+    thread = FakeThread()
+    excluder = FakeWindowCaptureExcluder()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window_capture_excluder=excluder,
+        window=window,
+        worker_factory=lambda runtime_service: worker,
+        thread_factory=lambda: thread,
+    )
+
+    assert controller.set_evidence_mode(
+        True,
+    ) is True
+
+    controller.start()
+
+    assert thread.start_calls == 0
+    assert worker.run_calls == 0
+    assert window.error_messages[-1] == (
+        "Restaura la protección de captura antes de iniciar el análisis."
     )

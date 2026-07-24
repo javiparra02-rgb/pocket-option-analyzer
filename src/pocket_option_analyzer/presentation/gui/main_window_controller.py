@@ -115,6 +115,14 @@ class WindowCaptureExcluderLike(Protocol):
     Contrato mínimo para excluir la GUI de capturas de pantalla.
     """
 
+    def allow_capture(
+        self,
+        window_handle: int,
+    ) -> bool:
+        """
+        Permite temporalmente que la ventana aparezca en capturas.
+        """
+
     @property
     def last_error_code(self) -> int | None:
         """
@@ -166,6 +174,7 @@ class MainWindowController(QObject):
         self._voice_notifier = voice_notifier
         self._manual_result_session = manual_result_session
         self._window_capture_excluder = window_capture_excluder
+        self._evidence_mode_enabled = False
         self._worker_interval_seconds = worker_interval_seconds
 
         self._worker_factory = worker_factory or self._create_worker
@@ -180,6 +189,7 @@ class MainWindowController(QObject):
             on_run_once_requested=self.run_once,
             on_voice_enabled_changed=self.set_voice_enabled,
             on_test_voice_requested=self.test_voice,
+            on_evidence_mode_changed=self.set_evidence_mode,
             on_session_result_registered=self.register_manual_result,
             on_session_result_undone=self.undo_manual_result,
             on_session_reset_requested=self.reset_manual_result_session,
@@ -238,6 +248,15 @@ class MainWindowController(QObject):
         self._window.set_error_message(
             None,
         )
+
+        if self._evidence_mode_enabled:
+            self._window.set_error_message(
+                "Restaura la protección de captura antes de iniciar el análisis."
+            )
+            self._window.set_running_state(
+                is_running=False,
+            )
+            return
 
         if not self._ensure_window_capture_exclusion():
             self._window.set_running_state(
@@ -547,7 +566,6 @@ class MainWindowController(QObject):
         )
         return True
 
-
     def undo_manual_result(
         self,
     ) -> bool:
@@ -575,7 +593,6 @@ class MainWindowController(QObject):
         )
         return True
 
-
     def reset_manual_result_session(
         self,
     ) -> None:
@@ -585,3 +602,82 @@ class MainWindowController(QObject):
 
         if self._manual_result_session is not None:
             self._manual_result_session.reset()
+
+    def set_evidence_mode(
+        self,
+        enabled: bool,
+    ) -> bool:
+        """
+        Activa o desactiva el modo de evidencia.
+
+        El modo evidencia solo puede activarse cuando el análisis continuo
+        está detenido. Así la ventana visible no contamina los frames.
+        """
+
+        if enabled and self._is_continuous_analysis_active():
+            self._window.set_error_message(
+                "Detén el análisis antes de activar el modo evidencia."
+            )
+            return False
+
+        if self._window_capture_excluder is None:
+            self._evidence_mode_enabled = enabled
+            return True
+
+        try:
+            window_handle = self._window.native_window_handle
+
+            if enabled:
+                was_applied = (
+                    self._window_capture_excluder.allow_capture(
+                        window_handle=window_handle,
+                    )
+                )
+            else:
+                was_applied = (
+                    self._window_capture_excluder.exclude(
+                        window_handle=window_handle,
+                    )
+                )
+        except Exception as error:
+            self._window.set_error_message(
+                "No fue posible cambiar el modo de captura: "
+                f"{error}"
+            )
+            return False
+
+        if not was_applied:
+            error_code = (
+                self._window_capture_excluder.last_error_code
+            )
+
+            error_suffix = ""
+
+            if error_code not in {
+                None,
+                0,
+            }:
+                error_suffix = (
+                    f" Código Win32: {error_code}."
+                )
+
+            self._window.set_error_message(
+                "No fue posible cambiar el modo de captura."
+                f"{error_suffix}"
+            )
+            return False
+
+        self._evidence_mode_enabled = enabled
+        self._window.set_error_message(
+            None,
+        )
+
+        return True
+
+    def _is_continuous_analysis_active(
+        self,
+    ) -> bool:
+        if self._worker is not None and self._worker.is_running:
+            return True
+
+        return self._runtime_service.is_running
