@@ -160,6 +160,7 @@ class FakeWindow:
         self.hide_for_capture_calls = 0
         self.show_after_capture_calls = 0
         self.accept_signal = accept_signal
+        self.native_window_handle = 98765
 
     def set_running_state(
         self,
@@ -228,6 +229,37 @@ class FakeVoiceNotifier:
         self,
     ) -> None:
         self.test_voice_calls += 1
+
+
+class FakeWindowCaptureExcluder:
+
+    def __init__(
+        self,
+        result: bool = True,
+        error_code: int | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.result = result
+        self._last_error_code = error_code
+        self.error = error
+        self.received_handles: list[int] = []
+
+    @property
+    def last_error_code(self) -> int | None:
+        return self._last_error_code
+
+    def exclude(
+        self,
+        window_handle: int,
+    ) -> bool:
+        self.received_handles.append(
+            window_handle,
+        )
+
+        if self.error is not None:
+            raise self.error
+
+        return self.result
 
 
 class FakeManualResultSession:
@@ -717,4 +749,104 @@ def test_controller_preserves_gui_state_when_result_persistence_fails() -> None:
         window.error_messages[-1]
         == "No fue posible guardar el resultado manual: "
         "disk unavailable"
+    )
+
+
+def test_controller_excludes_window_before_continuous_analysis() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    worker = FakeWorker(
+        auto_finish=False,
+    )
+    thread = FakeThread()
+    excluder = FakeWindowCaptureExcluder()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window_capture_excluder=excluder,
+        window=window,
+        worker_factory=lambda runtime_service: worker,
+        thread_factory=lambda: thread,
+    )
+
+    controller.start()
+
+    assert excluder.received_handles == [
+        window.native_window_handle,
+    ]
+    assert thread.start_calls == 1
+    assert worker.run_calls == 1
+
+
+def test_controller_does_not_start_when_capture_exclusion_fails() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    worker = FakeWorker(
+        auto_finish=False,
+    )
+    thread = FakeThread()
+    excluder = FakeWindowCaptureExcluder(
+        result=False,
+        error_code=5,
+    )
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window_capture_excluder=excluder,
+        window=window,
+        worker_factory=lambda runtime_service: worker,
+        thread_factory=lambda: thread,
+    )
+
+    controller.start()
+
+    assert excluder.received_handles == [
+        window.native_window_handle,
+    ]
+    assert thread.start_calls == 0
+    assert worker.run_calls == 0
+    assert window.running_states[-1] is False
+    assert window.error_messages[-1] == (
+        "No fue posible excluir la ventana del analizador "
+        "de la captura continua. Código Win32: 5. "
+        "Mueve la ventana fuera del gráfico o utiliza "
+        "«Analizar una vez»."
+    )
+
+
+def test_controller_does_not_start_when_capture_excluder_raises() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    worker = FakeWorker(
+        auto_finish=False,
+    )
+    thread = FakeThread()
+    excluder = FakeWindowCaptureExcluder(
+        error=RuntimeError(
+            "affinity unavailable"
+        ),
+    )
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window_capture_excluder=excluder,
+        window=window,
+        worker_factory=lambda runtime_service: worker,
+        thread_factory=lambda: thread,
+    )
+
+    controller.start()
+
+    assert thread.start_calls == 0
+    assert worker.run_calls == 0
+    assert window.running_states[-1] is False
+    assert window.error_messages[-1] == (
+        "No fue posible configurar la protección de captura: "
+        "affinity unavailable"
     )

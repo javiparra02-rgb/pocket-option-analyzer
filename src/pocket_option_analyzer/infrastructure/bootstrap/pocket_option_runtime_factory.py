@@ -328,22 +328,22 @@ class FixedChartRegionExtractor:
 
 class PocketOptionChartRegionExtractor:
     """
-    Extractor proporcional para el gráfico principal de Pocket Option.
+    Extrae principalmente el área de velas de Pocket Option.
 
-    Excluye aproximadamente:
-    - barra superior
-    - una pequeña parte del panel derecho
-    - zona inferior no esencial
+    Excluye proporcionalmente:
+    - la barra superior del navegador y de Pocket Option;
+    - el panel derecho de compra y venta;
+    - el RSI, la línea temporal y otros paneles inferiores.
 
-    El objetivo es capturar más contexto del gráfico sin incluir
-    demasiado panel lateral.
+    Los indicadores se calculan internamente, por lo que no es
+    necesario incluir los paneles RSI o Stochastic visibles.
     """
 
     def __init__(
         self,
-        top_ratio: float = 0.05,
-        right_ratio: float = 0.05,
-        bottom_ratio: float = 0.02,
+        top_ratio: float = 0.10,
+        right_ratio: float = 0.14,
+        bottom_ratio: float = 0.15,
     ) -> None:
         self._top_ratio = top_ratio
         self._right_ratio = right_ratio

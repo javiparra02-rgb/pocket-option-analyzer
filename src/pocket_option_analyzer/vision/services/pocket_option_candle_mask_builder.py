@@ -145,18 +145,29 @@ class PocketOptionCandleMaskBuilder:
         self,
         mask: np.ndarray,
     ) -> np.ndarray:
+        """
+        Conserva cuerpos delgados y mechas verticales.
 
-        kernel = cv2.getStructuringElement(
+        Un cierre morfológico vertical:
+        - mantiene dojis y cuerpos de pocos píxeles;
+        - reconecta pequeños espacios entre cuerpo y mecha;
+        - evita unir horizontalmente velas vecinas.
+        """
+
+        if self._kernel_size <= 1:
+            return mask.copy()
+
+        vertical_kernel = cv2.getStructuringElement(
             cv2.MORPH_RECT,
             (
-                self._kernel_size,
+                1,
                 self._kernel_size,
             ),
         )
 
         return cv2.morphologyEx(
             mask,
-            cv2.MORPH_OPEN,
-            kernel,
+            cv2.MORPH_CLOSE,
+            vertical_kernel,
             iterations=1,
         )

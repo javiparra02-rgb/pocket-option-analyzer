@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -43,6 +43,7 @@ class FakeWriter:
 def _signal_record(
     direction: SignalDirection = SignalDirection.CALL,
     second: int = 0,
+    created_at: datetime | None = None,
 ) -> SignalRecord:
     return SignalRecord(
         signal=MarketSignal(
@@ -50,14 +51,18 @@ def _signal_record(
             strength=SignalStrength.HIGH,
             reason=f"{direction.value} confirmed.",
         ),
-        created_at=datetime(
-            2026,
-            7,
-            21,
-            10,
-            0,
-            second,
-            tzinfo=timezone.utc,
+        created_at=(
+            created_at
+            if created_at is not None
+            else datetime(
+                2026,
+                7,
+                21,
+                10,
+                0,
+                second,
+                tzinfo=timezone.utc,
+            )
         ),
         source="test_source",
     )
@@ -233,3 +238,109 @@ def test_manual_result_session_does_not_consume_signal_when_writer_fails() -> No
 
     assert service.pending_count == 1
     assert service.recorded_count == 0
+
+
+def test_manual_result_session_localizes_naive_signal_datetime() -> None:
+    writer = FakeWriter()
+    chile_timezone = timezone(
+        timedelta(
+            hours=-4,
+        )
+    )
+    resolver_calls: list[datetime] = []
+
+    def resolve_naive_datetime(
+        value: datetime,
+    ) -> datetime:
+        resolver_calls.append(
+            value,
+        )
+
+        return value.replace(
+            tzinfo=chile_timezone,
+        )
+
+    naive_created_at = datetime(
+        2026,
+        7,
+        21,
+        22,
+        33,
+        2,
+    )
+
+    service = ManualSignalResultSessionService(
+        writer=writer,
+        clock=_clock,
+        event_id_factory=lambda: "event-naive-001",
+        naive_datetime_resolver=resolve_naive_datetime,
+    )
+
+    signal = _signal_record(
+        direction=SignalDirection.PUT,
+        created_at=naive_created_at,
+    )
+
+    service.track_confirmed_signal(
+        signal,
+    )
+    persisted_record = service.register_result(
+        ManualSignalResult.WIN,
+    )
+
+    assert persisted_record is not None
+    assert persisted_record.signal_created_at == datetime(
+        2026,
+        7,
+        21,
+        22,
+        33,
+        2,
+        tzinfo=chile_timezone,
+    )
+    assert resolver_calls == [
+        naive_created_at,
+    ]
+    assert writer.records == [
+        persisted_record,
+    ]
+
+
+def test_manual_result_session_preserves_aware_signal_datetime() -> None:
+    writer = FakeWriter()
+    aware_created_at = datetime(
+        2026,
+        7,
+        21,
+        22,
+        33,
+        2,
+        tzinfo=timezone.utc,
+    )
+
+    def unexpected_resolver(
+        value: datetime,
+    ) -> datetime:
+        raise AssertionError(
+            "El resolver no debe usarse para fechas conscientes."
+        )
+
+    service = ManualSignalResultSessionService(
+        writer=writer,
+        clock=_clock,
+        event_id_factory=lambda: "event-aware-001",
+        naive_datetime_resolver=unexpected_resolver,
+    )
+
+    service.track_confirmed_signal(
+        _signal_record(
+            created_at=aware_created_at,
+        ),
+    )
+
+    persisted_record = service.register_result(
+        ManualSignalResult.LOSS,
+    )
+
+    assert persisted_record is not None
+    assert persisted_record.signal_created_at == aware_created_at

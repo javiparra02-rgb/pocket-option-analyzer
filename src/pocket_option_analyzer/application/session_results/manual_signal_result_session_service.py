@@ -20,6 +20,7 @@ from pocket_option_analyzer.domain.signals import (
 
 Clock = Callable[[], datetime]
 EventIdFactory = Callable[[], str]
+NaiveDatetimeResolver = Callable[[datetime], datetime]
 
 
 def _utc_now() -> datetime:
@@ -30,6 +31,19 @@ def _utc_now() -> datetime:
 
 def _new_event_id() -> str:
     return uuid4().hex
+
+
+def _localize_system_datetime(
+    value: datetime,
+) -> datetime:
+    """
+    Interpreta una fecha sin zona horaria como hora local del sistema.
+
+    datetime.astimezone() aplica la zona configurada en Windows,
+    incluyendo el desplazamiento correspondiente a la fecha.
+    """
+
+    return value.astimezone()
 
 
 class ManualSignalResultSessionService:
@@ -50,6 +64,9 @@ class ManualSignalResultSessionService:
         writer: ManualSignalResultWriter,
         clock: Clock = _utc_now,
         event_id_factory: EventIdFactory = _new_event_id,
+        naive_datetime_resolver: NaiveDatetimeResolver = (
+            _localize_system_datetime
+        ),
         strategy_name: str = DEFAULT_STRATEGY_NAME,
     ) -> None:
         if not strategy_name.strip():
@@ -60,6 +77,7 @@ class ManualSignalResultSessionService:
         self._writer = writer
         self._clock = clock
         self._event_id_factory = event_id_factory
+        self._naive_datetime_resolver = naive_datetime_resolver
         self._strategy_name = strategy_name
 
         self._pending_signals: deque[SignalRecord] = deque()
@@ -102,6 +120,35 @@ class ManualSignalResultSessionService:
 
         return True
 
+    def _normalize_signal_datetime(
+        self,
+        value: datetime,
+    ) -> datetime:
+        """
+        Garantiza que la fecha de la señal tenga zona horaria.
+
+        Las fechas conscientes se conservan sin cambios. Las fechas
+        antiguas sin zona se interpretan mediante el resolver configurado.
+        """
+
+        if value.tzinfo is not None and value.utcoffset() is not None:
+            return value
+
+        resolved_value = self._naive_datetime_resolver(
+            value,
+        )
+
+        if (
+            resolved_value.tzinfo is None
+            or resolved_value.utcoffset() is None
+        ):
+            raise ValueError(
+                "naive_datetime_resolver debe devolver una fecha "
+                "con zona horaria."
+            )
+
+        return resolved_value
+
     def register_result(
         self,
         result: ManualSignalResult,
@@ -116,7 +163,9 @@ class ManualSignalResultSessionService:
         signal_record = self._pending_signals[0]
 
         result_record = ManualSignalResultRecord(
-            signal_created_at=signal_record.created_at,
+            signal_created_at=self._normalize_signal_datetime(
+                value=signal_record.created_at,
+            ),
             direction=signal_record.signal.direction,
             strength=signal_record.signal.strength,
             result=result,

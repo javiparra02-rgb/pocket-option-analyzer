@@ -1,3 +1,4 @@
+import cv2
 import numpy as np
 
 from pocket_option_analyzer.vision.models import (
@@ -6,6 +7,9 @@ from pocket_option_analyzer.vision.models import (
 )
 from pocket_option_analyzer.vision.services import (
     CandleDetectionPipeline,
+    CandleFilter,
+    CandleSegmenter,
+    PocketOptionCandleMaskBuilder,
 )
 
 
@@ -71,3 +75,140 @@ def test_detect_assigns_color_when_color_detector_is_configured() -> None:
 
     assert len(result) == 1
     assert result[0].color is CandleColor.WHITE
+
+
+def test_detection_pipeline_preserves_eighteen_mixed_size_candles() -> None:
+
+    image = np.zeros(
+        (
+            500,
+            1200,
+            3,
+        ),
+        dtype=np.uint8,
+    )
+    image[:] = (
+        25,
+        27,
+        40,
+    )
+
+    body_heights = (
+        70,
+        3,
+        25,
+        50,
+        8,
+        90,
+        4,
+        35,
+        65,
+        12,
+        100,
+        6,
+        45,
+        20,
+        80,
+        5,
+        55,
+        2,
+    )
+
+    for index, body_height in enumerate(
+        body_heights,
+    ):
+        # La primera vela representa una vela parcialmente recortada
+        # por el borde izquierdo del ROI.
+        x = (
+            0
+            if index == 0
+            else 20 + index * 55
+        )
+        body_width = (
+            24
+            if index == 0
+            else 36
+        )
+        top = 160 + (
+            index % 5
+            - 2
+        ) * 20
+
+        color = (
+            (
+                0,
+                0,
+                255,
+            )
+            if index % 2 == 0
+            else (
+                255,
+                255,
+                255,
+            )
+        )
+
+        center_x = x + body_width // 2
+
+        cv2.line(
+            image,
+            (
+                center_x,
+                top - 15,
+            ),
+            (
+                center_x,
+                top + body_height + 15,
+            ),
+            color,
+            thickness=1,
+        )
+        cv2.rectangle(
+            image,
+            (
+                x,
+                top,
+            ),
+            (
+                x + body_width - 1,
+                top + body_height - 1,
+            ),
+            color,
+            thickness=-1,
+        )
+
+    for index in range(8):
+        cv2.rectangle(
+            image,
+            (
+                40 + index * 15,
+                40,
+            ),
+            (
+                45 + index * 15,
+                54,
+            ),
+            (
+                255,
+                255,
+                255,
+            ),
+            thickness=-1,
+        )
+
+    pipeline = CandleDetectionPipeline(
+        mask_builder=PocketOptionCandleMaskBuilder(),
+        segmenter=CandleSegmenter(),
+        candle_filter=CandleFilter(),
+    )
+
+    result = pipeline.detect(
+        image=image,
+    )
+
+    assert len(result) == 18
+    assert result[0].width == 24
+    assert all(
+        candidate.width == 36
+        for candidate in result[1:]
+    )

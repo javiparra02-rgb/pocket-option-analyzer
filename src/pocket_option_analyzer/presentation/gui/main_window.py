@@ -705,6 +705,18 @@ class MainWindow(QMainWindow):
         return not self._history_list.isHidden()
 
     @property
+    def native_window_handle(self) -> int:
+        """
+        Devuelve el identificador nativo de la ventana principal.
+
+        En Windows corresponde al HWND utilizado por la API Win32.
+        """
+
+        return int(
+            self.winId()
+        )
+
+    @property
     def window_size(self) -> tuple[int, int]:
         return (
             self.width(),

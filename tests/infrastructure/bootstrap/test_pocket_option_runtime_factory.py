@@ -216,12 +216,16 @@ def test_fixed_chart_region_extractor_returns_clamped_region() -> None:
     assert region.height == 80
 
 
-def test_pocket_option_chart_region_extractor_returns_main_chart_area() -> None:
+def test_pocket_option_chart_region_extractor_returns_candle_chart_area() -> None:
 
     extractor = PocketOptionChartRegionExtractor()
 
     image = np.zeros(
-        (900, 1600, 3),
+        (
+            900,
+            1600,
+            3,
+        ),
         dtype=np.uint8,
     )
 
@@ -230,9 +234,10 @@ def test_pocket_option_chart_region_extractor_returns_main_chart_area() -> None:
     )
 
     assert region.x == 0
-    assert region.y == 45
-    assert region.width == 1520
-    assert region.height == 837
+    assert region.y == 90
+    assert region.width == 1376
+    assert region.height == 675
+    assert region.y + region.height == 765
 
 
 
@@ -295,12 +300,16 @@ def test_pocket_option_runtime_factory_can_enable_roi_debug(
     assert capture_service is not None
 
 
-def test_pocket_option_chart_region_extractor_keeps_timeline_area() -> None:
+def test_pocket_option_chart_region_extractor_excludes_lower_indicators() -> None:
 
     extractor = PocketOptionChartRegionExtractor()
 
     image = np.zeros(
-        (1000, 1600, 3),
+        (
+            1000,
+            1600,
+            3,
+        ),
         dtype=np.uint8,
     )
 
@@ -308,6 +317,7 @@ def test_pocket_option_chart_region_extractor_keeps_timeline_area() -> None:
         image=image,
     )
 
-    assert region.y == 50
-    assert region.height == 930
-    assert region.y + region.height == 980
+    assert region.y == 100
+    assert region.width == 1376
+    assert region.height == 750
+    assert region.y + region.height == 850

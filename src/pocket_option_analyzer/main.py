@@ -18,6 +18,9 @@ from pocket_option_analyzer.infrastructure.bootstrap import (
 from pocket_option_analyzer.infrastructure.persistence import (
     JsonlManualSignalResultWriter,
 )
+from pocket_option_analyzer.infrastructure.windows import (
+    WindowsWindowCaptureExcluder,
+)
 from pocket_option_analyzer.presentation.gui import (
     GuiApplication,
     MainWindowController,
@@ -81,6 +84,7 @@ def build_gui_application(
     runtime_service=None,
     voice_notifier: VoiceSignalNotifier | None = None,
     manual_result_session: ManualSignalResultSessionService | None = None,
+    window_capture_excluder: WindowsWindowCaptureExcluder | None = None,
 ) -> GuiApplication:
     """
     Construye la aplicación gráfica.
@@ -107,6 +111,15 @@ def build_gui_application(
         )
 
     resolved_manual_result_session = manual_result_session
+    resolved_window_capture_excluder = window_capture_excluder
+
+    if (
+        resolved_window_capture_excluder is None
+        and runtime_service is None
+    ):
+        resolved_window_capture_excluder = (
+            WindowsWindowCaptureExcluder()
+        )
 
     if (
         resolved_manual_result_session is None
@@ -122,6 +135,7 @@ def build_gui_application(
         runtime_service=resolved_runtime_service,
         voice_notifier=resolved_voice_notifier,
         manual_result_session=resolved_manual_result_session,
+        window_capture_excluder=resolved_window_capture_excluder,
     )
 
     return GuiApplication(

@@ -110,6 +110,26 @@ class VoiceNotifierLike(Protocol):
         """
 
 
+class WindowCaptureExcluderLike(Protocol):
+    """
+    Contrato mínimo para excluir la GUI de capturas de pantalla.
+    """
+
+    @property
+    def last_error_code(self) -> int | None:
+        """
+        Código Win32 del último fallo, cuando esté disponible.
+        """
+
+    def exclude(
+        self,
+        window_handle: int,
+    ) -> bool:
+        """
+        Excluye de la captura la ventana indicada.
+        """
+
+
 WorkerFactory = Callable[[AnalysisRuntimeService], WorkerLike]
 ThreadFactory = Callable[[], ThreadLike]
 
@@ -133,6 +153,7 @@ class MainWindowController(QObject):
         presenter: SignalRecordPresenter | None = None,
         voice_notifier: VoiceNotifierLike | None = None,
         manual_result_session: ManualSignalResultSessionService | None = None,
+        window_capture_excluder: WindowCaptureExcluderLike | None = None,
         window: MainWindow | None = None,
         worker_factory: WorkerFactory | None = None,
         thread_factory: ThreadFactory | None = None,
@@ -144,6 +165,7 @@ class MainWindowController(QObject):
         self._presenter = presenter or SignalRecordPresenter()
         self._voice_notifier = voice_notifier
         self._manual_result_session = manual_result_session
+        self._window_capture_excluder = window_capture_excluder
         self._worker_interval_seconds = worker_interval_seconds
 
         self._worker_factory = worker_factory or self._create_worker
@@ -217,9 +239,16 @@ class MainWindowController(QObject):
             None,
         )
 
+        if not self._ensure_window_capture_exclusion():
+            self._window.set_running_state(
+                is_running=False,
+            )
+            return
+
         worker = self._worker_factory(
             self._runtime_service,
         )
+
         thread = self._thread_factory()
 
         self._worker = worker
@@ -322,6 +351,59 @@ class MainWindowController(QObject):
         )
 
         return record
+
+    def _ensure_window_capture_exclusion(
+        self,
+    ) -> bool:
+        """
+        Protege el análisis continuo contra la propia ventana de la GUI.
+
+        Cuando no existe un adaptador configurado, conserva el
+        comportamiento anterior para pruebas e integraciones alternativas.
+        """
+
+        if self._window_capture_excluder is None:
+            return True
+
+        try:
+            window_handle = self._window.native_window_handle
+
+            was_excluded = self._window_capture_excluder.exclude(
+                window_handle=window_handle,
+            )
+        except Exception as error:
+            self._window.set_error_message(
+                "No fue posible configurar la protección de captura: "
+                f"{error}"
+            )
+            return False
+
+        if was_excluded:
+            return True
+
+        error_code = (
+            self._window_capture_excluder.last_error_code
+        )
+
+        error_suffix = ""
+
+        if error_code not in {
+            None,
+            0,
+        }:
+            error_suffix = (
+                f" Código Win32: {error_code}."
+            )
+
+        self._window.set_error_message(
+            "No fue posible excluir la ventana del analizador "
+            "de la captura continua."
+            f"{error_suffix} "
+            "Mueve la ventana fuera del gráfico o utiliza "
+            "«Analizar una vez»."
+        )
+
+        return False
 
     def _prepare_window_for_capture(
         self,
