@@ -4,6 +4,7 @@ import numpy as np
 from pocket_option_analyzer.vision.models import (
     CandleCandidate,
     CandleColor,
+    CandleGeometry,
 )
 from pocket_option_analyzer.vision.services import (
     CandleDetectionPipeline,
@@ -43,6 +44,27 @@ class FakeColorDetector:
 
     def detect(self, image, candle):
         return CandleColor.WHITE
+
+
+class FakeGeometryExtractor:
+
+    def __init__(
+        self,
+        geometry: CandleGeometry,
+    ) -> None:
+        self.geometry = geometry
+        self.received_mask = None
+        self.received_candidate = None
+
+    def extract(
+        self,
+        mask,
+        candidate,
+    ) -> CandleGeometry:
+        self.received_mask = mask
+        self.received_candidate = candidate
+
+        return self.geometry
 
 
 def test_detect_returns_candidates() -> None:
@@ -211,4 +233,44 @@ def test_detection_pipeline_preserves_eighteen_mixed_size_candles() -> None:
     assert all(
         candidate.width == 36
         for candidate in result[1:]
+    )
+
+
+def test_detect_assigns_candle_geometry_when_extractor_is_configured() -> None:
+
+    geometry = CandleGeometry(
+        high_y=10,
+        body_top_y=15,
+        body_bottom_y=25,
+        low_y=29,
+    )
+    geometry_extractor = FakeGeometryExtractor(
+        geometry=geometry,
+    )
+
+    image = np.zeros(
+        (
+            100,
+            100,
+        ),
+        dtype=np.uint8,
+    )
+
+    pipeline = CandleDetectionPipeline(
+        mask_builder=FakeMaskBuilder(),
+        segmenter=FakeSegmenter(),
+        candle_filter=FakeFilter(),
+        geometry_extractor=geometry_extractor,
+    )
+
+    result = pipeline.detect(
+        image=image,
+    )
+
+    assert len(result) == 1
+    assert result[0].geometry is geometry
+    assert geometry_extractor.received_mask is image
+    assert (
+        geometry_extractor.received_candidate.x
+        == 10
     )

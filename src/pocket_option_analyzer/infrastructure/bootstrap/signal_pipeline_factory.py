@@ -43,6 +43,7 @@ from pocket_option_analyzer.vision.services import (
     MarketAnalysisPipeline,
     PocketOptionCandleMaskBuilder,
     TrendDetector,
+    CandleGeometryExtractor,
 )
 
 
@@ -266,6 +267,7 @@ class SignalPipelineFactory:
             segmenter=CandleSegmenter(),
             candle_filter=CandleFilter(),
             color_detector=CandleColorDetector(),
+            geometry_extractor=CandleGeometryExtractor(),
         )
 
         classification_pipeline = CandleClassificationPipeline(

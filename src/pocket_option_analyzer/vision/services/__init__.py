@@ -1,3 +1,7 @@
+from pocket_option_analyzer.vision.services.candle_geometry_extractor import (
+    CandleGeometryExtractor,
+)
+
 from .binary_mask_builder import BinaryMaskBuilder
 from .candle_analysis_pipeline import CandleAnalysisPipeline
 from .candle_classification_pipeline import CandleClassificationPipeline
@@ -44,4 +48,5 @@ __all__ = [
     "RoiDebugRenderer",
     "TrendDetector",
     "VisionPipeline",
+    "CandleGeometryExtractor",
 ]

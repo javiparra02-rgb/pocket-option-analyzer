@@ -1,3 +1,7 @@
+from pocket_option_analyzer.vision.models.candle_geometry import (
+    CandleGeometry,
+)
+
 from .candle_candidate import CandleCandidate
 from .candle_color import CandleColor
 from .candle_color_profile import CandleColorProfile
@@ -20,4 +24,5 @@ __all__ = [
     "ClassifiedCandle",
     "MarketAnalysis",
     "TrendDirection",
+    "CandleGeometry",
 ]
