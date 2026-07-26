@@ -2,8 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pocket_option_analyzer.domain.indicators.stochastic_calculation_diagnostics import (
+    StochasticCalculationDiagnostics,
+)
 
-@dataclass(frozen=True, slots=True)
+
+@dataclass(
+    frozen=True,
+    slots=True,
+)
 class StochasticSnapshot:
     """
     Estado actual del oscilador estocástico.
@@ -13,12 +20,10 @@ class StochasticSnapshot:
     """
 
     k_value: float
-
     d_value: float
-
     k_previous: float
-
     d_previous: float
+    diagnostics: StochasticCalculationDiagnostics | None = None
 
     @property
     def crossed_up(self) -> bool:
@@ -26,7 +31,12 @@ class StochasticSnapshot:
         %K cruzó hacia arriba sobre %D.
         """
 
-        return self.k_previous <= self.d_previous and self.k_value > self.d_value
+        return (
+            self.k_previous
+            <= self.d_previous
+            and self.k_value
+            > self.d_value
+        )
 
     @property
     def crossed_down(self) -> bool:
@@ -34,4 +44,9 @@ class StochasticSnapshot:
         %K cruzó hacia abajo bajo %D.
         """
 
-        return self.k_previous >= self.d_previous and self.k_value < self.d_value
+        return (
+            self.k_previous
+            >= self.d_previous
+            and self.k_value
+            < self.d_value
+        )

@@ -20,7 +20,10 @@ class StochasticSnapshotBuilder:
         self,
         calculator: StochasticCalculator | None = None,
     ) -> None:
-        self._calculator = calculator or StochasticCalculator()
+        self._calculator = (
+            calculator
+            or StochasticCalculator()
+        )
 
     def build(
         self,
@@ -28,13 +31,17 @@ class StochasticSnapshotBuilder:
         profile: StrategyProfile,
     ) -> StochasticSnapshot | None:
         """
-        Calcula el estado actual del estocástico.
+        Calcula el estado actual y anterior del Stochastic.
 
-        Si no hay suficientes datos para tener valor actual y previo
-        de %K/%D, devuelve None.
+        Si no hay suficientes datos para tener %K y %D actuales
+        y anteriores, devuelve None.
         """
 
-        k_values, d_values = self._calculator.calculate(
+        (
+            k_values,
+            d_values,
+            diagnostics,
+        ) = self._calculator.calculate_with_diagnostics(
             highs=series.highs,
             lows=series.lows,
             closes=series.closes,
@@ -43,7 +50,10 @@ class StochasticSnapshotBuilder:
             smooth_period=profile.stoch_smooth_period,
         )
 
-        if len(k_values) < 2 or len(d_values) < 2:
+        if (
+            len(k_values) < 2
+            or len(d_values) < 2
+        ):
             return None
 
         aligned_k_values = self._align_k_values(
@@ -56,6 +66,7 @@ class StochasticSnapshotBuilder:
             d_previous=d_values[-2],
             k_value=aligned_k_values[-1],
             d_value=d_values[-1],
+            diagnostics=diagnostics,
         )
 
     def _align_k_values(
@@ -69,4 +80,8 @@ class StochasticSnapshotBuilder:
         %D empieza más tarde porque es una media móvil de %K.
         """
 
-        return k_values[-len(d_values):]
+        return k_values[
+            -len(
+                d_values,
+            ):
+        ]

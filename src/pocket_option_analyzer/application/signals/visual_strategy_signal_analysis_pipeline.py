@@ -106,7 +106,10 @@ class VisualStrategySignalAnalysisPipeline:
             strength=signal.strength,
             reason=(
                 f"{visual_diagnostics_line}\n"
-                f"{self._indicator_diagnostics_line(indicators)}\n"
+                f"{self._indicator_diagnostics_line(
+                    indicators=indicators,
+                    market_analysis=market_analysis,
+                )}\n"
                 f"{signal.reason}"
             ),
         )
@@ -287,6 +290,7 @@ class VisualStrategySignalAnalysisPipeline:
     def _indicator_diagnostics_line(
         self,
         indicators,
+        market_analysis,
     ) -> str:
 
         return (
@@ -295,9 +299,12 @@ class VisualStrategySignalAnalysisPipeline:
             f"  {self._ema_label(indicators)}\n"
             f"  {self._rsi_label(indicators)}\n"
             f"  {self._stochastic_label(indicators)}\n"
+            f"{self._stochastic_audit_lines(
+                indicators=indicators,
+                market_analysis=market_analysis,
+            )}\n"
             "  Estado: esperando confirmación de estrategia"
         )
-
 
     def _ema_label(
         self,
@@ -331,7 +338,6 @@ class VisualStrategySignalAnalysisPipeline:
             f"{separation_state}"
         )
 
-
     def _rsi_label(
         self,
         indicators,
@@ -362,7 +368,6 @@ class VisualStrategySignalAnalysisPipeline:
             f"{put_state}"
         )
 
-
     def _stochastic_label(
         self,
         indicators,
@@ -382,4 +387,81 @@ class VisualStrategySignalAnalysisPipeline:
             f"D={indicators.stochastic.d_value:.2f} | "
             f"prevK={indicators.stochastic.k_previous:.2f} | "
             f"prevD={indicators.stochastic.d_previous:.2f}"
+        )
+
+    def _stochastic_audit_lines(
+        self,
+        indicators,
+        market_analysis,
+    ) -> str:
+        """
+        Formatea la última ventana matemática del Stochastic.
+        """
+
+        diagnostics = (
+            indicators.stochastic.diagnostics
+        )
+
+        if diagnostics is None:
+            return (
+                "  Auditoría Stoch: no disponible"
+            )
+
+        geometry_valid_count, geometry_total_count = (
+            self._geometry_usage(
+                market_analysis=market_analysis,
+            )
+        )
+
+        return (
+            "  Auditoría Stoch ventana: "
+            f"velas={diagnostics.source_candle_count} | "
+            f"K-periodo={diagnostics.k_period} | "
+            "geometría="
+            f"{geometry_valid_count}/"
+            f"{geometry_total_count}\n"
+            "  Auditoría Stoch OHLC: "
+            f"máximo={diagnostics.highest_high:.2f} | "
+            f"mínimo={diagnostics.lowest_low:.2f} | "
+            f"cierre={diagnostics.latest_close:.2f} | "
+            f"rango={diagnostics.price_range:.2f}\n"
+            "  Auditoría Stoch cálculo: "
+            f"K bruto={diagnostics.latest_raw_k:.2f} | "
+            "K suavizado="
+            f"{diagnostics.latest_smoothed_k:.2f} | "
+            f"D={diagnostics.latest_d:.2f}"
+        )
+
+
+    def _geometry_usage(
+        self,
+        market_analysis,
+    ) -> tuple[
+        int,
+        int,
+    ]:
+        """
+        Cuenta geometrías válidas entre las velas usadas para OHLC.
+
+        Las velas UNKNOWN no son convertidas por
+        VisualPriceSeriesBuilder y no pertenecen al denominador.
+        """
+
+        used_candles = tuple(
+            candle
+            for candle in market_analysis.series.candles
+            if candle.candle_type.name != "UNKNOWN"
+        )
+
+        valid_geometry_count = sum(
+            1
+            for candle in used_candles
+            if candle.candidate.geometry is not None
+        )
+
+        return (
+            valid_geometry_count,
+            len(
+                used_candles,
+            ),
         )

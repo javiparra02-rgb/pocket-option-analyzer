@@ -1,4 +1,5 @@
 from pocket_option_analyzer.domain.indicators import (
+    StochasticCalculationDiagnostics,
     StochasticSnapshotBuilder,
 )
 from pocket_option_analyzer.domain.market import (
@@ -14,11 +15,16 @@ class FakeStochasticCalculator:
         self,
         k_values: tuple[float, ...],
         d_values: tuple[float, ...],
+        diagnostics: (
+            StochasticCalculationDiagnostics
+            | None
+        ) = None,
     ) -> None:
         self._k_values = k_values
         self._d_values = d_values
+        self._diagnostics = diagnostics
 
-    def calculate(
+    def calculate_with_diagnostics(
         self,
         highs,
         lows,
@@ -27,7 +33,11 @@ class FakeStochasticCalculator:
         d_period,
         smooth_period,
     ):
-        return self._k_values, self._d_values
+        return (
+            self._k_values,
+            self._d_values,
+            self._diagnostics,
+        )
 
 
 def _series() -> PriceSeries:
@@ -127,3 +137,39 @@ def test_build_detects_cross_down_snapshot() -> None:
     assert result.d_value == 78.0
     assert result.crossed_up is False
     assert result.crossed_down is True
+
+
+def test_build_preserves_stochastic_calculation_diagnostics() -> None:
+
+    diagnostics = StochasticCalculationDiagnostics(
+        source_candle_count=17,
+        k_period=5,
+        highest_high=120.0,
+        lowest_low=80.0,
+        latest_close=104.0,
+        latest_raw_k=60.0,
+        latest_smoothed_k=55.0,
+        latest_d=50.0,
+    )
+
+    builder = StochasticSnapshotBuilder(
+        calculator=FakeStochasticCalculator(
+            k_values=(
+                48.0,
+                55.0,
+            ),
+            d_values=(
+                49.0,
+                50.0,
+            ),
+            diagnostics=diagnostics,
+        ),
+    )
+
+    result = builder.build(
+        series=_series(),
+        profile=StrategyProfile.otc_precision_10s(),
+    )
+
+    assert result is not None
+    assert result.diagnostics is diagnostics

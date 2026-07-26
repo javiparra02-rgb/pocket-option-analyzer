@@ -7,6 +7,7 @@ from pocket_option_analyzer.domain.indicators import (
     EmaSnapshot,
     IndicatorSnapshot,
     RsiSnapshot,
+    StochasticCalculationDiagnostics,
     StochasticSnapshot,
 )
 from pocket_option_analyzer.domain.signals import (
@@ -17,6 +18,7 @@ from pocket_option_analyzer.domain.signals import (
 from pocket_option_analyzer.domain.strategy import StrategyProfile
 from pocket_option_analyzer.vision.models import (
     CandleCandidate,
+    CandleGeometry,
     CandleSeries,
     CandleType,
     ClassifiedCandle,
@@ -95,6 +97,12 @@ def _visual_series() -> CandleSeries:
                     width=5,
                     height=20,
                     area=100,
+                    geometry=CandleGeometry(
+                        high_y=40,
+                        body_top_y=45,
+                        body_bottom_y=54,
+                        low_y=59,
+                    ),
                 ),
                 candle_type=CandleType.BULLISH,
             ),
@@ -126,6 +134,16 @@ def _indicators() -> IndicatorSnapshot:
             d_previous=20.0,
             k_value=24.0,
             d_value=21.0,
+            diagnostics=StochasticCalculationDiagnostics(
+                source_candle_count=17,
+                k_period=5,
+                highest_high=120.0,
+                lowest_low=80.0,
+                latest_close=104.0,
+                latest_raw_k=60.0,
+                latest_smoothed_k=24.0,
+                latest_d=21.0,
+            ),
         ),
     )
 
@@ -173,6 +191,22 @@ def test_analyze_generates_signal_from_visual_indicators() -> None:
     assert indicator_builder.received_profile is profile
     assert signal_generator.received_analysis is analysis
     assert signal_generator.received_indicators is indicators
+    assert (
+        "Auditoría Stoch ventana: "
+        "velas=17 | K-periodo=5 | geometría=1/1"
+        in result.reason
+    )
+    assert (
+        "Auditoría Stoch OHLC: "
+        "máximo=120.00 | mínimo=80.00 | "
+        "cierre=104.00 | rango=40.00"
+        in result.reason
+    )
+    assert (
+        "Auditoría Stoch cálculo: "
+        "K bruto=60.00 | K suavizado=24.00 | D=21.00"
+        in result.reason
+    )
 
 
 def test_analyze_returns_neutral_signal_when_indicators_are_missing() -> None:

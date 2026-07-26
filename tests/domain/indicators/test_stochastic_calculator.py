@@ -179,3 +179,93 @@ def test_stochastic_calculator_rejects_mismatched_lengths() -> None:
             d_period=1,
             smooth_period=1,
         )
+
+
+def test_stochastic_calculator_returns_latest_window_diagnostics() -> None:
+
+    calculator = StochasticCalculator()
+
+    (
+        k_values,
+        d_values,
+        diagnostics,
+    ) = calculator.calculate_with_diagnostics(
+        highs=(
+            12.0,
+            13.0,
+            14.0,
+            15.0,
+            16.0,
+        ),
+        lows=(
+            9.0,
+            10.0,
+            11.0,
+            12.0,
+            13.0,
+        ),
+        closes=(
+            11.0,
+            12.0,
+            13.0,
+            14.0,
+            15.0,
+        ),
+        k_period=3,
+        d_period=2,
+        smooth_period=2,
+    )
+
+    assert k_values == (
+        80.0,
+        80.0,
+    )
+    assert d_values == (
+        80.0,
+    )
+
+    assert diagnostics is not None
+    assert diagnostics.source_candle_count == 5
+    assert diagnostics.k_period == 3
+    assert diagnostics.highest_high == 16.0
+    assert diagnostics.lowest_low == 11.0
+    assert diagnostics.latest_close == 15.0
+    assert diagnostics.latest_raw_k == 80.0
+    assert diagnostics.latest_smoothed_k == 80.0
+    assert diagnostics.latest_d == 80.0
+
+
+def test_stochastic_calculator_diagnostics_use_50_for_flat_window() -> None:
+
+    calculator = StochasticCalculator()
+
+    (
+        _,
+        _,
+        diagnostics,
+    ) = calculator.calculate_with_diagnostics(
+        highs=(
+            100.0,
+            100.0,
+            100.0,
+        ),
+        lows=(
+            100.0,
+            100.0,
+            100.0,
+        ),
+        closes=(
+            100.0,
+            100.0,
+            100.0,
+        ),
+        k_period=3,
+        d_period=1,
+        smooth_period=1,
+    )
+
+    assert diagnostics is not None
+    assert diagnostics.price_range == 0.0
+    assert diagnostics.latest_raw_k == 50.0
+    assert diagnostics.latest_smoothed_k == 50.0
+    assert diagnostics.latest_d == 50.0
