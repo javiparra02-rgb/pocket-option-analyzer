@@ -170,10 +170,8 @@ class VisualStrategySignalAnalysisPipeline:
 
         latest_candles = candles[-3:]
 
-        closed_candles = (
-            candles[:-1]
-            if len(candles) > 1
-            else candles
+        closed_candles = tuple(
+            market_analysis.series.without_latest().candles,
         )
 
         recent_closed_candles = closed_candles[-3:]
@@ -415,7 +413,9 @@ class VisualStrategySignalAnalysisPipeline:
 
         return (
             "  Auditoría Stoch ventana: "
-            f"velas={diagnostics.source_candle_count} | "
+            f"visibles={len(market_analysis.series)} | "
+            "OHLC cerradas="
+            f"{diagnostics.source_candle_count} | "
             f"K-periodo={diagnostics.k_period} | "
             "geometría="
             f"{geometry_valid_count}/"
@@ -447,9 +447,13 @@ class VisualStrategySignalAnalysisPipeline:
         VisualPriceSeriesBuilder y no pertenecen al denominador.
         """
 
+        closed_series = (
+            market_analysis.series.without_latest()
+        )
+
         used_candles = tuple(
             candle
-            for candle in market_analysis.series.candles
+            for candle in closed_series.candles
             if candle.candle_type.name != "UNKNOWN"
         )
 

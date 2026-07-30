@@ -106,6 +106,22 @@ def _visual_series() -> CandleSeries:
                 ),
                 candle_type=CandleType.BULLISH,
             ),
+            ClassifiedCandle(
+                candidate=CandleCandidate(
+                    x=20,
+                    y=35,
+                    width=5,
+                    height=25,
+                    area=125,
+                    geometry=CandleGeometry(
+                        high_y=35,
+                        body_top_y=40,
+                        body_bottom_y=54,
+                        low_y=59,
+                    ),
+                ),
+                candle_type=CandleType.BEARISH,
+            ),
         ),
     )
 
@@ -135,7 +151,7 @@ def _indicators() -> IndicatorSnapshot:
             k_value=24.0,
             d_value=21.0,
             diagnostics=StochasticCalculationDiagnostics(
-                source_candle_count=17,
+                source_candle_count=1,
                 k_period=5,
                 highest_high=120.0,
                 lowest_low=80.0,
@@ -193,7 +209,8 @@ def test_analyze_generates_signal_from_visual_indicators() -> None:
     assert signal_generator.received_indicators is indicators
     assert (
         "Auditoría Stoch ventana: "
-        "velas=17 | K-periodo=5 | geometría=1/1"
+        "visibles=2 | OHLC cerradas=1 | "
+        "K-periodo=5 | geometría=1/1"
         in result.reason
     )
     assert (

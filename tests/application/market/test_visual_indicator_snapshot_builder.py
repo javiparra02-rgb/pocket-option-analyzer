@@ -73,6 +73,16 @@ def _visual_series() -> CandleSeries:
                 ),
                 candle_type=CandleType.BULLISH,
             ),
+            ClassifiedCandle(
+                candidate=CandleCandidate(
+                    x=20,
+                    y=35,
+                    width=5,
+                    height=25,
+                    area=125,
+                ),
+                candle_type=CandleType.BEARISH,
+            ),
         ),
     )
 
@@ -136,7 +146,11 @@ def test_build_creates_indicator_snapshot_from_visual_series() -> None:
     )
 
     assert result is indicator_snapshot
-    assert price_builder.received_series is visual_series
+    assert price_builder.received_series is not visual_series
+    assert price_builder.received_series.candles == (
+        visual_series.candles[0],
+    )
+    assert len(visual_series) == 2
     assert indicator_builder.received_series is price_series
     assert indicator_builder.received_profile is profile
 
@@ -185,3 +199,28 @@ def test_build_returns_none_when_indicators_cannot_be_calculated() -> None:
 
     assert result is None
     assert indicator_builder.was_called is True
+
+
+def test_build_returns_none_when_only_forming_candle_is_visible() -> None:
+
+    indicator_builder = FakeIndicatorSnapshotBuilder(
+        result=_indicator_snapshot(),
+    )
+
+    visual_series = _visual_series()
+
+    builder = VisualIndicatorSnapshotBuilder(
+        indicator_snapshot_builder=indicator_builder,
+    )
+
+    result = builder.build(
+        series=CandleSeries(
+            candles=(
+                visual_series.candles[-1],
+            ),
+        ),
+        profile=StrategyProfile.otc_precision_10s(),
+    )
+
+    assert result is None
+    assert indicator_builder.was_called is False
