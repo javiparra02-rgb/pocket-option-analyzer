@@ -281,3 +281,60 @@ def test_worker_rejects_negative_interval() -> None:
             ),
             interval_seconds=-1.0,
         )
+
+
+def test_worker_runs_analysis_when_iteration_guard_accepts() -> None:
+
+    runtime = FakeRuntimeService(
+        records=[],
+    )
+    guard_calls = 0
+
+    def guard() -> None:
+        nonlocal guard_calls
+        guard_calls += 1
+        return None
+
+    worker = AnalysisWorker(
+        runtime_service=runtime,
+        interval_seconds=0,
+        sleep_function=lambda seconds: None,
+        iteration_guard=guard,
+    )
+
+    worker.run(
+        max_iterations=1,
+    )
+
+    assert guard_calls == 1
+    assert runtime.run_once_calls == 1
+
+
+def test_worker_stops_before_capture_when_iteration_guard_rejects() -> None:
+
+    runtime = FakeRuntimeService(
+        records=[],
+    )
+    errors: list[str] = []
+
+    worker = AnalysisWorker(
+        runtime_service=runtime,
+        interval_seconds=0,
+        sleep_function=lambda seconds: None,
+        iteration_guard=lambda: (
+            "El analizador se superpone con Pocket Option."
+        ),
+    )
+
+    worker.error_occurred.connect(
+        errors.append,
+    )
+
+    worker.run(
+        max_iterations=1,
+    )
+
+    assert runtime.run_once_calls == 0
+    assert errors == [
+        "El analizador se superpone con Pocket Option.",
+    ]

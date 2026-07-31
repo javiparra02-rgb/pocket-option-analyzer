@@ -2796,3 +2796,70 @@ def test_main_window_keeps_evidence_mode_button_visible_in_compact_mode() -> Non
 
     assert window.is_compact_mode_enabled is True
     assert window.evidence_mode_button_visible is True
+
+
+def test_main_window_enables_and_disables_recording_mode() -> None:
+
+    _application()
+
+    requested_states: list[bool] = []
+
+    window = MainWindow(
+        on_recording_mode_changed=lambda enabled: (
+            requested_states.append(enabled)
+            or True
+        ),
+    )
+
+    button = _button(
+        window=window,
+        object_name="recording_mode_button",
+    )
+
+    button.click()
+
+    assert window.recording_mode_enabled is True
+    assert window.recording_mode_button_checked is True
+    assert (
+        window.recording_mode_button_text
+        == "Salir de modo grabación"
+    )
+
+    button.click()
+
+    assert window.recording_mode_enabled is False
+    assert window.recording_mode_button_checked is False
+    assert window.recording_mode_button_text == "Modo grabación"
+    assert requested_states == [
+        True,
+        False,
+    ]
+
+
+def test_main_window_reverts_recording_button_when_callback_fails() -> None:
+
+    _application()
+
+    window = MainWindow(
+        on_recording_mode_changed=lambda enabled: False,
+    )
+
+    _button(
+        window=window,
+        object_name="recording_mode_button",
+    ).click()
+
+    assert window.recording_mode_enabled is False
+    assert window.recording_mode_button_checked is False
+
+
+def test_main_window_keeps_recording_button_visible_in_compact_mode() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is True
+    assert window.recording_mode_button_visible is True

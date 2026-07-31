@@ -142,6 +142,29 @@ WorkerFactory = Callable[[AnalysisRuntimeService], WorkerLike]
 ThreadFactory = Callable[[], ThreadLike]
 
 
+class RecordingSafetyStatusLike(Protocol):
+    """
+    Resultado mínimo de una comprobación de grabación.
+    """
+
+    is_safe: bool
+    message: str
+
+
+class RecordingSafetyGuardLike(Protocol):
+    """
+    Contrato para validar que el analizador no cubra Pocket Option.
+    """
+
+    def check(
+        self,
+        analyzer_window_handle: int,
+    ) -> RecordingSafetyStatusLike:
+        """
+        Comprueba si la ubicación actual es segura.
+        """
+
+
 class MainWindowController(QObject):
     """
     Controlador de la ventana principal.
@@ -162,6 +185,7 @@ class MainWindowController(QObject):
         voice_notifier: VoiceNotifierLike | None = None,
         manual_result_session: ManualSignalResultSessionService | None = None,
         window_capture_excluder: WindowCaptureExcluderLike | None = None,
+        recording_safety_guard: RecordingSafetyGuardLike | None = None,
         window: MainWindow | None = None,
         worker_factory: WorkerFactory | None = None,
         thread_factory: ThreadFactory | None = None,
@@ -174,6 +198,9 @@ class MainWindowController(QObject):
         self._voice_notifier = voice_notifier
         self._manual_result_session = manual_result_session
         self._window_capture_excluder = window_capture_excluder
+        self._recording_safety_guard = recording_safety_guard
+        self._recording_mode_enabled = False
+        self._recording_window_handle: int | None = None
         self._evidence_mode_enabled = False
         self._worker_interval_seconds = worker_interval_seconds
 
@@ -193,6 +220,7 @@ class MainWindowController(QObject):
             on_session_result_registered=self.register_manual_result,
             on_session_result_undone=self.undo_manual_result,
             on_session_reset_requested=self.reset_manual_result_session,
+            on_recording_mode_changed=self.set_recording_mode,
             restore_window_preferences=True,
         )
 
@@ -258,11 +286,23 @@ class MainWindowController(QObject):
             )
             return
 
-        if not self._ensure_window_capture_exclusion():
-            self._window.set_running_state(
-                is_running=False,
-            )
-            return
+        if self._recording_mode_enabled:
+            recording_error = self._recording_safety_error()
+
+            if recording_error is not None:
+                self._window.set_error_message(
+                    recording_error,
+                )
+                self._window.set_running_state(
+                    is_running=False,
+                )
+                return
+        else:
+            if not self._ensure_window_capture_exclusion():
+                self._window.set_running_state(
+                    is_running=False,
+                )
+                return
 
         worker = self._worker_factory(
             self._runtime_service,
@@ -462,7 +502,20 @@ class MainWindowController(QObject):
         return AnalysisWorker(
             runtime_service=runtime_service,
             interval_seconds=self._worker_interval_seconds,
+            iteration_guard=self._iteration_guard,
         )
+
+    def _iteration_guard(
+        self,
+    ) -> str | None:
+        """
+        Valida la ubicación antes de cada captura continua.
+        """
+
+        if not self._recording_mode_enabled:
+            return None
+
+        return self._recording_safety_error()
 
     @Slot(object)
     def _handle_record_ready(
@@ -496,6 +549,9 @@ class MainWindowController(QObject):
         self,
         message: str,
     ) -> None:
+
+        if self._recording_mode_enabled:
+            self._restore_recording_protection()
 
         self._window.set_error_message(
             message,
@@ -603,6 +659,175 @@ class MainWindowController(QObject):
         if self._manual_result_session is not None:
             self._manual_result_session.reset()
 
+    def set_recording_mode(
+        self,
+        enabled: bool,
+    ) -> bool:
+        """
+        Permite grabar la ventana mientras el análisis está activo.
+
+        Solo se habilita cuando el analizador está completamente fuera
+        de la ventana visible de Pocket Option.
+        """
+
+        if enabled and self._is_continuous_analysis_active():
+            self._window.set_error_message(
+                "Detén el análisis antes de activar el modo grabación."
+            )
+            return False
+
+        if enabled and self._evidence_mode_enabled:
+            self._window.set_error_message(
+                "Restaura la protección del modo evidencia antes "
+                "de activar el modo grabación."
+            )
+            return False
+
+        if enabled:
+            window_handle = self._window.native_window_handle
+
+            recording_error = self._recording_safety_error(
+                window_handle=window_handle,
+            )
+
+            if recording_error is not None:
+                self._window.set_error_message(
+                    recording_error,
+                )
+                return False
+
+            if not self._apply_capture_visibility(
+                window_handle=window_handle,
+                allow_capture=True,
+            ):
+                return False
+
+            self._recording_mode_enabled = True
+            self._recording_window_handle = window_handle
+            self._window.set_error_message(
+                None,
+            )
+            return True
+
+        window_handle = (
+            self._recording_window_handle
+            or self._window.native_window_handle
+        )
+
+        if not self._apply_capture_visibility(
+            window_handle=window_handle,
+            allow_capture=False,
+        ):
+            return False
+
+        self._recording_mode_enabled = False
+        self._recording_window_handle = None
+        self._window.set_error_message(
+            None,
+        )
+
+        return True
+
+
+    def _recording_safety_error(
+        self,
+        window_handle: int | None = None,
+    ) -> str | None:
+        """
+        Devuelve None cuando la ubicación es segura.
+        """
+
+        if self._recording_safety_guard is None:
+            return (
+                "No existe un validador de ubicación para "
+                "el modo grabación."
+            )
+
+        resolved_handle = (
+            window_handle
+            or self._recording_window_handle
+        )
+
+        if resolved_handle is None:
+            return (
+                "No se pudo resolver la ventana del analizador."
+            )
+
+        try:
+            status = self._recording_safety_guard.check(
+                analyzer_window_handle=resolved_handle,
+            )
+        except Exception as error:
+            return (
+                "No fue posible validar la ubicación para grabar: "
+                f"{error}"
+            )
+
+        if status.is_safe:
+            return None
+
+        return status.message
+
+
+    def _apply_capture_visibility(
+        self,
+        window_handle: int,
+        allow_capture: bool,
+    ) -> bool:
+        """
+        Cambia la afinidad de captura de la ventana.
+        """
+
+        if self._window_capture_excluder is None:
+            self._window.set_error_message(
+                "No existe un adaptador de protección de captura."
+            )
+            return False
+
+        try:
+            if allow_capture:
+                was_applied = (
+                    self._window_capture_excluder.allow_capture(
+                        window_handle=window_handle,
+                    )
+                )
+            else:
+                was_applied = (
+                    self._window_capture_excluder.exclude(
+                        window_handle=window_handle,
+                    )
+                )
+        except Exception as error:
+            self._window.set_error_message(
+                "No fue posible cambiar la visibilidad de captura: "
+                f"{error}"
+            )
+            return False
+
+        if was_applied:
+            return True
+
+        error_code = (
+            self._window_capture_excluder.last_error_code
+        )
+
+        error_suffix = ""
+
+        if error_code not in {
+            None,
+            0,
+        }:
+            error_suffix = (
+                f" Código Win32: {error_code}."
+            )
+
+        self._window.set_error_message(
+            "No fue posible cambiar la visibilidad de captura."
+            f"{error_suffix}"
+        )
+
+        return False
+
     def set_evidence_mode(
         self,
         enabled: bool,
@@ -613,6 +838,13 @@ class MainWindowController(QObject):
         El modo evidencia solo puede activarse cuando el análisis continuo
         está detenido. Así la ventana visible no contamina los frames.
         """
+
+        if enabled and self._recording_mode_enabled:
+            self._window.set_error_message(
+                "Sal del modo grabación antes de activar "
+                "el modo evidencia."
+            )
+            return False
 
         if enabled and self._is_continuous_analysis_active():
             self._window.set_error_message(
@@ -681,3 +913,41 @@ class MainWindowController(QObject):
             return True
 
         return self._runtime_service.is_running
+
+    def _restore_recording_protection(
+        self,
+    ) -> None:
+        """
+        Vuelve al modo protegido después de una validación fallida.
+        """
+
+        window_handle = (
+            self._recording_window_handle
+        )
+
+        if (
+            window_handle is not None
+            and self._window_capture_excluder is not None
+        ):
+            try:
+                self._window_capture_excluder.exclude(
+                    window_handle=window_handle,
+                )
+            except Exception:
+                pass
+
+        self._recording_mode_enabled = False
+        self._recording_window_handle = None
+
+        update_window_state = getattr(
+            self._window,
+            "set_recording_mode_enabled",
+            None,
+        )
+
+        if callable(
+            update_window_state,
+        ):
+            update_window_state(
+                False,
+            )

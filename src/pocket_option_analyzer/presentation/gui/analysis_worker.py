@@ -9,6 +9,11 @@ from pocket_option_analyzer.application.runtime import (
     AnalysisRuntimeService,
 )
 
+IterationGuard = Callable[
+    [],
+    str | None,
+]
+
 
 class AnalysisWorker(QObject):
     """
@@ -36,6 +41,7 @@ class AnalysisWorker(QObject):
         runtime_service: AnalysisRuntimeService,
         interval_seconds: float = 1.0,
         sleep_function: Callable[[float], None] = time.sleep,
+        iteration_guard: IterationGuard | None = None,
     ) -> None:
         super().__init__()
 
@@ -45,6 +51,7 @@ class AnalysisWorker(QObject):
         self._runtime_service = runtime_service
         self._interval_seconds = interval_seconds
         self._sleep_function = sleep_function
+        self._iteration_guard = iteration_guard
         self._is_running = False
         self._stop_requested = False
 
@@ -75,6 +82,13 @@ class AnalysisWorker(QObject):
         try:
             while not self._stop_requested:
                 try:
+                    guard_error = self._validate_iteration()
+
+                    if guard_error is not None:
+                        self.error_occurred.emit(
+                            guard_error,
+                        )
+                        break
                     record = self._runtime_service.run_once()
                 except Exception as error:
                     self.error_occurred.emit(
@@ -102,6 +116,26 @@ class AnalysisWorker(QObject):
             self._is_running = False
             self.running_changed.emit(False)
             self.finished.emit()
+
+    def _validate_iteration(
+        self,
+    ) -> str | None:
+        """
+        Ejecuta la validación previa a una captura.
+
+        None indica que la captura puede continuar.
+        """
+
+        if self._iteration_guard is None:
+            return None
+
+        try:
+            return self._iteration_guard()
+        except Exception as error:
+            return (
+                "Falló la validación previa a la captura: "
+                f"{error}"
+            )
 
     def stop(self) -> None:
         """

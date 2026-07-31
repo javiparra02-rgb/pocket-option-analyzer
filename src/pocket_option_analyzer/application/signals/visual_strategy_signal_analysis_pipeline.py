@@ -5,6 +5,7 @@ import numpy as np
 from pocket_option_analyzer.application.market import (
     VisualEntryContextAnalyzer,
     VisualIndicatorSnapshotBuilder,
+    VisualIndicatorSnapshotContext,
 )
 from pocket_option_analyzer.application.signals.strategy_signal_generator import (
     StrategySignalGenerator,
@@ -108,7 +109,9 @@ class VisualStrategySignalAnalysisPipeline:
                 f"{visual_diagnostics_line}\n"
                 f"{self._indicator_diagnostics_line(
                     indicators=indicators,
-                    market_analysis=market_analysis,
+                    snapshot_context=(
+                        self._indicator_snapshot_builder.snapshot_context
+                    ),
                 )}\n"
                 f"{signal.reason}"
             ),
@@ -288,7 +291,10 @@ class VisualStrategySignalAnalysisPipeline:
     def _indicator_diagnostics_line(
         self,
         indicators,
-        market_analysis,
+        snapshot_context: (
+            VisualIndicatorSnapshotContext
+            | None
+        ),
     ) -> str:
 
         return (
@@ -299,7 +305,7 @@ class VisualStrategySignalAnalysisPipeline:
             f"  {self._stochastic_label(indicators)}\n"
             f"{self._stochastic_audit_lines(
                 indicators=indicators,
-                market_analysis=market_analysis,
+                snapshot_context=snapshot_context,
             )}\n"
             "  Estado: esperando confirmación de estrategia"
         )
@@ -390,10 +396,15 @@ class VisualStrategySignalAnalysisPipeline:
     def _stochastic_audit_lines(
         self,
         indicators,
-        market_analysis,
+        snapshot_context: (
+            VisualIndicatorSnapshotContext
+            | None
+        ),
     ) -> str:
         """
-        Formatea la última ventana matemática del Stochastic.
+        Formatea el Stochastic y el contexto exacto del snapshot.
+
+        No mezcla los conteos almacenados con la captura visual actual.
         """
 
         diagnostics = (
@@ -405,21 +416,15 @@ class VisualStrategySignalAnalysisPipeline:
                 "  Auditoría Stoch: no disponible"
             )
 
-        geometry_valid_count, geometry_total_count = (
-            self._geometry_usage(
-                market_analysis=market_analysis,
+        snapshot_source_line = (
+            self._stochastic_snapshot_source_line(
+                diagnostics=diagnostics,
+                snapshot_context=snapshot_context,
             )
         )
 
         return (
-            "  Auditoría Stoch ventana: "
-            f"visibles={len(market_analysis.series)} | "
-            "OHLC cerradas="
-            f"{diagnostics.source_candle_count} | "
-            f"K-periodo={diagnostics.k_period} | "
-            "geometría="
-            f"{geometry_valid_count}/"
-            f"{geometry_total_count}\n"
+            f"{snapshot_source_line}\n"
             "  Auditoría Stoch OHLC: "
             f"máximo={diagnostics.highest_high:.2f} | "
             f"mínimo={diagnostics.lowest_low:.2f} | "
@@ -433,39 +438,47 @@ class VisualStrategySignalAnalysisPipeline:
         )
 
 
-    def _geometry_usage(
+    def _stochastic_snapshot_source_line(
         self,
-        market_analysis,
-    ) -> tuple[
-        int,
-        int,
-    ]:
+        diagnostics,
+        snapshot_context: (
+            VisualIndicatorSnapshotContext
+            | None
+        ),
+    ) -> str:
         """
-        Cuenta geometrías válidas entre las velas usadas para OHLC.
-
-        Las velas UNKNOWN no son convertidas por
-        VisualPriceSeriesBuilder y no pertenecen al denominador.
+        Formatea los conteos pertenecientes al snapshot almacenado.
         """
 
-        closed_series = (
-            market_analysis.series.without_latest()
+        if snapshot_context is None:
+            return (
+                "  Auditoría Stoch snapshot: "
+                "origen no disponible | "
+                "OHLC cerradas="
+                f"{diagnostics.source_candle_count} | "
+                f"K-periodo={diagnostics.k_period}"
+            )
+
+        is_consistent = (
+            snapshot_context.ohlc_candle_count
+            == diagnostics.source_candle_count
         )
 
-        used_candles = tuple(
-            candle
-            for candle in closed_series.candles
-            if candle.candle_type.name != "UNKNOWN"
-        )
-
-        valid_geometry_count = sum(
-            1
-            for candle in used_candles
-            if candle.candidate.geometry is not None
+        consistency_label = (
+            "OK"
+            if is_consistent
+            else "REVISAR"
         )
 
         return (
-            valid_geometry_count,
-            len(
-                used_candles,
-            ),
+            "  Auditoría Stoch snapshot: "
+            "visibles="
+            f"{snapshot_context.visible_candle_count} | "
+            "OHLC cerradas="
+            f"{snapshot_context.ohlc_candle_count} | "
+            f"K-periodo={diagnostics.k_period} | "
+            "geometría="
+            f"{snapshot_context.geometry_valid_count}/"
+            f"{snapshot_context.geometry_total_count} | "
+            f"consistencia={consistency_label}"
         )

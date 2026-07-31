@@ -162,6 +162,7 @@ class FakeWindow:
         self.show_after_capture_calls = 0
         self.accept_signal = accept_signal
         self.native_window_handle = 98765
+        self.recording_mode_states: list[bool] = []
 
     def set_running_state(
         self,
@@ -201,6 +202,14 @@ class FakeWindow:
         self,
     ) -> None:
         self.show_after_capture_calls += 1
+
+    def set_recording_mode_enabled(
+        self,
+        enabled: bool,
+    ) -> None:
+        self.recording_mode_states.append(
+            enabled,
+        )
 
 
 class FakeVoiceNotifier:
@@ -319,6 +328,42 @@ class FakeManualResultSession:
 
     def reset(self) -> None:
         self.reset_calls += 1
+
+
+class FakeRecordingSafetyStatus:
+
+    def __init__(
+        self,
+        is_safe: bool,
+        message: str,
+    ) -> None:
+        self.is_safe = is_safe
+        self.message = message
+
+
+class FakeRecordingSafetyGuard:
+
+    def __init__(
+        self,
+        is_safe: bool = True,
+        message: str = "Ubicación segura para grabación.",
+    ) -> None:
+        self.is_safe = is_safe
+        self.message = message
+        self.received_handles: list[int] = []
+
+    def check(
+        self,
+        analyzer_window_handle: int,
+    ) -> FakeRecordingSafetyStatus:
+        self.received_handles.append(
+            analyzer_window_handle,
+        )
+
+        return FakeRecordingSafetyStatus(
+            is_safe=self.is_safe,
+            message=self.message,
+        )
 
 
 def _record() -> SignalRecord:
@@ -953,4 +998,167 @@ def test_controller_blocks_start_while_evidence_mode_is_enabled() -> None:
     assert worker.run_calls == 0
     assert window.error_messages[-1] == (
         "Restaura la protección de captura antes de iniciar el análisis."
+    )
+
+
+def test_controller_enables_recording_mode_when_location_is_safe() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    excluder = FakeWindowCaptureExcluder()
+    safety_guard = FakeRecordingSafetyGuard()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window_capture_excluder=excluder,
+        recording_safety_guard=safety_guard,
+        window=window,
+    )
+
+    result = controller.set_recording_mode(
+        True,
+    )
+
+    assert result is True
+    assert safety_guard.received_handles == [
+        window.native_window_handle,
+    ]
+    assert excluder.allowed_handles == [
+        window.native_window_handle,
+    ]
+
+
+def test_controller_rejects_recording_mode_when_windows_overlap() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    excluder = FakeWindowCaptureExcluder()
+    safety_guard = FakeRecordingSafetyGuard(
+        is_safe=False,
+        message=(
+            "El analizador se superpone con Pocket Option."
+        ),
+    )
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window_capture_excluder=excluder,
+        recording_safety_guard=safety_guard,
+        window=window,
+    )
+
+    result = controller.set_recording_mode(
+        True,
+    )
+
+    assert result is False
+    assert excluder.allowed_handles == []
+    assert window.error_messages[-1] == (
+        "El analizador se superpone con Pocket Option."
+    )
+
+
+def test_controller_starts_recording_without_excluding_window() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    worker = FakeWorker(
+        auto_finish=False,
+    )
+    thread = FakeThread()
+    excluder = FakeWindowCaptureExcluder()
+    safety_guard = FakeRecordingSafetyGuard()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window_capture_excluder=excluder,
+        recording_safety_guard=safety_guard,
+        window=window,
+        worker_factory=lambda runtime_service: worker,
+        thread_factory=lambda: thread,
+    )
+
+    assert controller.set_recording_mode(
+        True,
+    ) is True
+
+    controller.start()
+
+    assert thread.start_calls == 1
+    assert worker.run_calls == 1
+    assert excluder.allowed_handles == [
+        window.native_window_handle,
+    ]
+    assert excluder.excluded_handles == []
+
+
+def test_controller_blocks_start_when_recording_location_changed() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    worker = FakeWorker(
+        auto_finish=False,
+    )
+    thread = FakeThread()
+    excluder = FakeWindowCaptureExcluder()
+    safety_guard = FakeRecordingSafetyGuard()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window_capture_excluder=excluder,
+        recording_safety_guard=safety_guard,
+        window=window,
+        worker_factory=lambda runtime_service: worker,
+        thread_factory=lambda: thread,
+    )
+
+    assert controller.set_recording_mode(
+        True,
+    ) is True
+
+    safety_guard.is_safe = False
+    safety_guard.message = (
+        "El analizador se superpone con Pocket Option."
+    )
+
+    controller.start()
+
+    assert thread.start_calls == 0
+    assert worker.run_calls == 0
+    assert window.error_messages[-1] == (
+        "El analizador se superpone con Pocket Option."
+    )
+
+
+def test_controller_rejects_evidence_mode_during_recording_mode() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+    excluder = FakeWindowCaptureExcluder()
+    safety_guard = FakeRecordingSafetyGuard()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window_capture_excluder=excluder,
+        recording_safety_guard=safety_guard,
+        window=window,
+    )
+
+    assert controller.set_recording_mode(
+        True,
+    ) is True
+
+    result = controller.set_evidence_mode(
+        True,
+    )
+
+    assert result is False
+    assert window.error_messages[-1] == (
+        "Sal del modo grabación antes de activar "
+        "el modo evidencia."
     )

@@ -240,6 +240,7 @@ class MainWindow(QMainWindow):
         on_voice_enabled_changed: BooleanWindowAction | None = None,
         on_test_voice_requested: WindowAction | None = None,
         on_evidence_mode_changed: BooleanResultWindowAction | None = None,
+        on_recording_mode_changed: BooleanResultWindowAction | None = None,
         on_session_result_registered: SessionResultWindowAction | None = None,
         on_session_result_undone: ConfirmedResultWindowAction | None = None,
         on_session_reset_requested: WindowAction | None = None,
@@ -256,6 +257,8 @@ class MainWindow(QMainWindow):
         self._voice_enabled = True
         self._on_evidence_mode_changed = on_evidence_mode_changed
         self._evidence_mode_enabled = False
+        self._on_recording_mode_changed = on_recording_mode_changed
+        self._recording_mode_enabled = False
         self._on_session_result_registered = on_session_result_registered
         self._on_session_result_undone = on_session_result_undone
         self._on_session_reset_requested = on_session_reset_requested
@@ -560,6 +563,18 @@ class MainWindow(QMainWindow):
             True,
         )
         self._evidence_mode_button.setChecked(
+            False,
+        )
+        self._recording_mode_button = QPushButton(
+            "Modo grabación",
+        )
+        self._recording_mode_button.setObjectName(
+            "recording_mode_button",
+        )
+        self._recording_mode_button.setCheckable(
+            True,
+        )
+        self._recording_mode_button.setChecked(
             False,
         )
 
@@ -945,20 +960,37 @@ class MainWindow(QMainWindow):
     def evidence_mode_enabled(self) -> bool:
         return self._evidence_mode_enabled
 
-
     @property
     def evidence_mode_button_text(self) -> str:
         return self._evidence_mode_button.text()
-
 
     @property
     def evidence_mode_button_checked(self) -> bool:
         return self._evidence_mode_button.isChecked()
 
-
     @property
     def evidence_mode_button_visible(self) -> bool:
         return not self._evidence_mode_button.isHidden()
+
+    @property
+    def recording_mode_enabled(self) -> bool:
+        return self._recording_mode_enabled
+
+
+    @property
+    def recording_mode_button_text(self) -> str:
+        return self._recording_mode_button.text()
+
+
+    @property
+    def recording_mode_button_checked(self) -> bool:
+        return self._recording_mode_button.isChecked()
+
+
+    @property
+    def recording_mode_button_visible(self) -> bool:
+        return not self._recording_mode_button.isHidden()
+    
 
     def set_running_state(
         self,
@@ -1188,6 +1220,9 @@ class MainWindow(QMainWindow):
             self._evidence_mode_button,
         )
         layout.addWidget(
+            self._recording_mode_button,
+        )
+        layout.addWidget(
             self._clear_history_button,
         )
         layout.addWidget(
@@ -1252,6 +1287,9 @@ class MainWindow(QMainWindow):
         )
         self._evidence_mode_button.clicked.connect(
             self._handle_evidence_mode_clicked,
+        )
+        self._recording_mode_button.clicked.connect(
+            self._handle_recording_mode_clicked,
         )
 
     def _apply_button_state(
@@ -1351,6 +1389,52 @@ class MainWindow(QMainWindow):
             "Restaurar protección"
             if enabled
             else "Modo evidencia",
+        )
+
+    def _handle_recording_mode_clicked(
+        self,
+    ) -> None:
+        requested_enabled = (
+            self._recording_mode_button.isChecked()
+        )
+
+        was_applied = True
+
+        if self._on_recording_mode_changed is not None:
+            was_applied = self._on_recording_mode_changed(
+                requested_enabled,
+            )
+
+        if not was_applied:
+            self._recording_mode_button.setChecked(
+                self._recording_mode_enabled,
+            )
+            return
+
+        self.set_recording_mode_enabled(
+            enabled=requested_enabled,
+        )
+
+    def set_recording_mode_enabled(
+        self,
+        enabled: bool,
+    ) -> None:
+        """
+        Sincroniza el estado visual del modo grabación.
+
+        El controlador puede usarlo para desactivar el modo cuando
+        detecte una superposición durante el análisis.
+        """
+
+        self._recording_mode_enabled = enabled
+
+        self._recording_mode_button.setChecked(
+            enabled,
+        )
+        self._recording_mode_button.setText(
+            "Salir de modo grabación"
+            if enabled
+            else "Modo grabación",
         )
 
     def _apply_signal_style(
@@ -1879,6 +1963,9 @@ class MainWindow(QMainWindow):
             True,
         )
         self._evidence_mode_button.setVisible(
+            True,
+        )
+        self._recording_mode_button.setVisible(
             True,
         )
 

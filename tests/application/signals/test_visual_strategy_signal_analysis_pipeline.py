@@ -1,5 +1,8 @@
 import numpy as np
 
+from pocket_option_analyzer.application.market import (
+    VisualIndicatorSnapshotContext,
+)
 from pocket_option_analyzer.application.signals import (
     VisualStrategySignalAnalysisPipeline,
 )
@@ -49,8 +52,13 @@ class FakeVisualIndicatorSnapshotBuilder:
     def __init__(
         self,
         result: IndicatorSnapshot | None,
+        snapshot_context: (
+            VisualIndicatorSnapshotContext
+            | None
+        ) = None,
     ) -> None:
         self.result = result
+        self.snapshot_context = snapshot_context
         self.received_series = None
         self.received_profile = None
 
@@ -180,6 +188,12 @@ def test_analyze_generates_signal_from_visual_indicators() -> None:
     )
     indicator_builder = FakeVisualIndicatorSnapshotBuilder(
         result=indicators,
+        snapshot_context=VisualIndicatorSnapshotContext(
+            visible_candle_count=2,
+            ohlc_candle_count=1,
+            geometry_valid_count=1,
+            geometry_total_count=1,
+        ),
     )
     signal_generator = FakeStrategySignalGenerator(
         result=MarketSignal(
@@ -208,9 +222,10 @@ def test_analyze_generates_signal_from_visual_indicators() -> None:
     assert signal_generator.received_analysis is analysis
     assert signal_generator.received_indicators is indicators
     assert (
-        "Auditoría Stoch ventana: "
+        "Auditoría Stoch snapshot: "
         "visibles=2 | OHLC cerradas=1 | "
-        "K-periodo=5 | geometría=1/1"
+        "K-periodo=5 | geometría=1/1 | "
+        "consistencia=OK"
         in result.reason
     )
     assert (
@@ -278,3 +293,80 @@ def test_analyze_returns_neutral_signal_when_indicators_are_missing() -> None:
     )
     assert "Minimum visible required: 14." in result.reason
     assert "Minimum closed required: 13." in result.reason
+
+
+def test_audit_does_not_mix_current_capture_with_cached_context() -> None:
+
+    original_series = _visual_series()
+
+    current_series = CandleSeries(
+        candles=(
+            *original_series.candles,
+            ClassifiedCandle(
+                candidate=CandleCandidate(
+                    x=30,
+                    y=30,
+                    width=5,
+                    height=20,
+                    area=100,
+                    geometry=CandleGeometry(
+                        high_y=30,
+                        body_top_y=35,
+                        body_bottom_y=44,
+                        low_y=49,
+                    ),
+                ),
+                candle_type=CandleType.BULLISH,
+            ),
+        ),
+    )
+
+    analysis = MarketAnalysis(
+        series=current_series,
+        trend=TrendDirection.BULLISH,
+    )
+
+    pipeline = VisualStrategySignalAnalysisPipeline(
+        market_analysis_pipeline=FakeMarketAnalysisPipeline(
+            result=analysis,
+        ),
+        indicator_snapshot_builder=(
+            FakeVisualIndicatorSnapshotBuilder(
+                result=_indicators(),
+                snapshot_context=(
+                    VisualIndicatorSnapshotContext(
+                        visible_candle_count=2,
+                        ohlc_candle_count=1,
+                        geometry_valid_count=1,
+                        geometry_total_count=1,
+                    )
+                ),
+            )
+        ),
+        signal_generator=FakeStrategySignalGenerator(
+            result=MarketSignal.neutral(
+                reason="Waiting.",
+            ),
+        ),
+        profile=StrategyProfile.otc_precision_10s(),
+    )
+
+    result = pipeline.analyze(
+        image=np.zeros(
+            (100, 100, 3),
+            dtype=np.uint8,
+        ),
+    )
+
+    assert "Velas detectadas: 3" in result.reason
+
+    assert (
+        "Auditoría Stoch snapshot: "
+        "visibles=2 | OHLC cerradas=1"
+        in result.reason
+    )
+
+    assert (
+        "Auditoría Stoch snapshot: visibles=3"
+        not in result.reason
+    )
