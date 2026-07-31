@@ -6,6 +6,9 @@ from datetime import datetime
 from pocket_option_analyzer.application.market.candle_interval_indicator_cache import (
     CandleIntervalIndicatorCache,
 )
+from pocket_option_analyzer.application.market.candle_interval_indicator_cache_status import (
+    CandleIntervalIndicatorCacheStatus,
+)
 from pocket_option_analyzer.application.market.visual_indicator_snapshot_context import (
     VisualIndicatorSnapshotContext,
 )
@@ -84,6 +87,22 @@ class VisualIndicatorSnapshotBuilder:
         """
 
         return self._snapshot_context
+
+    @property
+    def snapshot_timing_status(
+        self,
+    ) -> CandleIntervalIndicatorCacheStatus | None:
+        """
+        Estado temporal del snapshot devuelto en la última ejecución.
+
+        Permite diferenciar entre:
+
+        - snapshot perteneciente a la vela actual;
+        - snapshot anterior conservado durante estabilización;
+        - snapshot anterior conservado por fallo de actualización.
+        """
+
+        return self._indicator_cache.last_status
 
     def build(
         self,

@@ -1,10 +1,16 @@
+from datetime import datetime
+
 import numpy as np
 
 from pocket_option_analyzer.application.market import (
+    CandleIntervalIndicatorCacheStatus,
     VisualIndicatorSnapshotContext,
 )
 from pocket_option_analyzer.application.signals import (
     VisualStrategySignalAnalysisPipeline,
+)
+from pocket_option_analyzer.application.timing import (
+    CandleIntervalKey,
 )
 from pocket_option_analyzer.domain.indicators import (
     EmaSnapshot,
@@ -56,11 +62,16 @@ class FakeVisualIndicatorSnapshotBuilder:
             VisualIndicatorSnapshotContext
             | None
         ) = None,
+        snapshot_timing_status: (
+            CandleIntervalIndicatorCacheStatus
+            | None
+        ) = None,
     ) -> None:
         self.result = result
         self.snapshot_context = snapshot_context
         self.received_series = None
         self.received_profile = None
+        self.snapshot_timing_status = snapshot_timing_status
 
     def build(
         self,
@@ -369,4 +380,148 @@ def test_audit_does_not_mix_current_capture_with_cached_context() -> None:
     assert (
         "Auditoría Stoch snapshot: visibles=3"
         not in result.reason
+    )
+
+
+def _timing_status(
+    requested_second: int,
+    cached_second: int,
+    is_settling: bool,
+) -> CandleIntervalIndicatorCacheStatus:
+
+    requested_key = CandleIntervalKey(
+        started_at=datetime(
+            2026,
+            7,
+            31,
+            11,
+            9,
+            requested_second,
+        ),
+        duration_seconds=30,
+    )
+
+    cached_key = CandleIntervalKey(
+        started_at=datetime(
+            2026,
+            7,
+            31,
+            11,
+            9,
+            cached_second,
+        ),
+        duration_seconds=30,
+    )
+
+    return CandleIntervalIndicatorCacheStatus(
+        requested_key=requested_key,
+        cached_key=cached_key,
+        has_snapshot=True,
+        is_current=False,
+        is_settling=is_settling,
+    )
+
+
+def test_analyze_blocks_actionable_signal_while_snapshot_is_settling() -> None:
+
+    signal_generator = FakeStrategySignalGenerator(
+        result=MarketSignal(
+            direction=SignalDirection.PUT,
+            strength=SignalStrength.HIGH,
+            reason="Should not be emitted.",
+        ),
+    )
+
+    pipeline = VisualStrategySignalAnalysisPipeline(
+        market_analysis_pipeline=FakeMarketAnalysisPipeline(
+            result=_market_analysis(),
+        ),
+        indicator_snapshot_builder=(
+            FakeVisualIndicatorSnapshotBuilder(
+                result=_indicators(),
+                snapshot_context=(
+                    VisualIndicatorSnapshotContext(
+                        visible_candle_count=2,
+                        ohlc_candle_count=1,
+                        geometry_valid_count=1,
+                        geometry_total_count=1,
+                    )
+                ),
+                snapshot_timing_status=_timing_status(
+                    requested_second=30,
+                    cached_second=0,
+                    is_settling=True,
+                ),
+            )
+        ),
+        signal_generator=signal_generator,
+        profile=StrategyProfile.otc_precision_10s(),
+    )
+
+    result = pipeline.analyze(
+        image=np.zeros(
+            (100, 100, 3),
+            dtype=np.uint8,
+        ),
+    )
+
+    assert result.direction is SignalDirection.NONE
+    assert result.is_actionable is False
+    assert signal_generator.was_called is False
+    assert "ESPERANDO_SNAPSHOT_NUEVO" in result.reason
+    assert "intervalo solicitado=11:09:30" in result.reason
+    assert "intervalo almacenado=11:09:00" in result.reason
+    assert "estado=ESTABILIZANDO" in result.reason
+    assert "Entrada: ESPERAR" in result.reason
+
+
+def test_analyze_blocks_actionable_signal_when_snapshot_is_outdated() -> None:
+
+    signal_generator = FakeStrategySignalGenerator(
+        result=MarketSignal(
+            direction=SignalDirection.CALL,
+            strength=SignalStrength.HIGH,
+            reason="Should not be emitted.",
+        ),
+    )
+
+    pipeline = VisualStrategySignalAnalysisPipeline(
+        market_analysis_pipeline=FakeMarketAnalysisPipeline(
+            result=_market_analysis(),
+        ),
+        indicator_snapshot_builder=(
+            FakeVisualIndicatorSnapshotBuilder(
+                result=_indicators(),
+                snapshot_context=(
+                    VisualIndicatorSnapshotContext(
+                        visible_candle_count=2,
+                        ohlc_candle_count=1,
+                        geometry_valid_count=1,
+                        geometry_total_count=1,
+                    )
+                ),
+                snapshot_timing_status=_timing_status(
+                    requested_second=30,
+                    cached_second=0,
+                    is_settling=False,
+                ),
+            )
+        ),
+        signal_generator=signal_generator,
+        profile=StrategyProfile.otc_precision_10s(),
+    )
+
+    result = pipeline.analyze(
+        image=np.zeros(
+            (100, 100, 3),
+            dtype=np.uint8,
+        ),
+    )
+
+    assert result.direction is SignalDirection.NONE
+    assert signal_generator.was_called is False
+    assert "estado=DESACTUALIZADO" in result.reason
+    assert (
+        "Estado: esperando snapshot nuevo"
+        in result.reason
     )

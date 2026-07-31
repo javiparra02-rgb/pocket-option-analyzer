@@ -9,6 +9,7 @@ from pocket_option_analyzer.domain.signals import (
     MarketSignal,
     SignalDirection,
     SignalRecord,
+    SignalRecordDisposition,
     SignalStrength,
 )
 from pocket_option_analyzer.presentation.gui import (
@@ -163,6 +164,7 @@ class FakeWindow:
         self.accept_signal = accept_signal
         self.native_window_handle = 98765
         self.recording_mode_states: list[bool] = []
+        self.diagnostic_view_models = []
 
     def set_running_state(
         self,
@@ -211,6 +213,14 @@ class FakeWindow:
             enabled,
         )
 
+    def update_diagnostics_only(
+        self,
+        view_model,
+    ) -> None:
+        self.diagnostic_view_models.append(
+            view_model,
+        )
+
 
 class FakeVoiceNotifier:
 
@@ -218,6 +228,7 @@ class FakeVoiceNotifier:
         self.view_models = []
         self.enabled_changes: list[bool] = []
         self.test_voice_calls = 0
+        self.reset_calls = 0
 
     def notify(
         self,
@@ -239,6 +250,11 @@ class FakeVoiceNotifier:
         self,
     ) -> None:
         self.test_voice_calls += 1
+
+    def reset(
+        self,
+    ) -> None:
+        self.reset_calls += 1
 
 
 class FakeWindowCaptureExcluder:
@@ -1162,3 +1178,114 @@ def test_controller_rejects_evidence_mode_during_recording_mode() -> None:
         "Sal del modo grabación antes de activar "
         "el modo evidencia."
     )
+
+
+def test_controller_suppresses_duplicate_side_effects() -> None:
+
+    interval_started_at = datetime(
+        2026,
+        7,
+        31,
+        10,
+        30,
+        0,
+        tzinfo=timezone.utc,
+    )
+
+    duplicate_record = SignalRecord(
+        signal=MarketSignal(
+            direction=SignalDirection.CALL,
+            strength=SignalStrength.HIGH,
+            reason="Repeated confirmation.",
+        ),
+        created_at=datetime(
+            2026,
+            7,
+            31,
+            10,
+            30,
+            15,
+            tzinfo=timezone.utc,
+        ),
+        source="controller_test",
+        disposition=(
+            SignalRecordDisposition.DUPLICATE_SUPPRESSED
+        ),
+        candle_interval_started_at=interval_started_at,
+    )
+
+    runtime = FakeRuntimeService(
+        record=duplicate_record,
+    )
+    window = FakeWindow()
+    voice = FakeVoiceNotifier()
+    manual_session = FakeManualResultSession()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        voice_notifier=voice,
+        manual_result_session=manual_session,
+        window=window,
+    )
+
+    controller.run_once()
+
+    assert window.view_models == []
+    assert len(window.diagnostic_view_models) == 1
+    assert voice.view_models == []
+    assert manual_session.tracked_records == []
+
+
+def test_controller_resets_voice_for_new_accepted_interval() -> None:
+
+    interval_started_at = datetime(
+        2026,
+        7,
+        31,
+        10,
+        30,
+        30,
+        tzinfo=timezone.utc,
+    )
+
+    accepted_record = SignalRecord(
+        signal=MarketSignal(
+            direction=SignalDirection.CALL,
+            strength=SignalStrength.HIGH,
+            reason="New candle confirmation.",
+        ),
+        created_at=datetime(
+            2026,
+            7,
+            31,
+            10,
+            30,
+            35,
+            tzinfo=timezone.utc,
+        ),
+        source="controller_test",
+        disposition=(
+            SignalRecordDisposition.ACTIONABLE_ACCEPTED
+        ),
+        candle_interval_started_at=interval_started_at,
+    )
+
+    runtime = FakeRuntimeService(
+        record=accepted_record,
+    )
+    window = FakeWindow()
+    voice = FakeVoiceNotifier()
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        voice_notifier=voice,
+        window=window,
+    )
+
+    controller.run_once()
+
+    assert voice.reset_calls == 1
+    assert len(voice.view_models) == 1
+    assert voice.view_models[0].is_actionable is True

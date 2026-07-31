@@ -1,3 +1,7 @@
+from .actionable_signal_gate import (
+    ActionableSignalGate,
+    ActionableSignalGateDecision,
+)
 from .contracts import SignalRecordWriter
 from .signal_analysis_pipeline import SignalAnalysisPipeline
 from .signal_recorder import SignalRecorder
@@ -11,6 +15,8 @@ from .visual_strategy_signal_analysis_pipeline import (
 )
 
 __all__ = [
+    "ActionableSignalGate",
+    "ActionableSignalGateDecision",
     "SignalAnalysisPipeline",
     "SignalRecorder",
     "SignalRecordingPipeline",

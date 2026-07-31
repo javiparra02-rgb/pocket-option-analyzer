@@ -232,3 +232,52 @@ def test_cache_preserves_last_valid_snapshot_when_new_build_fails() -> None:
     )
 
     assert result is first_snapshot
+
+
+def test_cache_reports_settling_status_for_previous_snapshot() -> None:
+
+    cache = CandleIntervalIndicatorCache(
+        settling_seconds=2.0,
+    )
+
+    first_snapshot = _snapshot(
+        value=50.0,
+    )
+
+    cache.resolve(
+        observed_at=datetime(
+            2026,
+            7,
+            31,
+            11,
+            9,
+            20,
+        ),
+        snapshot_factory=lambda: first_snapshot,
+    )
+
+    result = cache.resolve(
+        observed_at=datetime(
+            2026,
+            7,
+            31,
+            11,
+            9,
+            30,
+            500000,
+        ),
+        snapshot_factory=lambda: _snapshot(
+            value=70.0,
+        ),
+    )
+
+    status = cache.last_status
+
+    assert result is first_snapshot
+    assert status is not None
+    assert status.state_label == "ESTABILIZANDO"
+    assert status.is_current is False
+    assert status.allows_actionable_signals is False
+    assert status.requested_key.started_at.second == 30
+    assert status.cached_key is not None
+    assert status.cached_key.started_at.second == 0

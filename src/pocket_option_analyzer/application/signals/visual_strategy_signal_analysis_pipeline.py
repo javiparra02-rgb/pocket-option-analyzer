@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 from pocket_option_analyzer.application.market import (
+    CandleIntervalIndicatorCacheStatus,
     VisualEntryContextAnalyzer,
     VisualIndicatorSnapshotBuilder,
     VisualIndicatorSnapshotContext,
@@ -90,6 +91,45 @@ class VisualStrategySignalAnalysisPipeline:
                 ),
             )
 
+        snapshot_timing_status = (
+            self._resolve_snapshot_timing_status()
+        )
+
+        if (
+            snapshot_timing_status is not None
+            and not snapshot_timing_status.allows_actionable_signals
+        ):
+            visual_diagnostics_line = (
+                self._visual_diagnostics_line(
+                    market_analysis=market_analysis,
+                    signal_state_label=(
+                        "ESPERANDO_SNAPSHOT_NUEVO"
+                    ),
+                )
+            )
+
+            indicator_diagnostics_line = (
+                self._indicator_diagnostics_line(
+                    indicators=indicators,
+                    snapshot_context=(
+                        self._indicator_snapshot_builder.snapshot_context
+                    ),
+                    snapshot_timing_status=(
+                        snapshot_timing_status
+                    ),
+                )
+            )
+
+            return MarketSignal.neutral(
+                reason=(
+                    f"{visual_diagnostics_line}\n"
+                    f"{indicator_diagnostics_line}\n"
+                    f"{self._snapshot_timing_line(
+                        status=snapshot_timing_status,
+                    )}"
+                ),
+            )
+
         signal = self._signal_generator.generate(
             analysis=market_analysis,
             indicators=indicators,
@@ -111,6 +151,9 @@ class VisualStrategySignalAnalysisPipeline:
                     indicators=indicators,
                     snapshot_context=(
                         self._indicator_snapshot_builder.snapshot_context
+                    ),
+                    snapshot_timing_status=(
+                        snapshot_timing_status
                     ),
                 )}\n"
                 f"{signal.reason}"
@@ -295,7 +338,20 @@ class VisualStrategySignalAnalysisPipeline:
             VisualIndicatorSnapshotContext
             | None
         ),
+        snapshot_timing_status: (
+            CandleIntervalIndicatorCacheStatus
+            | None
+        ) = None,
     ) -> str:
+
+        indicator_state = (
+            "esperando snapshot nuevo"
+            if (
+                snapshot_timing_status is not None
+                and not snapshot_timing_status.is_current
+            )
+            else "esperando confirmación de estrategia"
+        )
 
         return (
             "[indicator_diagnostics] "
@@ -307,8 +363,57 @@ class VisualStrategySignalAnalysisPipeline:
                 indicators=indicators,
                 snapshot_context=snapshot_context,
             )}\n"
-            "  Estado: esperando confirmación de estrategia"
+            f"  Estado: {indicator_state}"
         )
+
+
+    def _resolve_snapshot_timing_status(
+        self,
+    ) -> CandleIntervalIndicatorCacheStatus | None:
+        """
+        Obtiene el estado temporal sin romper fakes o adaptadores antiguos.
+        """
+
+        return getattr(
+            self._indicator_snapshot_builder,
+            "snapshot_timing_status",
+            None,
+        )
+
+
+    def _snapshot_timing_line(
+        self,
+        status: CandleIntervalIndicatorCacheStatus,
+    ) -> str:
+        """
+        Informa por qué una CALL o PUT está temporalmente bloqueada.
+        """
+
+        requested_label = (
+            status.requested_key.started_at.strftime(
+                "%H:%M:%S",
+            )
+        )
+
+        cached_label = (
+            status.cached_key.started_at.strftime(
+                "%H:%M:%S",
+            )
+            if status.cached_key is not None
+            else "NO_DISPONIBLE"
+        )
+
+        return (
+            "[snapshot_timing] Snapshot temporal:\n"
+            "  intervalo solicitado="
+            f"{requested_label}\n"
+            "  intervalo almacenado="
+            f"{cached_label}\n"
+            f"  estado={status.state_label}\n"
+            "  Entrada: ESPERAR — el snapshot de indicadores "
+            "todavía no pertenece a la vela actual."
+        )
+
 
     def _ema_label(
         self,

@@ -14,7 +14,10 @@ from pocket_option_analyzer.application.session_results import (
 from pocket_option_analyzer.domain.session_results import (
     ManualSignalResult,
 )
-from pocket_option_analyzer.domain.signals import SignalRecord
+from pocket_option_analyzer.domain.signals import (
+    SignalRecord,
+    SignalRecordDisposition,
+)
 from pocket_option_analyzer.presentation.gui.analysis_worker import (
     AnalysisWorker,
 )
@@ -527,8 +530,26 @@ class MainWindowController(QObject):
             record=record,
         )
 
-        was_counted_as_new_signal = self._window.update_signal(
-            view_model=view_model,
+        if record.is_duplicate_suppressed:
+            update_diagnostics_only = getattr(
+                self._window,
+                "update_diagnostics_only",
+                None,
+            )
+
+            if callable(
+                update_diagnostics_only,
+            ):
+                update_diagnostics_only(
+                    view_model,
+                )
+
+            return
+
+        was_counted_as_new_signal = (
+            self._window.update_signal(
+                view_model=view_model,
+            )
         )
 
         if (
@@ -539,10 +560,27 @@ class MainWindowController(QObject):
                 record=record,
             )
 
-        if self._voice_notifier is not None:
-            self._voice_notifier.notify(
-                view_model=view_model,
+        if self._voice_notifier is None:
+            return
+
+        if (
+            record.disposition
+            is SignalRecordDisposition.ACTIONABLE_ACCEPTED
+        ):
+            reset_voice_state = getattr(
+                self._voice_notifier,
+                "reset",
+                None,
             )
+
+            if callable(
+                reset_voice_state,
+            ):
+                reset_voice_state()
+
+        self._voice_notifier.notify(
+            view_model=view_model,
+        )
 
     @Slot(str)
     def _handle_error_occurred(

@@ -6,6 +6,7 @@ from pocket_option_analyzer.domain.signals import (
     MarketSignal,
     SignalHistory,
     SignalRecord,
+    SignalRecordDisposition,
 )
 
 
@@ -29,17 +30,32 @@ class SignalRecorder:
         signal: MarketSignal,
         created_at: datetime | None = None,
         source: str = "strategy_signal_analysis",
+        disposition: SignalRecordDisposition = (
+            SignalRecordDisposition.OBSERVED
+        ),
+        candle_interval_started_at: datetime | None = None,
     ) -> SignalRecord:
         """
-        Crea un registro para una señal y lo agrega al historial.
+        Crea un registro y lo agrega al historial.
         """
 
         record = SignalRecord(
             signal=signal,
-            created_at=created_at or datetime.now(timezone.utc),
+            created_at=(
+                created_at
+                or datetime.now(
+                    timezone.utc,
+                )
+            ),
             source=source,
+            disposition=disposition,
+            candle_interval_started_at=(
+                candle_interval_started_at
+            ),
         )
 
-        self._history.append(record)
+        self._history.append(
+            record,
+        )
 
         return record

@@ -480,3 +480,43 @@ def test_snapshot_context_remains_bound_to_cached_snapshot() -> None:
     assert first_context is not None
     assert first_context.visible_candle_count == 2
     assert first_context.ohlc_candle_count == 1
+
+
+def test_builder_exposes_current_snapshot_timing_status() -> None:
+
+    now_provider = MutableNowProvider(
+        current=datetime(
+            2026,
+            7,
+            31,
+            11,
+            9,
+            35,
+        ),
+    )
+
+    builder = VisualIndicatorSnapshotBuilder(
+        price_series_builder=FakePriceSeriesBuilder(
+            result=_price_series(),
+        ),
+        indicator_snapshot_builder=(
+            FakeIndicatorSnapshotBuilder(
+                result=_indicator_snapshot(),
+            )
+        ),
+        now_provider=now_provider,
+    )
+
+    result = builder.build(
+        series=_visual_series(),
+        profile=StrategyProfile.otc_precision_10s(),
+    )
+
+    status = builder.snapshot_timing_status
+
+    assert result is not None
+    assert status is not None
+    assert status.state_label == "ACTUAL"
+    assert status.allows_actionable_signals is True
+    assert status.requested_key.started_at.second == 30
+    assert status.cached_key == status.requested_key

@@ -1117,6 +1117,48 @@ class MainWindow(QMainWindow):
             > previous_session_total
         )
 
+
+    def update_diagnostics_only(
+        self,
+        view_model: SignalRecordViewModel,
+    ) -> None:
+        """
+        Actualiza únicamente la información técnica del análisis.
+
+        Se utiliza para señales duplicadas suprimidas. No modifica:
+
+        - señal principal;
+        - alerta de entrada;
+        - resumen operativo;
+        - checklist;
+        - historial visible;
+        - contador;
+        - resultados manuales.
+        """
+
+        self._visual_diagnostics_label.setText(
+            view_model.visual_diagnostics_label,
+        )
+        self._indicator_diagnostics_label.setText(
+            view_model.indicator_diagnostics_label,
+        )
+        self._reason_text.setPlainText(
+            f"Motivo: {view_model.reason}",
+        )
+        self._reason_text.moveCursor(
+            QTextCursor.MoveOperation.Start,
+        )
+        self._reason_text.verticalScrollBar().setValue(
+            0,
+        )
+        self._source_label.setText(
+            f"Origen: {view_model.source}",
+        )
+        self._created_at_label.setText(
+            f"Fecha: {view_model.created_at_label}",
+        )
+    
+
     def _setup_layout(self) -> None:
         content_widget = QWidget()
         layout = QVBoxLayout()

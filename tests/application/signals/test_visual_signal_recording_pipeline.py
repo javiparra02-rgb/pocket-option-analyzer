@@ -11,6 +11,7 @@ from pocket_option_analyzer.domain.signals import (
     SignalDirection,
     SignalHistory,
     SignalRecord,
+    SignalRecordDisposition,
     SignalStrength,
 )
 
@@ -94,3 +95,116 @@ def test_analyze_and_record_writes_visual_signal_when_writer_is_configured() -> 
     assert writer.records == [
         record,
     ]
+
+
+def test_pipeline_suppresses_second_actionable_signal_in_same_candle() -> None:
+
+    history = SignalHistory()
+    writer = FakeSignalRecordWriter()
+
+    pipeline = VisualSignalRecordingPipeline(
+        analysis_pipeline=(
+            FakeVisualStrategySignalAnalysisPipeline()
+        ),
+        recorder=SignalRecorder(
+            history,
+        ),
+        record_writer=writer,
+    )
+
+    first = pipeline.analyze_and_record(
+        image=np.zeros(
+            (100, 100, 3),
+            dtype=np.uint8,
+        ),
+        created_at=datetime(
+            2026,
+            7,
+            31,
+            10,
+            30,
+            5,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    duplicate = pipeline.analyze_and_record(
+        image=np.zeros(
+            (100, 100, 3),
+            dtype=np.uint8,
+        ),
+        created_at=datetime(
+            2026,
+            7,
+            31,
+            10,
+            30,
+            20,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    assert (
+        first.disposition
+        is SignalRecordDisposition.ACTIONABLE_ACCEPTED
+    )
+    assert first.is_actionable is True
+
+    assert (
+        duplicate.disposition
+        is SignalRecordDisposition.DUPLICATE_SUPPRESSED
+    )
+    assert duplicate.signal.direction is SignalDirection.CALL
+    assert duplicate.is_actionable is False
+
+    assert writer.records == [
+        first,
+        duplicate,
+    ]
+
+
+def test_pipeline_accepts_same_direction_in_next_candle() -> None:
+
+    pipeline = VisualSignalRecordingPipeline(
+        analysis_pipeline=(
+            FakeVisualStrategySignalAnalysisPipeline()
+        ),
+        recorder=SignalRecorder(
+            SignalHistory(),
+        ),
+    )
+
+    first = pipeline.analyze_and_record(
+        image=np.zeros(
+            (100, 100, 3),
+            dtype=np.uint8,
+        ),
+        created_at=datetime(
+            2026,
+            7,
+            31,
+            10,
+            30,
+            20,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    second = pipeline.analyze_and_record(
+        image=np.zeros(
+            (100, 100, 3),
+            dtype=np.uint8,
+        ),
+        created_at=datetime(
+            2026,
+            7,
+            31,
+            10,
+            30,
+            35,
+            tzinfo=timezone.utc,
+        ),
+    )
+
+    assert first.is_actionable is True
+    assert second.is_actionable is True
