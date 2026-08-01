@@ -26,6 +26,10 @@ from pocket_option_analyzer.presentation.signals.session_risk_presenter import (
 from pocket_option_analyzer.presentation.signals.session_signal_counter import (
     SessionSignalCounter,
 )
+from pocket_option_analyzer.presentation.signals.signal_gate_audit_presenter import (
+    SignalGateAuditPresenter,
+    SignalGateAuditViewModel,
+)
 from pocket_option_analyzer.presentation.signals.voice_signal_notifier import (
     SpeechEngine,
     VoiceSignalNotifier,
@@ -46,6 +50,8 @@ __all__ = [
     "SessionSignalCounter",
     "SessionRiskPresenter",
     "SessionRiskViewModel",
+    "SignalGateAuditPresenter",
+    "SignalGateAuditViewModel",
     "SpeechEngine",
     "VoiceSignalNotifier",
     "SessionResult",

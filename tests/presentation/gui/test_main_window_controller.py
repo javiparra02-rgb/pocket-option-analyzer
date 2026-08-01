@@ -165,6 +165,7 @@ class FakeWindow:
         self.native_window_handle = 98765
         self.recording_mode_states: list[bool] = []
         self.diagnostic_view_models = []
+        self.gate_audit_view_models = []
 
     def set_running_state(
         self,
@@ -218,6 +219,14 @@ class FakeWindow:
         view_model,
     ) -> None:
         self.diagnostic_view_models.append(
+            view_model,
+        )
+
+    def update_gate_audit(
+        self,
+        view_model,
+    ) -> None:
+        self.gate_audit_view_models.append(
             view_model,
         )
 
@@ -1235,6 +1244,12 @@ def test_controller_suppresses_duplicate_side_effects() -> None:
     assert len(window.diagnostic_view_models) == 1
     assert voice.view_models == []
     assert manual_session.tracked_records == []
+    assert len(window.gate_audit_view_models) == 1
+
+    assert (
+        "1 duplicada suprimida"
+        in window.gate_audit_view_models[-1].text
+    )
 
 
 def test_controller_resets_voice_for_new_accepted_interval() -> None:
@@ -1289,3 +1304,9 @@ def test_controller_resets_voice_for_new_accepted_interval() -> None:
     assert voice.reset_calls == 1
     assert len(voice.view_models) == 1
     assert voice.view_models[0].is_actionable is True
+    assert len(window.gate_audit_view_models) == 1
+
+    assert (
+        "1 aceptada"
+        in window.gate_audit_view_models[-1].text
+    )

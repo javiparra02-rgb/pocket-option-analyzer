@@ -11,6 +11,9 @@ from pocket_option_analyzer.application.runtime import (
 from pocket_option_analyzer.application.session_results import (
     ManualSignalResultSessionService,
 )
+from pocket_option_analyzer.application.signals import (
+    SignalGateAuditTracker,
+)
 from pocket_option_analyzer.domain.session_results import (
     ManualSignalResult,
 )
@@ -24,6 +27,7 @@ from pocket_option_analyzer.presentation.gui.analysis_worker import (
 from pocket_option_analyzer.presentation.gui.main_window import MainWindow
 from pocket_option_analyzer.presentation.signals import (
     SessionResult,
+    SignalGateAuditPresenter,
     SignalRecordPresenter,
     SignalRecordViewModel,
 )
@@ -185,6 +189,8 @@ class MainWindowController(QObject):
         self,
         runtime_service: AnalysisRuntimeService,
         presenter: SignalRecordPresenter | None = None,
+        signal_gate_audit_tracker: SignalGateAuditTracker | None = None,
+        signal_gate_audit_presenter: SignalGateAuditPresenter | None = None,
         voice_notifier: VoiceNotifierLike | None = None,
         manual_result_session: ManualSignalResultSessionService | None = None,
         window_capture_excluder: WindowCaptureExcluderLike | None = None,
@@ -198,6 +204,15 @@ class MainWindowController(QObject):
 
         self._runtime_service = runtime_service
         self._presenter = presenter or SignalRecordPresenter()
+        self._signal_gate_audit_tracker = (
+            signal_gate_audit_tracker
+            or SignalGateAuditTracker()
+        )
+
+        self._signal_gate_audit_presenter = (
+            signal_gate_audit_presenter
+            or SignalGateAuditPresenter()
+        )
         self._voice_notifier = voice_notifier
         self._manual_result_session = manual_result_session
         self._window_capture_excluder = window_capture_excluder
@@ -530,6 +545,16 @@ class MainWindowController(QObject):
             record=record,
         )
 
+        gate_audit_snapshot = (
+            self._signal_gate_audit_tracker.track(
+                record=record,
+            )
+        )
+
+        self._update_gate_audit(
+            snapshot=gate_audit_snapshot,
+        )
+
         if record.is_duplicate_suppressed:
             update_diagnostics_only = getattr(
                 self._window,
@@ -581,6 +606,40 @@ class MainWindowController(QObject):
         self._voice_notifier.notify(
             view_model=view_model,
         )
+
+
+    def _update_gate_audit(
+        self,
+        snapshot,
+    ) -> None:
+        """
+        Actualiza la auditoría del gate cuando la ventana la soporta.
+
+        getattr conserva compatibilidad con fakes y adaptadores
+        anteriores utilizados por los tests.
+        """
+
+        update_gate_audit = getattr(
+            self._window,
+            "update_gate_audit",
+            None,
+        )
+
+        if not callable(
+            update_gate_audit,
+        ):
+            return
+
+        gate_view_model = (
+            self._signal_gate_audit_presenter.present(
+                snapshot=snapshot,
+            )
+        )
+
+        update_gate_audit(
+            gate_view_model,
+        )
+
 
     @Slot(str)
     def _handle_error_occurred(

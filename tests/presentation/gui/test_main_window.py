@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QApplication, QPushButton
 from pocket_option_analyzer.presentation.gui import MainWindow
 from pocket_option_analyzer.presentation.signals import (
     SessionResult,
+    SignalGateAuditViewModel,
     SignalRecordViewModel,
 )
 
@@ -2863,3 +2864,37 @@ def test_main_window_keeps_recording_button_visible_in_compact_mode() -> None:
 
     assert window.is_compact_mode_enabled is True
     assert window.recording_mode_button_visible is True
+
+
+def test_main_window_updates_gate_audit_and_keeps_it_in_compact_mode() -> None:
+
+    _application()
+
+    window = MainWindow()
+
+    window.update_gate_audit(
+        SignalGateAuditViewModel(
+            text=(
+                "Gate S30 (ejecución): "
+                "1 aceptada | "
+                "2 duplicadas suprimidas | "
+                "último: PUT suprimida | "
+                "vela 10:30:00"
+            ),
+            css_class="gate-suppressed",
+        )
+    )
+
+    assert window.gate_audit_text == (
+        "Gate S30 (ejecución): "
+        "1 aceptada | "
+        "2 duplicadas suprimidas | "
+        "último: PUT suprimida | "
+        "vela 10:30:00"
+    )
+    assert "#b45309" in window.gate_audit_style
+
+    window._compact_mode_button.click()
+
+    assert window.is_compact_mode_enabled is True
+    assert window.gate_audit_visible is True

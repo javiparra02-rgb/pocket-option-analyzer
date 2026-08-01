@@ -27,6 +27,7 @@ from pocket_option_analyzer.presentation.signals import (
     SessionResultTracker,
     SessionRiskPresenter,
     SessionSignalCounter,
+    SignalGateAuditViewModel,
     SignalRecordViewModel,
 )
 
@@ -160,6 +161,33 @@ class MainWindow(QMainWindow):
         "color: #374151; "
         "background-color: #f8f9fa; "
         "border: 1px solid #c7cdd4; "
+        "border-radius: 4px; "
+        "padding: 4px;"
+    )
+
+    GATE_AUDIT_NEUTRAL_STYLE = (
+        "font-weight: bold; "
+        "color: #374151; "
+        "background-color: #f8f9fa; "
+        "border: 1px solid #c7cdd4; "
+        "border-radius: 4px; "
+        "padding: 4px;"
+    )
+
+    GATE_AUDIT_ACCEPTED_STYLE = (
+        "font-weight: bold; "
+        "color: #0f9d58; "
+        "background-color: #eefaf3; "
+        "border: 1px solid #0f9d58; "
+        "border-radius: 4px; "
+        "padding: 4px;"
+    )
+
+    GATE_AUDIT_SUPPRESSED_STYLE = (
+        "font-weight: bold; "
+        "color: #b45309; "
+        "background-color: #fff7ed; "
+        "border: 1px solid #f59e0b; "
         "border-radius: 4px; "
         "padding: 4px;"
     )
@@ -353,6 +381,18 @@ class MainWindow(QMainWindow):
         )
         self._session_counter_label = QLabel(
             "Sesión: 0 CALL | 0 PUT | 0 total",
+        )
+        self._gate_audit_label = QLabel(
+            "Gate S30 (ejecución): "
+            "0 aceptadas | "
+            "0 duplicadas suprimidas | "
+            "último: -",
+        )
+        self._gate_audit_label.setWordWrap(
+            True,
+        )
+        self._gate_audit_label.setStyleSheet(
+            self.GATE_AUDIT_NEUTRAL_STYLE,
         )
         initial_session_risk = self._session_risk_presenter.present(
             total_confirmed_signals=0,
@@ -815,6 +855,26 @@ class MainWindow(QMainWindow):
         return not self._session_counter_label.isHidden()
 
     @property
+    def gate_audit_text(
+        self,
+    ) -> str:
+        return self._gate_audit_label.text()
+
+
+    @property
+    def gate_audit_visible(
+        self,
+    ) -> bool:
+        return not self._gate_audit_label.isHidden()
+
+
+    @property
+    def gate_audit_style(
+        self,
+    ) -> str:
+        return self._gate_audit_label.styleSheet()
+
+    @property
     def session_call_count(self) -> int:
         return self._session_signal_counter.call_count
 
@@ -1157,6 +1217,38 @@ class MainWindow(QMainWindow):
         self._created_at_label.setText(
             f"Fecha: {view_model.created_at_label}",
         )
+
+
+    def update_gate_audit(
+        self,
+        view_model: SignalGateAuditViewModel,
+    ) -> None:
+        """
+        Actualiza la auditoría visible del gate S30.
+
+        No modifica la señal, el historial ni los contadores
+        operativos de la sesión.
+        """
+
+        self._gate_audit_label.setText(
+            view_model.text,
+        )
+
+        if view_model.css_class == "gate-suppressed":
+            self._gate_audit_label.setStyleSheet(
+                self.GATE_AUDIT_SUPPRESSED_STYLE,
+            )
+            return
+
+        if view_model.css_class == "gate-accepted":
+            self._gate_audit_label.setStyleSheet(
+                self.GATE_AUDIT_ACCEPTED_STYLE,
+            )
+            return
+
+        self._gate_audit_label.setStyleSheet(
+            self.GATE_AUDIT_NEUTRAL_STYLE,
+        )
     
 
     def _setup_layout(self) -> None:
@@ -1194,6 +1286,9 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(
             self._session_counter_label,
+        )
+        layout.addWidget(
+            self._gate_audit_label,
         )
         layout.addWidget(
             self._session_risk_label,
@@ -1960,6 +2055,9 @@ class MainWindow(QMainWindow):
             True,
         )
         self._session_counter_label.setVisible(
+            True,
+        )
+        self._gate_audit_label.setVisible(
             True,
         )
         self._session_risk_label.setVisible(
