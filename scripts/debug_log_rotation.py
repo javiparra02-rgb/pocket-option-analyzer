@@ -10,7 +10,6 @@ from pocket_option_analyzer.infrastructure.logging import (
     LoggingManager,
 )
 
-
 OUTPUT_DIRECTORY = (
     Path("debug")
     / "log_rotation"
