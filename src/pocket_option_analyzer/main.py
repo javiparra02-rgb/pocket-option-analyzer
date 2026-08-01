@@ -15,6 +15,12 @@ from pocket_option_analyzer.infrastructure.audio import (
 from pocket_option_analyzer.infrastructure.bootstrap import (
     PocketOptionRuntimeFactory,
 )
+from pocket_option_analyzer.infrastructure.config import (
+    get_settings,
+)
+from pocket_option_analyzer.infrastructure.logging import (
+    LoggingManager,
+)
 from pocket_option_analyzer.infrastructure.persistence import (
     JsonlManualSignalResultWriter,
 )
@@ -163,21 +169,53 @@ def build_gui_application(
 
 def main(
     argv: Sequence[str] | None = None,
+    logging_manager: LoggingManager | None = None,
 ) -> int:
     """
     Punto de entrada principal de la aplicación.
+
+    Configura el logger técnico antes de construir la GUI y garantiza
+    que los mensajes encolados se escriban antes de finalizar.
     """
 
-    application = build_gui_application(
-        argv=argv,
-    )
-
-    return application.run()
-
-
-if __name__ == "__main__":
-    raise SystemExit(
-        main(
-            argv=sys.argv,
+    resolved_logging_manager = (
+        logging_manager
+        if logging_manager is not None
+        else LoggingManager(
+            settings=get_settings(),
         )
     )
+
+    resolved_logging_manager.configure()
+
+    application_logger = (
+        resolved_logging_manager.logger
+    )
+
+    application_logger.info(
+        "Iniciando Pocket Option Analyzer."
+    )
+
+    try:
+        application = build_gui_application(
+            argv=argv,
+        )
+
+        exit_code = application.run()
+
+        application_logger.info(
+            "Pocket Option Analyzer finalizado "
+            f"con código {exit_code}."
+        )
+
+        return exit_code
+
+    except Exception:
+        application_logger.exception(
+            "Error no controlado durante "
+            "la ejecución de Pocket Option Analyzer."
+        )
+        raise
+
+    finally:
+        resolved_logging_manager.shutdown()

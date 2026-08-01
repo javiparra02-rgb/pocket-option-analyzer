@@ -54,6 +54,19 @@ class Settings(BaseSettings):
 
     log_directory: str = "logs"
 
+    log_max_bytes: int = Field(
+        default=2 * 1024 * 1024,
+        ge=1024,
+    )
+
+    log_backup_count: int = Field(
+        default=5,
+        ge=0,
+        le=100,
+    )
+
+    log_compression: str | None = "zip"
+
     # ------------------------------------------------------------------
     # Capture
     # ------------------------------------------------------------------
