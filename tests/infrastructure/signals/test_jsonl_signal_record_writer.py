@@ -186,7 +186,7 @@ def test_writer_persists_only_first_observed_record_per_interval(
     )
 
 
-def test_writer_persists_accepted_full_and_duplicate_compact(
+def test_writer_updates_single_duplicate_summary_in_place(
     tmp_path: Path,
 ) -> None:
 
@@ -207,24 +207,26 @@ def test_writer_persists_accepted_full_and_duplicate_compact(
             created_second=32,
             interval_second=30,
             direction=SignalDirection.CALL,
-            reason="Full accepted diagnostics.",
+            reason="Accepted diagnostics.",
         )
     )
 
-    writer.write(
-        _record(
-            disposition=(
-                SignalRecordDisposition.DUPLICATE_SUPPRESSED
-            ),
-            created_second=35,
-            interval_second=30,
-            direction=SignalDirection.CALL,
-            reason=(
-                "This repeated diagnostic must not "
-                "be persisted."
-            ),
+    for created_second in (
+        33,
+        34,
+        35,
+    ):
+        writer.write(
+            _record(
+                disposition=(
+                    SignalRecordDisposition.DUPLICATE_SUPPRESSED
+                ),
+                created_second=created_second,
+                interval_second=30,
+                direction=SignalDirection.CALL,
+                reason="Repeated diagnostics.",
+            )
         )
-    )
 
     records = _read_jsonl(
         file_path=file_path,
@@ -233,19 +235,37 @@ def test_writer_persists_accepted_full_and_duplicate_compact(
     assert len(records) == 2
 
     accepted = records[0]
-    duplicate = records[1]
+    summary = records[1]
 
     assert accepted["storage_format"] == "full"
     assert accepted["reason"] == (
-        "Full accepted diagnostics."
+        "Accepted diagnostics."
     )
 
-    assert duplicate["storage_format"] == "compact"
-    assert duplicate["disposition"] == (
-        "duplicate_suppressed"
+    assert summary["storage_format"] == "summary"
+    assert summary["event_type"] == (
+        "duplicate_signal_summary"
     )
-    assert duplicate["is_actionable"] is False
-    assert "reason" not in duplicate
+    assert summary["accepted_direction"] == "call"
+
+    assert (
+        summary["duplicate_suppressed_count"]
+        == 3
+    )
+
+    assert summary["duplicate_direction_counts"] == {
+        "call": 3,
+        "put": 0,
+    }
+
+    assert "reason" not in summary
+
+    assert summary["is_actionable"] is False
+
+    assert (
+        summary["is_duplicate_suppressed"]
+        is True
+    )
 
 
 def test_writer_rotates_files_and_respects_backup_limit(
@@ -343,3 +363,127 @@ def test_writer_rejects_invalid_rotation_configuration(
             ),
             backup_count=-1,
         )
+
+
+def test_writer_creates_independent_summary_for_next_interval(
+    tmp_path: Path,
+) -> None:
+
+    file_path = (
+        tmp_path
+        / "signals.jsonl"
+    )
+
+    writer = JsonlSignalRecordWriter(
+        file_path=file_path,
+    )
+
+    writer.write(
+        _record(
+            disposition=(
+                SignalRecordDisposition.ACTIONABLE_ACCEPTED
+            ),
+            created_second=5,
+            interval_second=0,
+            direction=SignalDirection.CALL,
+        )
+    )
+
+    writer.write(
+        _record(
+            disposition=(
+                SignalRecordDisposition.DUPLICATE_SUPPRESSED
+            ),
+            created_second=10,
+            interval_second=0,
+            direction=SignalDirection.CALL,
+        )
+    )
+
+    writer.write(
+        _record(
+            disposition=(
+                SignalRecordDisposition.ACTIONABLE_ACCEPTED
+            ),
+            created_second=35,
+            interval_second=30,
+            direction=SignalDirection.PUT,
+        )
+    )
+
+    writer.write(
+        _record(
+            disposition=(
+                SignalRecordDisposition.DUPLICATE_SUPPRESSED
+            ),
+            created_second=40,
+            interval_second=30,
+            direction=SignalDirection.PUT,
+        )
+    )
+
+    records = _read_jsonl(
+        file_path=file_path,
+    )
+
+    summaries = [
+        record
+        for record in records
+        if record.get(
+            "event_type",
+        ) == "duplicate_signal_summary"
+    ]
+
+    assert len(summaries) == 2
+
+    assert summaries[0][
+        "accepted_direction"
+    ] == "call"
+
+    assert summaries[1][
+        "accepted_direction"
+    ] == "put"
+
+
+def test_writer_skips_observed_after_accepted_signal(
+    tmp_path: Path,
+) -> None:
+
+    file_path = (
+        tmp_path
+        / "signals.jsonl"
+    )
+
+    writer = JsonlSignalRecordWriter(
+        file_path=file_path,
+    )
+
+    writer.write(
+        _record(
+            disposition=(
+                SignalRecordDisposition.ACTIONABLE_ACCEPTED
+            ),
+            created_second=5,
+            interval_second=0,
+            direction=SignalDirection.CALL,
+        )
+    )
+
+    writer.write(
+        _record(
+            disposition=SignalRecordDisposition.OBSERVED,
+            created_second=20,
+            interval_second=0,
+            direction=SignalDirection.NONE,
+        )
+    )
+
+    records = _read_jsonl(
+        file_path=file_path,
+    )
+
+    assert len(records) == 1
+
+    assert records[0]["disposition"] == (
+        "actionable_accepted"
+    )

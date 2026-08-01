@@ -6,8 +6,12 @@ from pathlib import Path
 from typing import Any
 
 from pocket_option_analyzer.domain.signals import (
+    SignalDirection,
     SignalRecord,
     SignalRecordDisposition,
+)
+from pocket_option_analyzer.infrastructure.signals.duplicate_signal_summary import (
+    DuplicateSignalSummary,
 )
 from pocket_option_analyzer.infrastructure.signals.signal_record_serializer import (
     SignalRecordSerializer,
@@ -16,21 +20,21 @@ from pocket_option_analyzer.infrastructure.signals.signal_record_serializer impo
 
 class JsonlSignalRecordWriter:
     """
-    Persiste señales en JSONL aplicando control de crecimiento.
+    Persiste señales aplicando muestreo, resúmenes y rotación.
 
     Política:
 
     OBSERVED:
-        Se guarda únicamente la primera observación completa
-        de cada intervalo de vela.
+        Solo se guarda la primera observación de cada vela S30.
 
     ACTIONABLE_ACCEPTED:
-        Siempre se guarda en formato completo.
+        Se guarda siempre con diagnóstico completo.
 
     DUPLICATE_SUPPRESSED:
-        Siempre se guarda, pero en formato compacto.
+        Se acumula en una sola línea de resumen por vela.
 
-    El archivo rota automáticamente cuando supera max_bytes.
+    La línea del resumen permanece al final del archivo durante la
+    vela y se actualiza mediante seek + truncate + write.
     """
 
     DEFAULT_MAX_BYTES = 5 * 1024 * 1024
@@ -55,15 +59,37 @@ class JsonlSignalRecordWriter:
             )
 
         self._file_path = file_path
+
         self._serializer = (
             serializer
             or SignalRecordSerializer()
         )
+
         self._max_bytes = max_bytes
         self._backup_count = backup_count
 
         self._last_observed_interval_started_at: (
             datetime
+            | None
+        ) = None
+
+        self._last_accepted_interval_started_at: (
+            datetime
+            | None
+        ) = None
+
+        self._last_accepted_direction: (
+            SignalDirection
+            | None
+        ) = None
+
+        self._active_duplicate_summary: (
+            DuplicateSignalSummary
+            | None
+        ) = None
+
+        self._active_duplicate_summary_offset: (
+            int
             | None
         ) = None
 
@@ -85,74 +111,57 @@ class JsonlSignalRecordWriter:
     ) -> int:
         return self._backup_count
 
+    @property
+    def active_duplicate_summary(
+        self,
+    ) -> DuplicateSignalSummary | None:
+        return self._active_duplicate_summary
+
     def write(
         self,
         record: SignalRecord,
     ) -> None:
         """
-        Persiste el registro cuando cumple la política configurada.
+        Persiste o acumula el registro recibido.
         """
 
-        if self._should_skip(
+        self._release_summary_if_interval_changed(
+            record=record,
+        )
+
+        if (
+            record.disposition
+            is SignalRecordDisposition.DUPLICATE_SUPPRESSED
+        ):
+            self._write_duplicate_summary(
+                record=record,
+            )
+            return
+
+        if self._should_skip_observed(
             record=record,
         ):
             return
 
-        data = self._serialize_record(
+        data = self._serializer.to_dict(
             record=record,
         )
 
-        serialized_line = json.dumps(
-            data,
-            ensure_ascii=False,
-            separators=(
-                ",",
-                ":",
-            ),
+        self._append_data(
+            data=data,
         )
 
-        encoded_size = len(
-            (
-                serialized_line
-                + "\n"
-            ).encode(
-                "utf-8",
-            )
-        )
-
-        self._file_path.parent.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        self._rotate_if_required(
-            incoming_size=encoded_size,
-        )
-
-        with self._file_path.open(
-            mode="a",
-            encoding="utf-8",
-            newline="\n",
-        ) as file:
-            file.write(
-                serialized_line,
-            )
-            file.write(
-                "\n",
-            )
-
-        self._remember_persisted_record(
+        self._remember_record(
             record=record,
         )
 
-    def _should_skip(
+    def _should_skip_observed(
         self,
         record: SignalRecord,
     ) -> bool:
         """
-        Omite observaciones repetidas dentro de una misma vela.
-
-        Señales aceptadas y duplicadas nunca se omiten.
+        Omite observaciones repetidas o posteriores a una señal
+        ya persistida dentro de la misma vela.
         """
 
         if (
@@ -165,72 +174,275 @@ class JsonlSignalRecordWriter:
             record.candle_interval_started_at
         )
 
-        # Registros antiguos o externos sin clave temporal se
-        # conservan para mantener compatibilidad.
         if interval_started_at is None:
             return False
 
-        return (
+        if (
             interval_started_at
             == self._last_observed_interval_started_at
+        ):
+            return True
+
+        if (
+            interval_started_at
+            == self._last_accepted_interval_started_at
+        ):
+            return True
+
+        active_summary = (
+            self._active_duplicate_summary
         )
 
-    def _serialize_record(
+        return (
+            active_summary is not None
+            and interval_started_at
+            == active_summary.candle_interval_started_at
+        )
+
+    def _remember_record(
         self,
         record: SignalRecord,
-    ) -> dict[str, Any]:
-        """
-        Selecciona la representación completa o compacta.
-        """
+    ) -> None:
+        interval_started_at = (
+            record.candle_interval_started_at
+        )
+
+        if interval_started_at is None:
+            return
 
         if (
             record.disposition
-            is SignalRecordDisposition.DUPLICATE_SUPPRESSED
+            is SignalRecordDisposition.OBSERVED
         ):
-            return self._serializer.to_compact_dict(
+            self._last_observed_interval_started_at = (
+                interval_started_at
+            )
+            return
+
+        if (
+            record.disposition
+            is SignalRecordDisposition.ACTIONABLE_ACCEPTED
+        ):
+            self._last_accepted_interval_started_at = (
+                interval_started_at
+            )
+
+            self._last_accepted_direction = (
+                record.signal.direction
+            )
+
+    def _write_duplicate_summary(
+        self,
+        record: SignalRecord,
+    ) -> None:
+        interval_started_at = (
+            record.candle_interval_started_at
+        )
+
+        if interval_started_at is None:
+            raise ValueError(
+                "La señal duplicada debe incluir "
+                "candle_interval_started_at."
+            )
+
+        active_summary = (
+            self._active_duplicate_summary
+        )
+
+        if (
+            active_summary is not None
+            and active_summary.candle_interval_started_at
+            == interval_started_at
+        ):
+            updated_summary = active_summary.add(
                 record=record,
             )
 
-        return self._serializer.to_dict(
-            record=record,
+            self._replace_active_summary(
+                summary=updated_summary,
+            )
+            return
+
+        accepted_record_found = (
+            self._last_accepted_interval_started_at
+            == interval_started_at
+            and self._last_accepted_direction is not None
         )
 
-    def _remember_persisted_record(
+        accepted_direction = (
+            self._last_accepted_direction
+            if accepted_record_found
+            else record.signal.direction
+        )
+
+        if accepted_direction is None:
+            accepted_direction = (
+                record.signal.direction
+            )
+
+        summary = DuplicateSignalSummary.start(
+            record=record,
+            accepted_direction=accepted_direction,
+            accepted_record_found=accepted_record_found,
+        )
+
+        offset = self._append_data(
+            data=(
+                self._serializer.to_duplicate_summary_dict(
+                    summary=summary,
+                )
+            ),
+        )
+
+        self._active_duplicate_summary = summary
+        self._active_duplicate_summary_offset = offset
+
+    def _replace_active_summary(
+        self,
+        summary: DuplicateSignalSummary,
+    ) -> None:
+        """
+        Reemplaza la última línea del archivo por el resumen actualizado.
+        """
+
+        offset = (
+            self._active_duplicate_summary_offset
+        )
+
+        if (
+            offset is None
+            or not self._file_path.exists()
+            or self._file_path.stat().st_size < offset
+        ):
+            new_offset = self._append_data(
+                data=(
+                    self._serializer.to_duplicate_summary_dict(
+                        summary=summary,
+                    )
+                ),
+            )
+
+            self._active_duplicate_summary = summary
+            self._active_duplicate_summary_offset = (
+                new_offset
+            )
+            return
+
+        encoded_line = self._encode_data(
+            data=(
+                self._serializer.to_duplicate_summary_dict(
+                    summary=summary,
+                )
+            ),
+        )
+
+        with self._file_path.open(
+            mode="r+b",
+        ) as file:
+            file.seek(
+                offset,
+            )
+            file.truncate()
+            file.write(
+                encoded_line,
+            )
+
+        self._active_duplicate_summary = summary
+
+    def _release_summary_if_interval_changed(
         self,
         record: SignalRecord,
     ) -> None:
         """
-        Recuerda el intervalo de la última observación persistida.
+        Libera la referencia editable cuando comienza otra vela.
+
+        El resumen anterior ya permanece finalizado en disco.
         """
 
+        active_summary = (
+            self._active_duplicate_summary
+        )
+
+        if active_summary is None:
+            return
+
         if (
-            record.disposition
-            is not SignalRecordDisposition.OBSERVED
+            record.candle_interval_started_at
+            == active_summary.candle_interval_started_at
         ):
             return
 
-        if record.candle_interval_started_at is None:
-            return
+        self._active_duplicate_summary = None
+        self._active_duplicate_summary_offset = None
 
-        self._last_observed_interval_started_at = (
-            record.candle_interval_started_at
+    def _append_data(
+        self,
+        data: dict[str, Any],
+    ) -> int:
+        """
+        Agrega una línea y devuelve su desplazamiento inicial en bytes.
+        """
+
+        encoded_line = self._encode_data(
+            data=data,
+        )
+
+        self._file_path.parent.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        self._rotate_if_required(
+            incoming_size=len(
+                encoded_line,
+            ),
+        )
+
+        offset = (
+            self._file_path.stat().st_size
+            if self._file_path.exists()
+            else 0
+        )
+
+        with self._file_path.open(
+            mode="ab",
+        ) as file:
+            file.write(
+                encoded_line,
+            )
+
+        return offset
+
+    @staticmethod
+    def _encode_data(
+        data: dict[str, Any],
+    ) -> bytes:
+        serialized_line = json.dumps(
+            data,
+            ensure_ascii=False,
+            separators=(
+                ",",
+                ":",
+            ),
+        )
+
+        return (
+            serialized_line
+            + "\n"
+        ).encode(
+            "utf-8",
         )
 
     def _rotate_if_required(
         self,
         incoming_size: int,
     ) -> None:
-        """
-        Rota el archivo antes de superar el límite configurado.
-
-        Un único registro mayor que max_bytes se conserva completo
-        cuando el archivo actual está vacío.
-        """
-
         if not self._file_path.exists():
             return
 
-        current_size = self._file_path.stat().st_size
+        current_size = (
+            self._file_path.stat().st_size
+        )
 
         if current_size == 0:
             return
@@ -247,15 +459,6 @@ class JsonlSignalRecordWriter:
     def _rotate_files(
         self,
     ) -> None:
-        """
-        Desplaza los archivos existentes:
-
-        signals.jsonl.4 -> signals.jsonl.5
-        signals.jsonl.3 -> signals.jsonl.4
-        ...
-        signals.jsonl   -> signals.jsonl.1
-        """
-
         if self._backup_count == 0:
             self._file_path.unlink(
                 missing_ok=True,
@@ -282,12 +485,10 @@ class JsonlSignalRecordWriter:
             if not source.exists():
                 continue
 
-            destination = self._backup_path(
-                index=index + 1,
-            )
-
             source.replace(
-                destination,
+                self._backup_path(
+                    index=index + 1,
+                )
             )
 
         if self._file_path.exists():

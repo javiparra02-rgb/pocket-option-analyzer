@@ -8,6 +8,7 @@ from pocket_option_analyzer.domain.signals import (
     SignalStrength,
 )
 from pocket_option_analyzer.infrastructure.signals import (
+    DuplicateSignalSummary,
     SignalRecordSerializer,
 )
 
@@ -49,7 +50,7 @@ def test_signal_record_serializer_converts_record_to_dict() -> None:
     }
 
 
-def test_serializer_creates_compact_duplicate_record() -> None:
+def test_serializer_creates_duplicate_summary_record() -> None:
 
     interval_started_at = datetime(
         2026,
@@ -61,14 +62,11 @@ def test_serializer_creates_compact_duplicate_record() -> None:
         tzinfo=timezone.utc,
     )
 
-    record = SignalRecord(
+    first_duplicate = SignalRecord(
         signal=MarketSignal(
             direction=SignalDirection.CALL,
             strength=SignalStrength.HIGH,
-            reason=(
-                "Este diagnóstico sería deliberadamente "
-                "muy extenso."
-            ),
+            reason="Repeated diagnostics.",
         ),
         created_at=datetime(
             2026,
@@ -76,7 +74,7 @@ def test_serializer_creates_compact_duplicate_record() -> None:
             1,
             20,
             51,
-            40,
+            33,
             tzinfo=timezone.utc,
         ),
         source="serializer_test",
@@ -86,22 +84,43 @@ def test_serializer_creates_compact_duplicate_record() -> None:
         candle_interval_started_at=interval_started_at,
     )
 
-    data = SignalRecordSerializer().to_compact_dict(
-        record=record,
+    summary = DuplicateSignalSummary.start(
+        record=first_duplicate,
+        accepted_direction=SignalDirection.CALL,
+        accepted_record_found=True,
+    )
+
+    data = (
+        SignalRecordSerializer()
+        .to_duplicate_summary_dict(
+            summary=summary,
+        )
     )
 
     assert data == {
-        "created_at": "2026-08-01T20:51:40+00:00",
+        "event_type": "duplicate_signal_summary",
+        "created_at": "2026-08-01T20:51:33+00:00",
         "candle_interval_started_at": (
             "2026-08-01T20:51:30+00:00"
         ),
         "source": "serializer_test",
-        "direction": "call",
-        "strength": "high",
+        "accepted_direction": "call",
+        "accepted_record_found": True,
         "disposition": "duplicate_suppressed",
+        "duplicate_suppressed_count": 1,
+        "duplicate_direction_counts": {
+            "call": 1,
+            "put": 0,
+        },
+        "first_duplicate_at": (
+            "2026-08-01T20:51:33+00:00"
+        ),
+        "last_duplicate_at": (
+            "2026-08-01T20:51:33+00:00"
+        ),
         "is_actionable": False,
         "is_duplicate_suppressed": True,
-        "storage_format": "compact",
+        "storage_format": "summary",
     }
 
     assert "reason" not in data
