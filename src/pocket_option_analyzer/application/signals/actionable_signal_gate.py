@@ -23,6 +23,7 @@ class ActionableSignalGateDecision:
     """
 
     disposition: SignalRecordDisposition
+
     interval_key: CandleIntervalKey
 
     @property
@@ -38,9 +39,8 @@ class ActionableSignalGate:
 
     Las señales neutrales no reservan el intervalo.
 
-    Cuando una señal accionable ya fue aceptada, cualquier CALL o PUT
-    posterior dentro de la misma clave queda suprimida, incluso si
-    cambia la dirección.
+    Solo conserva la última clave que aceptó una señal, por lo que
+    su consumo de memoria permanece constante durante toda la ejecución.
     """
 
     def __init__(
@@ -51,15 +51,29 @@ class ActionableSignalGate:
             duration_seconds=30,
         )
 
-        self._accepted_intervals: set[CandleIntervalKey] = set()
+        self._accepted_interval_key: CandleIntervalKey | None = None
+
+    @property
+    def accepted_interval_key(
+        self,
+    ) -> CandleIntervalKey | None:
+        """
+        Último intervalo en el que se aceptó una señal accionable.
+        """
+
+        return self._accepted_interval_key
 
     @property
     def accepted_interval_count(
         self,
     ) -> int:
-        return len(
-            self._accepted_intervals,
-        )
+        """
+        Cantidad de claves mantenidas actualmente en memoria.
+
+        El resultado siempre será cero o uno.
+        """
+
+        return int(self._accepted_interval_key is not None)
 
     def evaluate(
         self,
@@ -76,19 +90,17 @@ class ActionableSignalGate:
 
         if not signal.is_actionable:
             return ActionableSignalGateDecision(
-                disposition=SignalRecordDisposition.OBSERVED,
+                disposition=(SignalRecordDisposition.OBSERVED),
                 interval_key=interval_key,
             )
 
-        if interval_key in self._accepted_intervals:
+        if interval_key == self._accepted_interval_key:
             return ActionableSignalGateDecision(
                 disposition=(SignalRecordDisposition.DUPLICATE_SUPPRESSED),
                 interval_key=interval_key,
             )
 
-        self._accepted_intervals.add(
-            interval_key,
-        )
+        self._accepted_interval_key = interval_key
 
         return ActionableSignalGateDecision(
             disposition=(SignalRecordDisposition.ACTIONABLE_ACCEPTED),
@@ -99,10 +111,10 @@ class ActionableSignalGate:
         self,
     ) -> None:
         """
-        Limpia las claves almacenadas.
+        Libera la clave actualmente almacenada.
 
-        Se utiliza principalmente en pruebas o al reiniciar completamente
-        el motor, no al reiniciar solamente el contador visual.
+        Se utiliza al reiniciar completamente el motor, no al reiniciar
+        únicamente los contadores visuales de la sesión.
         """
 
-        self._accepted_intervals.clear()
+        self._accepted_interval_key = None
