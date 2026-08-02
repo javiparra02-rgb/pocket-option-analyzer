@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from pocket_option_analyzer.presentation.signals import (
     SessionResult,
     SessionResultTracker,
@@ -141,3 +143,43 @@ def test_session_result_tracker_supports_custom_loss_limit() -> None:
     assert tracker.max_consecutive_losses == 2
     assert tracker.consecutive_losses == 2
     assert tracker.pause_recommended is True
+
+
+def test_session_result_tracker_undoing_win_restores_loss_streak() -> None:
+
+    tracker = SessionResultTracker()
+
+    tracker.register_loss()
+    tracker.register_loss()
+    tracker.register_win()
+
+    assert tracker.consecutive_losses == 0
+
+    removed_result = tracker.undo_last_result()
+
+    assert removed_result is SessionResult.WIN
+    assert tracker.wins == 0
+    assert tracker.losses == 2
+    assert tracker.total == 2
+    assert tracker.consecutive_losses == 2
+    assert tracker.pause_recommended is False
+
+
+@pytest.mark.parametrize(
+    "max_consecutive_losses",
+    [
+        0,
+        -1,
+    ],
+)
+def test_session_result_tracker_rejects_invalid_loss_limit(
+    max_consecutive_losses: int,
+) -> None:
+
+    with pytest.raises(
+        ValueError,
+        match="mayor o igual a 1",
+    ):
+        SessionResultTracker(
+            max_consecutive_losses=(max_consecutive_losses),
+        )
