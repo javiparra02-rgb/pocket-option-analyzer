@@ -73,7 +73,8 @@ class SignalPipelineFactory:
         - indicadores externos ya calculados
         """
 
-        history = signal_history or SignalHistory()
+        history = signal_history if signal_history is not None else SignalHistory()
+
         profile = strategy_profile or StrategyProfile.otc_precision_10s()
 
         market_analysis_pipeline = (
@@ -123,7 +124,8 @@ class SignalPipelineFactory:
         Los indicadores se calculan automáticamente desde las velas visuales.
         """
 
-        history = signal_history or SignalHistory()
+        history = signal_history if signal_history is not None else SignalHistory()
+
         profile = strategy_profile or StrategyProfile.otc_precision_10s()
 
         market_analysis_pipeline = (
