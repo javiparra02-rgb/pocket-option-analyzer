@@ -27,7 +27,6 @@ class CandleSegmenter:
         candles: list[CandleCandidate] = []
 
         for contour in contours:
-
             x, y, w, h = cv2.boundingRect(contour)
 
             candles.append(

@@ -33,9 +33,7 @@ class SessionRiskPresenter:
     DEFAULT_MAX_SESSION_SIGNALS = 12
     DEFAULT_WARNING_SIGNAL_COUNT = 10
 
-    MANUAL_LOSS_REMINDER = (
-        "Recordatorio: detener si acumulas 3 pérdidas manuales"
-    )
+    MANUAL_LOSS_REMINDER = "Recordatorio: detener si acumulas 3 pérdidas manuales"
 
     def __init__(
         self,
@@ -87,8 +85,7 @@ class SessionRiskPresenter:
                 f"{self.MANUAL_LOSS_REMINDER}"
             ),
             compact_text=(
-                "Riesgo: OK "
-                f"{total_confirmed_signals}/{self._max_session_signals}"
+                f"Riesgo: OK {total_confirmed_signals}/{self._max_session_signals}"
             ),
             state=self.STATE_OK,
         )

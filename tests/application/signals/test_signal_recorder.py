@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pocket_option_analyzer.application.signals import SignalRecorder
 from pocket_option_analyzer.domain.signals import (
@@ -24,7 +24,7 @@ def test_record_adds_signal_to_history() -> None:
         2026,
         1,
         1,
-        tzinfo=timezone.utc,
+        tzinfo=UTC,
     )
 
     record = recorder.record(

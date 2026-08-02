@@ -125,10 +125,7 @@ class VisualPriceSeriesBuilder:
                 close=body_bottom,
             )
 
-        midpoint = (
-            body_top
-            + body_bottom
-        ) / 2.0
+        midpoint = (body_top + body_bottom) / 2.0
 
         return PriceCandle(
             open=midpoint,
@@ -150,10 +147,7 @@ class VisualPriceSeriesBuilder:
         """
 
         top = candle.candidate.y
-        bottom = (
-            candle.candidate.y
-            + candle.candidate.height
-        )
+        bottom = candle.candidate.y + candle.candidate.height
 
         high = self._to_normalized_price(
             y=top,
@@ -180,10 +174,7 @@ class VisualPriceSeriesBuilder:
                 close=low,
             )
 
-        midpoint = (
-            high
-            + low
-        ) / 2.0
+        midpoint = (high + low) / 2.0
 
         return PriceCandle(
             open=midpoint,
@@ -205,10 +196,7 @@ class VisualPriceSeriesBuilder:
         if geometry is not None:
             return geometry.low_y
 
-        return (
-            candle.candidate.y
-            + candle.candidate.height
-        )
+        return candle.candidate.y + candle.candidate.height
 
     @staticmethod
     def _to_normalized_price(

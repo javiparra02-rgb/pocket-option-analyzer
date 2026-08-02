@@ -57,9 +57,7 @@ class ManualSignalResultRecord:
     event_id: str = field(
         default_factory=_new_event_id,
     )
-    event_type: ManualSignalResultEventType = (
-        ManualSignalResultEventType.RECORDED
-    )
+    event_type: ManualSignalResultEventType = ManualSignalResultEventType.RECORDED
     reverses_event_id: str | None = None
 
     def __post_init__(
@@ -75,40 +73,24 @@ class ManualSignalResultRecord:
         )
 
         if not self.source.strip():
-            raise ValueError(
-                "source no puede estar vacío."
-            )
+            raise ValueError("source no puede estar vacío.")
 
         if not self.strategy_name.strip():
-            raise ValueError(
-                "strategy_name no puede estar vacío."
-            )
+            raise ValueError("strategy_name no puede estar vacío.")
 
         if not self.event_id.strip():
-            raise ValueError(
-                "event_id no puede estar vacío."
-            )
+            raise ValueError("event_id no puede estar vacío.")
 
-        if (
-            self.event_type
-            == ManualSignalResultEventType.REVERSED
-            and not (
-                self.reverses_event_id
-                and self.reverses_event_id.strip()
-            )
+        if self.event_type == ManualSignalResultEventType.REVERSED and not (
+            self.reverses_event_id and self.reverses_event_id.strip()
         ):
-            raise ValueError(
-                "Un evento REVERSED debe indicar reverses_event_id."
-            )
+            raise ValueError("Un evento REVERSED debe indicar reverses_event_id.")
 
         if (
-            self.event_type
-            == ManualSignalResultEventType.RECORDED
+            self.event_type == ManualSignalResultEventType.RECORDED
             and self.reverses_event_id is not None
         ):
-            raise ValueError(
-                "Un evento RECORDED no puede indicar reverses_event_id."
-            )
+            raise ValueError("Un evento RECORDED no puede indicar reverses_event_id.")
 
     @staticmethod
     def _validate_aware_datetime(
@@ -116,6 +98,4 @@ class ManualSignalResultRecord:
         field_name: str,
     ) -> None:
         if value.tzinfo is None or value.utcoffset() is None:
-            raise ValueError(
-                f"{field_name} debe incluir zona horaria."
-            )
+            raise ValueError(f"{field_name} debe incluir zona horaria.")

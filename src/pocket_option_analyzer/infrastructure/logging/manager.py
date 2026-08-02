@@ -44,11 +44,7 @@ class LoggingManager:
         enable_console: bool = True,
     ) -> None:
         self._settings = settings
-        self._logger = (
-            logger_instance
-            if logger_instance is not None
-            else logger
-        )
+        self._logger = logger_instance if logger_instance is not None else logger
         self._enable_console = enable_console
         self._handler_ids: list[int] = []
 

@@ -205,13 +205,11 @@ class MainWindowController(QObject):
         self._runtime_service = runtime_service
         self._presenter = presenter or SignalRecordPresenter()
         self._signal_gate_audit_tracker = (
-            signal_gate_audit_tracker
-            or SignalGateAuditTracker()
+            signal_gate_audit_tracker or SignalGateAuditTracker()
         )
 
         self._signal_gate_audit_presenter = (
-            signal_gate_audit_presenter
-            or SignalGateAuditPresenter()
+            signal_gate_audit_presenter or SignalGateAuditPresenter()
         )
         self._voice_notifier = voice_notifier
         self._manual_result_session = manual_result_session
@@ -249,7 +247,7 @@ class MainWindowController(QObject):
     @property
     def window(self) -> MainWindow:
         return self._window
-    
+
     def set_voice_enabled(
         self,
         enabled: bool,
@@ -264,7 +262,6 @@ class MainWindowController(QObject):
         self._voice_notifier.set_enabled(
             enabled,
         )
-
 
     def test_voice(
         self,
@@ -450,17 +447,14 @@ class MainWindowController(QObject):
             )
         except Exception as error:
             self._window.set_error_message(
-                "No fue posible configurar la protección de captura: "
-                f"{error}"
+                f"No fue posible configurar la protección de captura: {error}"
             )
             return False
 
         if was_excluded:
             return True
 
-        error_code = (
-            self._window_capture_excluder.last_error_code
-        )
+        error_code = self._window_capture_excluder.last_error_code
 
         error_suffix = ""
 
@@ -468,9 +462,7 @@ class MainWindowController(QObject):
             None,
             0,
         }:
-            error_suffix = (
-                f" Código Win32: {error_code}."
-            )
+            error_suffix = f" Código Win32: {error_code}."
 
         self._window.set_error_message(
             "No fue posible excluir la ventana del analizador "
@@ -545,10 +537,8 @@ class MainWindowController(QObject):
             record=record,
         )
 
-        gate_audit_snapshot = (
-            self._signal_gate_audit_tracker.track(
-                record=record,
-            )
+        gate_audit_snapshot = self._signal_gate_audit_tracker.track(
+            record=record,
         )
 
         self._update_gate_audit(
@@ -571,16 +561,11 @@ class MainWindowController(QObject):
 
             return
 
-        was_counted_as_new_signal = (
-            self._window.update_signal(
-                view_model=view_model,
-            )
+        was_counted_as_new_signal = self._window.update_signal(
+            view_model=view_model,
         )
 
-        if (
-            was_counted_as_new_signal
-            and self._manual_result_session is not None
-        ):
+        if was_counted_as_new_signal and self._manual_result_session is not None:
             self._manual_result_session.track_confirmed_signal(
                 record=record,
             )
@@ -588,10 +573,7 @@ class MainWindowController(QObject):
         if self._voice_notifier is None:
             return
 
-        if (
-            record.disposition
-            is SignalRecordDisposition.ACTIONABLE_ACCEPTED
-        ):
+        if record.disposition is SignalRecordDisposition.ACTIONABLE_ACCEPTED:
             reset_voice_state = getattr(
                 self._voice_notifier,
                 "reset",
@@ -606,7 +588,6 @@ class MainWindowController(QObject):
         self._voice_notifier.notify(
             view_model=view_model,
         )
-
 
     def _update_gate_audit(
         self,
@@ -630,16 +611,13 @@ class MainWindowController(QObject):
         ):
             return
 
-        gate_view_model = (
-            self._signal_gate_audit_presenter.present(
-                snapshot=snapshot,
-            )
+        gate_view_model = self._signal_gate_audit_presenter.present(
+            snapshot=snapshot,
         )
 
         update_gate_audit(
             gate_view_model,
         )
-
 
     @Slot(str)
     def _handle_error_occurred(
@@ -703,8 +681,7 @@ class MainWindowController(QObject):
             )
         except Exception as error:
             self._window.set_error_message(
-                "No fue posible guardar el resultado manual: "
-                f"{error}"
+                f"No fue posible guardar el resultado manual: {error}"
             )
             return False
 
@@ -733,8 +710,7 @@ class MainWindowController(QObject):
             reversal_record = self._manual_result_session.undo_last_result()
         except Exception as error:
             self._window.set_error_message(
-                "No fue posible deshacer el resultado manual: "
-                f"{error}"
+                f"No fue posible deshacer el resultado manual: {error}"
             )
             return False
 
@@ -807,8 +783,7 @@ class MainWindowController(QObject):
             return True
 
         window_handle = (
-            self._recording_window_handle
-            or self._window.native_window_handle
+            self._recording_window_handle or self._window.native_window_handle
         )
 
         if not self._apply_capture_visibility(
@@ -825,7 +800,6 @@ class MainWindowController(QObject):
 
         return True
 
-
     def _recording_safety_error(
         self,
         window_handle: int | None = None,
@@ -835,36 +809,24 @@ class MainWindowController(QObject):
         """
 
         if self._recording_safety_guard is None:
-            return (
-                "No existe un validador de ubicación para "
-                "el modo grabación."
-            )
+            return "No existe un validador de ubicación para el modo grabación."
 
-        resolved_handle = (
-            window_handle
-            or self._recording_window_handle
-        )
+        resolved_handle = window_handle or self._recording_window_handle
 
         if resolved_handle is None:
-            return (
-                "No se pudo resolver la ventana del analizador."
-            )
+            return "No se pudo resolver la ventana del analizador."
 
         try:
             status = self._recording_safety_guard.check(
                 analyzer_window_handle=resolved_handle,
             )
         except Exception as error:
-            return (
-                "No fue posible validar la ubicación para grabar: "
-                f"{error}"
-            )
+            return f"No fue posible validar la ubicación para grabar: {error}"
 
         if status.is_safe:
             return None
 
         return status.message
-
 
     def _apply_capture_visibility(
         self,
@@ -883,30 +845,23 @@ class MainWindowController(QObject):
 
         try:
             if allow_capture:
-                was_applied = (
-                    self._window_capture_excluder.allow_capture(
-                        window_handle=window_handle,
-                    )
+                was_applied = self._window_capture_excluder.allow_capture(
+                    window_handle=window_handle,
                 )
             else:
-                was_applied = (
-                    self._window_capture_excluder.exclude(
-                        window_handle=window_handle,
-                    )
+                was_applied = self._window_capture_excluder.exclude(
+                    window_handle=window_handle,
                 )
         except Exception as error:
             self._window.set_error_message(
-                "No fue posible cambiar la visibilidad de captura: "
-                f"{error}"
+                f"No fue posible cambiar la visibilidad de captura: {error}"
             )
             return False
 
         if was_applied:
             return True
 
-        error_code = (
-            self._window_capture_excluder.last_error_code
-        )
+        error_code = self._window_capture_excluder.last_error_code
 
         error_suffix = ""
 
@@ -914,13 +869,10 @@ class MainWindowController(QObject):
             None,
             0,
         }:
-            error_suffix = (
-                f" Código Win32: {error_code}."
-            )
+            error_suffix = f" Código Win32: {error_code}."
 
         self._window.set_error_message(
-            "No fue posible cambiar la visibilidad de captura."
-            f"{error_suffix}"
+            f"No fue posible cambiar la visibilidad de captura.{error_suffix}"
         )
 
         return False
@@ -938,8 +890,7 @@ class MainWindowController(QObject):
 
         if enabled and self._recording_mode_enabled:
             self._window.set_error_message(
-                "Sal del modo grabación antes de activar "
-                "el modo evidencia."
+                "Sal del modo grabación antes de activar el modo evidencia."
             )
             return False
 
@@ -957,28 +908,21 @@ class MainWindowController(QObject):
             window_handle = self._window.native_window_handle
 
             if enabled:
-                was_applied = (
-                    self._window_capture_excluder.allow_capture(
-                        window_handle=window_handle,
-                    )
+                was_applied = self._window_capture_excluder.allow_capture(
+                    window_handle=window_handle,
                 )
             else:
-                was_applied = (
-                    self._window_capture_excluder.exclude(
-                        window_handle=window_handle,
-                    )
+                was_applied = self._window_capture_excluder.exclude(
+                    window_handle=window_handle,
                 )
         except Exception as error:
             self._window.set_error_message(
-                "No fue posible cambiar el modo de captura: "
-                f"{error}"
+                f"No fue posible cambiar el modo de captura: {error}"
             )
             return False
 
         if not was_applied:
-            error_code = (
-                self._window_capture_excluder.last_error_code
-            )
+            error_code = self._window_capture_excluder.last_error_code
 
             error_suffix = ""
 
@@ -986,13 +930,10 @@ class MainWindowController(QObject):
                 None,
                 0,
             }:
-                error_suffix = (
-                    f" Código Win32: {error_code}."
-                )
+                error_suffix = f" Código Win32: {error_code}."
 
             self._window.set_error_message(
-                "No fue posible cambiar el modo de captura."
-                f"{error_suffix}"
+                f"No fue posible cambiar el modo de captura.{error_suffix}"
             )
             return False
 
@@ -1018,14 +959,9 @@ class MainWindowController(QObject):
         Vuelve al modo protegido después de una validación fallida.
         """
 
-        window_handle = (
-            self._recording_window_handle
-        )
+        window_handle = self._recording_window_handle
 
-        if (
-            window_handle is not None
-            and self._window_capture_excluder is not None
-        ):
+        if window_handle is not None and self._window_capture_excluder is not None:
             try:
                 self._window_capture_excluder.exclude(
                     window_handle=window_handle,

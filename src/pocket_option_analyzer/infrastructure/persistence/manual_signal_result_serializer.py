@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from pocket_option_analyzer.domain.session_results import (
@@ -45,13 +45,10 @@ class ManualSignalResultSerializer:
         value: datetime,
     ) -> str:
         utc_value = value.astimezone(
-            timezone.utc,
+            UTC,
         )
 
-        return (
-            utc_value.isoformat()
-            .replace(
-                "+00:00",
-                "Z",
-            )
+        return utc_value.isoformat().replace(
+            "+00:00",
+            "Z",
         )

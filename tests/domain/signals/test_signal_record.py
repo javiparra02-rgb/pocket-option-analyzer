@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pocket_option_analyzer.domain.signals import (
     MarketSignal,
@@ -23,7 +23,7 @@ def test_signal_record_exposes_actionable_state() -> None:
             2026,
             1,
             1,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
     )
 
@@ -40,7 +40,7 @@ def test_duplicate_signal_record_is_not_actionable() -> None:
         10,
         30,
         0,
-        tzinfo=timezone.utc,
+        tzinfo=UTC,
     )
 
     record = SignalRecord(
@@ -56,11 +56,9 @@ def test_duplicate_signal_record_is_not_actionable() -> None:
             10,
             30,
             12,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
-        disposition=(
-            SignalRecordDisposition.DUPLICATE_SUPPRESSED
-        ),
+        disposition=(SignalRecordDisposition.DUPLICATE_SUPPRESSED),
         candle_interval_started_at=interval_started_at,
     )
 
@@ -78,7 +76,7 @@ def test_accepted_signal_record_remains_actionable() -> None:
         10,
         30,
         0,
-        tzinfo=timezone.utc,
+        tzinfo=UTC,
     )
 
     record = SignalRecord(
@@ -94,11 +92,9 @@ def test_accepted_signal_record_remains_actionable() -> None:
             10,
             30,
             10,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
-        disposition=(
-            SignalRecordDisposition.ACTIONABLE_ACCEPTED
-        ),
+        disposition=(SignalRecordDisposition.ACTIONABLE_ACCEPTED),
         candle_interval_started_at=interval_started_at,
     )
 

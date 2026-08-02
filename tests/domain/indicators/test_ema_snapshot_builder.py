@@ -99,10 +99,7 @@ def test_build_returns_zero_separation_when_emas_are_equal() -> None:
     builder = EmaSnapshotBuilder()
 
     series = _series_from_closes(
-        closes=tuple(
-            100.0
-            for _ in range(20)
-        ),
+        closes=tuple(100.0 for _ in range(20)),
     )
 
     result = builder.build(

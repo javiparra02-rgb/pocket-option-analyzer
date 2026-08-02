@@ -23,10 +23,7 @@ def test_snapshot_context_rejects_geometry_count_above_total() -> None:
 
     with pytest.raises(
         ValueError,
-        match=(
-            "geometry_valid_count no puede superar "
-            "geometry_total_count"
-        ),
+        match=("geometry_valid_count no puede superar geometry_total_count"),
     ):
         VisualIndicatorSnapshotContext(
             visible_candle_count=18,

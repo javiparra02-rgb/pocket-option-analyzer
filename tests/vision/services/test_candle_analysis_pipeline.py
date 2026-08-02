@@ -12,7 +12,6 @@ from pocket_option_analyzer.vision.services import (
 
 
 class FakeDetectionPipeline:
-
     def detect(self, image):
         return [
             CandleCandidate(
@@ -27,7 +26,6 @@ class FakeDetectionPipeline:
 
 
 class FakeClassificationPipeline:
-
     def classify(self, candles):
         return [
             ClassifiedCandle(

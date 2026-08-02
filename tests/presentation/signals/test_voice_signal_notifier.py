@@ -7,7 +7,6 @@ from pocket_option_analyzer.presentation.signals import (
 
 
 class FakeSpeechEngine:
-
     def __init__(self) -> None:
         self.spoken_messages: list[str] = []
 

@@ -80,9 +80,7 @@ def test_candle_series_without_latest_preserves_closed_candles() -> None:
 
     result = series.without_latest()
 
-    assert result.candles == (
-        closed_candle,
-    )
+    assert result.candles == (closed_candle,)
 
     # La serie original es inmutable y conserva ambas velas.
     assert series.candles == (
@@ -106,9 +104,7 @@ def test_candle_series_without_latest_returns_empty_for_single_candle() -> None:
     )
 
     series = CandleSeries(
-        candles=(
-            forming_candle,
-        ),
+        candles=(forming_candle,),
     )
 
     result = series.without_latest()

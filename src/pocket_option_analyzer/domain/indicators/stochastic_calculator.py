@@ -156,14 +156,10 @@ class StochasticCalculator:
         window_start = len(closes) - k_period
 
         highest_high = max(
-            highs[
-                window_start:
-            ],
+            highs[window_start:],
         )
         lowest_low = min(
-            lows[
-                window_start:
-            ],
+            lows[window_start:],
         )
 
         return StochasticCalculationDiagnostics(
@@ -190,28 +186,16 @@ class StochasticCalculator:
     ) -> None:
 
         if k_period <= 0:
-            raise ValueError(
-                "Stochastic K period must be greater than zero."
-            )
+            raise ValueError("Stochastic K period must be greater than zero.")
 
         if d_period <= 0:
-            raise ValueError(
-                "Stochastic D period must be greater than zero."
-            )
+            raise ValueError("Stochastic D period must be greater than zero.")
 
         if smooth_period <= 0:
-            raise ValueError(
-                "Stochastic smooth period must be greater than zero."
-            )
+            raise ValueError("Stochastic smooth period must be greater than zero.")
 
-        if not (
-            len(highs)
-            == len(lows)
-            == len(closes)
-        ):
-            raise ValueError(
-                "High, low and close sequences must have the same length."
-            )
+        if not (len(highs) == len(lows) == len(closes)):
+            raise ValueError("High, low and close sequences must have the same length.")
 
     def _calculate_raw_k_values(
         self,
@@ -227,28 +211,17 @@ class StochasticCalculator:
             k_period - 1,
             len(closes),
         ):
-            start = (
-                index
-                - k_period
-                + 1
-            )
+            start = index - k_period + 1
             end = index + 1
 
             highest_high = max(
-                highs[
-                    start:end
-                ],
+                highs[start:end],
             )
             lowest_low = min(
-                lows[
-                    start:end
-                ],
+                lows[start:end],
             )
 
-            price_range = (
-                highest_high
-                - lowest_low
-            )
+            price_range = highest_high - lowest_low
 
             if price_range == 0:
                 values.append(
@@ -256,13 +229,7 @@ class StochasticCalculator:
                 )
                 continue
 
-            k_value = (
-                (
-                    closes[index]
-                    - lowest_low
-                )
-                / price_range
-            ) * 100
+            k_value = ((closes[index] - lowest_low) / price_range) * 100
 
             values.append(
                 k_value,
@@ -287,16 +254,10 @@ class StochasticCalculator:
             period - 1,
             len(values),
         ):
-            start = (
-                index
-                - period
-                + 1
-            )
+            start = index - period + 1
             end = index + 1
 
-            window = values[
-                start:end
-            ]
+            window = values[start:end]
 
             averages.append(
                 sum(

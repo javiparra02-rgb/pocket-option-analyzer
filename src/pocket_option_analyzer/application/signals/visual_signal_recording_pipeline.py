@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 
@@ -38,10 +38,7 @@ class VisualSignalRecordingPipeline:
         self._analysis_pipeline = analysis_pipeline
         self._recorder = recorder
         self._record_writer = record_writer
-        self._actionable_signal_gate = (
-            actionable_signal_gate
-            or ActionableSignalGate()
-        )
+        self._actionable_signal_gate = actionable_signal_gate or ActionableSignalGate()
 
     def analyze_and_record(
         self,
@@ -57,18 +54,13 @@ class VisualSignalRecordingPipeline:
             image=image,
         )
 
-        resolved_created_at = (
-            created_at
-            or datetime.now(
-                timezone.utc,
-            )
+        resolved_created_at = created_at or datetime.now(
+            UTC,
         )
 
-        gate_decision = (
-            self._actionable_signal_gate.evaluate(
-                signal=signal,
-                observed_at=resolved_created_at,
-            )
+        gate_decision = self._actionable_signal_gate.evaluate(
+            signal=signal,
+            observed_at=resolved_created_at,
         )
 
         record = self._recorder.record(
@@ -76,9 +68,7 @@ class VisualSignalRecordingPipeline:
             created_at=resolved_created_at,
             source=source,
             disposition=gate_decision.disposition,
-            candle_interval_started_at=(
-                gate_decision.interval_key.started_at
-            ),
+            candle_interval_started_at=(gate_decision.interval_key.started_at),
         )
 
         if self._record_writer is not None:

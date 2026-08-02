@@ -34,51 +34,35 @@ class CandleFilter:
         max_candidates: int = 80,
     ) -> None:
         if min_area < 1:
-            raise ValueError(
-                "min_area debe ser mayor o igual a 1."
-            )
+            raise ValueError("min_area debe ser mayor o igual a 1.")
 
         if min_width < 1 or min_height < 1:
-            raise ValueError(
-                "Las dimensiones mínimas deben ser mayores o iguales a 1."
-            )
+            raise ValueError("Las dimensiones mínimas deben ser mayores o iguales a 1.")
 
         if max_width < min_width or max_height < min_height:
             raise ValueError(
-                "Las dimensiones máximas no pueden ser menores "
-                "que las mínimas."
+                "Las dimensiones máximas no pueden ser menores que las mínimas."
             )
 
         if min_relative_width <= 0:
-            raise ValueError(
-                "min_relative_width debe ser mayor que cero."
-            )
+            raise ValueError("min_relative_width debe ser mayor que cero.")
 
         if max_relative_width < min_relative_width:
             raise ValueError(
-                "max_relative_width no puede ser menor "
-                "que min_relative_width."
+                "max_relative_width no puede ser menor que min_relative_width."
             )
 
         if width_bucket_size < 1:
-            raise ValueError(
-                "width_bucket_size debe ser mayor o igual a 1."
-            )
+            raise ValueError("width_bucket_size debe ser mayor o igual a 1.")
 
         if not 0 < anchor_min_height_ratio <= 1:
-            raise ValueError(
-                "anchor_min_height_ratio debe estar entre 0 y 1."
-            )
+            raise ValueError("anchor_min_height_ratio debe estar entre 0 y 1.")
 
         if not 0 < same_column_center_ratio <= 1:
-            raise ValueError(
-                "same_column_center_ratio debe estar entre 0 y 1."
-            )
+            raise ValueError("same_column_center_ratio debe estar entre 0 y 1.")
 
         if max_candidates < 1:
-            raise ValueError(
-                "max_candidates debe ser mayor o igual a 1."
-            )
+            raise ValueError("max_candidates debe ser mayor o igual a 1.")
 
         self._min_area = min_area
         self._min_width = min_width
@@ -133,9 +117,7 @@ class CandleFilter:
             key=lambda candidate: candidate.x,
         )
 
-        return merged_candidates[
-            -self._max_candidates:
-        ]
+        return merged_candidates[-self._max_candidates :]
 
     def _has_valid_dimensions(
         self,
@@ -166,18 +148,11 @@ class CandleFilter:
             if candidate.height
             >= max(
                 3,
-                round(
-                    candidate.width
-                    * self._anchor_min_height_ratio
-                ),
+                round(candidate.width * self._anchor_min_height_ratio),
             )
         ]
 
-        estimation_candidates = (
-            anchor_candidates
-            if anchor_candidates
-            else candidates
-        )
+        estimation_candidates = anchor_candidates if anchor_candidates else candidates
 
         width_groups: dict[int, list[int]] = defaultdict(
             list,
@@ -187,10 +162,7 @@ class CandleFilter:
 
         for candidate in estimation_candidates:
             bucket = (
-                (
-                    candidate.width
-                    + half_bucket
-                )
+                (candidate.width + half_bucket)
                 // self._width_bucket_size
                 * self._width_bucket_size
             )
@@ -219,27 +191,16 @@ class CandleFilter:
         candidate: CandleCandidate,
         dominant_width: float,
     ) -> bool:
-        minimum_width = (
-            dominant_width
-            * self._min_relative_width
-        )
-        maximum_width = (
-            dominant_width
-            * self._max_relative_width
-        )
+        minimum_width = dominant_width * self._min_relative_width
+        maximum_width = dominant_width * self._max_relative_width
 
-        if (
-            minimum_width
-            <= candidate.width
-            <= maximum_width
-        ):
+        if minimum_width <= candidate.width <= maximum_width:
             return True
 
         # La vela ubicada en el borde izquierdo puede estar recortada.
         return (
             candidate.x <= 2
-            and candidate.width
-            >= dominant_width * 0.45
+            and candidate.width >= dominant_width * 0.45
             and candidate.width <= maximum_width
         )
 
@@ -268,10 +229,7 @@ class CandleFilter:
 
         groups: list[list[CandleCandidate]] = []
 
-        maximum_center_distance = (
-            dominant_width
-            * self._same_column_center_ratio
-        )
+        maximum_center_distance = dominant_width * self._same_column_center_ratio
 
         for candidate in ordered:
             if not groups:
@@ -290,13 +248,7 @@ class CandleFilter:
                 candidate=candidate,
             )
 
-            if (
-                abs(
-                    candidate_center
-                    - group_center
-                )
-                <= maximum_center_distance
-            ):
+            if abs(candidate_center - group_center) <= maximum_center_distance:
                 previous_group.append(
                     candidate,
                 )
@@ -319,10 +271,7 @@ class CandleFilter:
     def _center_x(
         candidate: CandleCandidate,
     ) -> float:
-        return (
-            candidate.x
-            + candidate.width / 2
-        )
+        return candidate.x + candidate.width / 2
 
     def _group_center_x(
         self,
@@ -344,22 +293,10 @@ class CandleFilter:
         if len(candidates) == 1:
             return candidates[0]
 
-        left = min(
-            candidate.x
-            for candidate in candidates
-        )
-        top = min(
-            candidate.y
-            for candidate in candidates
-        )
-        right = max(
-            candidate.x + candidate.width
-            for candidate in candidates
-        )
-        bottom = max(
-            candidate.y + candidate.height
-            for candidate in candidates
-        )
+        left = min(candidate.x for candidate in candidates)
+        top = min(candidate.y for candidate in candidates)
+        right = max(candidate.x + candidate.width for candidate in candidates)
+        bottom = max(candidate.y + candidate.height for candidate in candidates)
 
         colors = {
             candidate.color

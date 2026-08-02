@@ -8,7 +8,6 @@ from pocket_option_analyzer.presentation.gui import GuiApplication
 
 
 class FakeWindow:
-
     def __init__(self) -> None:
         self.show_calls = 0
 
@@ -17,7 +16,6 @@ class FakeWindow:
 
 
 class FakeController:
-
     def __init__(self) -> None:
         self.window = FakeWindow()
 

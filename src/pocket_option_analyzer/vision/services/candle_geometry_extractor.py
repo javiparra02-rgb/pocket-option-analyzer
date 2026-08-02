@@ -29,14 +29,10 @@ class CandleGeometryExtractor:
         min_body_row_pixels: int = 3,
     ) -> None:
         if not 0 < body_row_fill_ratio <= 1:
-            raise ValueError(
-                "body_row_fill_ratio debe estar entre 0 y 1."
-            )
+            raise ValueError("body_row_fill_ratio debe estar entre 0 y 1.")
 
         if min_body_row_pixels < 1:
-            raise ValueError(
-                "min_body_row_pixels debe ser mayor o igual a 1."
-            )
+            raise ValueError("min_body_row_pixels debe ser mayor o igual a 1.")
 
         self._body_row_fill_ratio = body_row_fill_ratio
         self._min_body_row_pixels = min_body_row_pixels
@@ -56,9 +52,7 @@ class CandleGeometryExtractor:
         """
 
         if mask.ndim != 2:
-            raise ValueError(
-                "La máscara de velas debe tener dos dimensiones."
-            )
+            raise ValueError("La máscara de velas debe tener dos dimensiones.")
 
         image_height, image_width = mask.shape
 
@@ -102,57 +96,28 @@ class CandleGeometryExtractor:
         if active_rows.size == 0:
             return None
 
-        maximum_row_occupancy = int(
-            row_occupancy.max()
-        )
+        maximum_row_occupancy = int(row_occupancy.max())
 
         # Una línea vertical aislada no constituye un cuerpo de vela.
-        if (
-            maximum_row_occupancy
-            < self._min_body_row_pixels
-        ):
+        if maximum_row_occupancy < self._min_body_row_pixels:
             return None
 
         body_threshold = max(
             self._min_body_row_pixels,
-            ceil(
-                maximum_row_occupancy
-                * self._body_row_fill_ratio
-            ),
+            ceil(maximum_row_occupancy * self._body_row_fill_ratio),
         )
 
         body_rows = np.flatnonzero(
-            row_occupancy
-            >= body_threshold,
+            row_occupancy >= body_threshold,
         )
 
         if body_rows.size == 0:
             return None
 
-        high_y = (
-            top
-            + int(
-                active_rows[0]
-            )
-        )
-        low_y = (
-            top
-            + int(
-                active_rows[-1]
-            )
-        )
-        body_top_y = (
-            top
-            + int(
-                body_rows[0]
-            )
-        )
-        body_bottom_y = (
-            top
-            + int(
-                body_rows[-1]
-            )
-        )
+        high_y = top + int(active_rows[0])
+        low_y = top + int(active_rows[-1])
+        body_top_y = top + int(body_rows[0])
+        body_bottom_y = top + int(body_rows[-1])
 
         return CandleGeometry(
             high_y=high_y,

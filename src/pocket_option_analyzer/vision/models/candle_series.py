@@ -26,9 +26,12 @@ class CandleSeries:
     def is_empty(
         self,
     ) -> bool:
-        return len(
-            self.candles,
-        ) == 0
+        return (
+            len(
+                self.candles,
+            )
+            == 0
+        )
 
     @property
     def first(

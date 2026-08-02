@@ -34,9 +34,7 @@ class IndicatorSnapshotBuilder:
     ) -> None:
         self._ema_builder = ema_builder or EmaSnapshotBuilder()
         self._rsi_builder = rsi_builder or RsiSnapshotBuilder()
-        self._stochastic_builder = (
-            stochastic_builder or StochasticSnapshotBuilder()
-        )
+        self._stochastic_builder = stochastic_builder or StochasticSnapshotBuilder()
 
     def build(
         self,

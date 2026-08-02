@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 from pocket_option_analyzer.domain.session_results import (
     ManualSignalResult,
@@ -29,7 +29,7 @@ def _record(
                 16,
                 3,
                 25,
-                tzinfo=timezone.utc,
+                tzinfo=UTC,
             )
         ),
         direction=SignalDirection.CALL,
@@ -42,7 +42,7 @@ def _record(
             16,
             3,
             47,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         event_id="event-001",
         source="captured_frame_visual_analysis",
@@ -111,7 +111,7 @@ def test_manual_signal_result_serializer_preserves_unicode() -> None:
             16,
             3,
             25,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         direction=SignalDirection.PUT,
         strength=SignalStrength.HIGH,
@@ -123,7 +123,7 @@ def test_manual_signal_result_serializer_preserves_unicode() -> None:
             16,
             3,
             47,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         source="análisis_visual",
         reason="Señal bajista confirmada.",
@@ -148,7 +148,7 @@ def test_manual_signal_result_serializer_serializes_reversal_event() -> None:
             16,
             3,
             25,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         direction=SignalDirection.PUT,
         strength=SignalStrength.HIGH,
@@ -160,7 +160,7 @@ def test_manual_signal_result_serializer_serializes_reversal_event() -> None:
             16,
             5,
             0,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         source="test_source",
         event_id="reversal-001",

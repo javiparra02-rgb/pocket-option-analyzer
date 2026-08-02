@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 
@@ -18,7 +18,6 @@ from pocket_option_analyzer.domain.signals import (
 
 @dataclass(frozen=True, slots=True)
 class FakeFrame:
-
     image: np.ndarray
 
     captured_at: datetime
@@ -26,12 +25,10 @@ class FakeFrame:
 
 @dataclass(frozen=True, slots=True)
 class FakeFrameWithoutTimestamp:
-
     image: np.ndarray
 
 
 class FakeVisualSignalRecordingPipeline:
-
     def __init__(self) -> None:
         self.received_image = None
         self.received_created_at = None
@@ -58,7 +55,7 @@ class FakeVisualSignalRecordingPipeline:
                 2026,
                 1,
                 1,
-                tzinfo=timezone.utc,
+                tzinfo=UTC,
             ),
             source=source,
         )
@@ -74,7 +71,7 @@ def test_execute_analyzes_frame_image_and_preserves_capture_datetime() -> None:
         2026,
         1,
         1,
-        tzinfo=timezone.utc,
+        tzinfo=UTC,
     )
 
     frame = FakeFrame(

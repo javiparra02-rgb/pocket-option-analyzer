@@ -1,7 +1,7 @@
+from pocket_option_analyzer.infrastructure.windows.models import Win32WindowInfo
 from pocket_option_analyzer.vision.services.chart_region_extractor import (
     ChartRegionExtractor,
 )
-from pocket_option_analyzer.infrastructure.windows.models import Win32WindowInfo
 
 
 def test_extract_chart_region():

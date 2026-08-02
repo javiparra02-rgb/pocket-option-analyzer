@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -30,9 +30,7 @@ def _duplicate(
         ),
         created_at=created_at,
         source="summary_test",
-        disposition=(
-            SignalRecordDisposition.DUPLICATE_SUPPRESSED
-        ),
+        disposition=(SignalRecordDisposition.DUPLICATE_SUPPRESSED),
         candle_interval_started_at=interval_started_at,
     )
 
@@ -46,7 +44,7 @@ def test_summary_accumulates_directions_and_timestamps() -> None:
         20,
         51,
         30,
-        tzinfo=timezone.utc,
+        tzinfo=UTC,
     )
 
     first = _duplicate(
@@ -58,7 +56,7 @@ def test_summary_accumulates_directions_and_timestamps() -> None:
             20,
             51,
             33,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         interval_started_at=interval_started_at,
     )
@@ -72,7 +70,7 @@ def test_summary_accumulates_directions_and_timestamps() -> None:
             20,
             51,
             40,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         interval_started_at=interval_started_at,
     )
@@ -103,7 +101,7 @@ def test_summary_rejects_duplicate_from_another_interval() -> None:
         20,
         51,
         0,
-        tzinfo=timezone.utc,
+        tzinfo=UTC,
     )
 
     second_interval = datetime(
@@ -113,7 +111,7 @@ def test_summary_rejects_duplicate_from_another_interval() -> None:
         20,
         51,
         30,
-        tzinfo=timezone.utc,
+        tzinfo=UTC,
     )
 
     summary = DuplicateSignalSummary.start(
@@ -126,7 +124,7 @@ def test_summary_rejects_duplicate_from_another_interval() -> None:
                 20,
                 51,
                 5,
-                tzinfo=timezone.utc,
+                tzinfo=UTC,
             ),
             interval_started_at=first_interval,
         ),
@@ -148,7 +146,7 @@ def test_summary_rejects_duplicate_from_another_interval() -> None:
                     20,
                     51,
                     35,
-                    tzinfo=timezone.utc,
+                    tzinfo=UTC,
                 ),
                 interval_started_at=second_interval,
             )

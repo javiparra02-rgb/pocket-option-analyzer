@@ -112,4 +112,4 @@ def test_returns_unknown_when_no_valid_color_is_detected() -> None:
         candle=candle,
     )
 
-    assert result is CandleColor.UNKNOWN    
+    assert result is CandleColor.UNKNOWN

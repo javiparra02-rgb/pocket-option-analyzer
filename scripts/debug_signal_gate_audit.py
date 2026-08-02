@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pocket_option_analyzer.application.signals import (
     SignalGateAuditTracker,
@@ -37,7 +37,7 @@ def _record(
             10,
             30,
             created_second,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         source="debug_signal_gate_audit",
         disposition=disposition,
@@ -48,7 +48,7 @@ def _record(
             10,
             30,
             interval_second,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
     )
 
@@ -61,33 +61,25 @@ def main() -> None:
     records = (
         _record(
             direction=SignalDirection.PUT,
-            disposition=(
-                SignalRecordDisposition.ACTIONABLE_ACCEPTED
-            ),
+            disposition=(SignalRecordDisposition.ACTIONABLE_ACCEPTED),
             created_second=5,
             interval_second=0,
         ),
         _record(
             direction=SignalDirection.PUT,
-            disposition=(
-                SignalRecordDisposition.DUPLICATE_SUPPRESSED
-            ),
+            disposition=(SignalRecordDisposition.DUPLICATE_SUPPRESSED),
             created_second=8,
             interval_second=0,
         ),
         _record(
             direction=SignalDirection.CALL,
-            disposition=(
-                SignalRecordDisposition.DUPLICATE_SUPPRESSED
-            ),
+            disposition=(SignalRecordDisposition.DUPLICATE_SUPPRESSED),
             created_second=12,
             interval_second=0,
         ),
         _record(
             direction=SignalDirection.CALL,
-            disposition=(
-                SignalRecordDisposition.ACTIONABLE_ACCEPTED
-            ),
+            disposition=(SignalRecordDisposition.ACTIONABLE_ACCEPTED),
             created_second=35,
             interval_second=30,
         ),

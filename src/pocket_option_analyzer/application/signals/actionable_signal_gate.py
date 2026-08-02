@@ -29,10 +29,7 @@ class ActionableSignalGateDecision:
     def is_duplicate_suppressed(
         self,
     ) -> bool:
-        return (
-            self.disposition
-            is SignalRecordDisposition.DUPLICATE_SUPPRESSED
-        )
+        return self.disposition is SignalRecordDisposition.DUPLICATE_SUPPRESSED
 
 
 class ActionableSignalGate:
@@ -50,16 +47,11 @@ class ActionableSignalGate:
         self,
         interval_resolver: CandleIntervalResolver | None = None,
     ) -> None:
-        self._interval_resolver = (
-            interval_resolver
-            or CandleIntervalResolver(
-                duration_seconds=30,
-            )
+        self._interval_resolver = interval_resolver or CandleIntervalResolver(
+            duration_seconds=30,
         )
 
-        self._accepted_intervals: set[
-            CandleIntervalKey
-        ] = set()
+        self._accepted_intervals: set[CandleIntervalKey] = set()
 
     @property
     def accepted_interval_count(
@@ -90,9 +82,7 @@ class ActionableSignalGate:
 
         if interval_key in self._accepted_intervals:
             return ActionableSignalGateDecision(
-                disposition=(
-                    SignalRecordDisposition.DUPLICATE_SUPPRESSED
-                ),
+                disposition=(SignalRecordDisposition.DUPLICATE_SUPPRESSED),
                 interval_key=interval_key,
             )
 
@@ -101,9 +91,7 @@ class ActionableSignalGate:
         )
 
         return ActionableSignalGateDecision(
-            disposition=(
-                SignalRecordDisposition.ACTIONABLE_ACCEPTED
-            ),
+            disposition=(SignalRecordDisposition.ACTIONABLE_ACCEPTED),
             interval_key=interval_key,
         )
 

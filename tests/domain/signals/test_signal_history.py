@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pocket_option_analyzer.domain.signals import (
     MarketSignal,
@@ -29,7 +29,7 @@ def _record(
             2026,
             1,
             1,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
     )
 
@@ -71,9 +71,7 @@ def test_signal_history_can_be_cleared() -> None:
 
     history = SignalHistory()
 
-    history.append(
-        _record(SignalDirection.CALL)
-    )
+    history.append(_record(SignalDirection.CALL))
 
     history.clear()
 

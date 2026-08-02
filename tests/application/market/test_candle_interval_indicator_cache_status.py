@@ -51,9 +51,7 @@ def test_cache_status_rejects_current_state_from_another_interval() -> None:
 
     with pytest.raises(
         ValueError,
-        match=(
-            "debe pertenecer al intervalo solicitado"
-        ),
+        match=("debe pertenecer al intervalo solicitado"),
     ):
         CandleIntervalIndicatorCacheStatus(
             requested_key=_key(

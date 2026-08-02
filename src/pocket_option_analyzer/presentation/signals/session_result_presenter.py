@@ -77,8 +77,7 @@ class SessionResultPresenter:
             return "-"
 
         return (
-            f"{percentage:.1f}"
-            .replace(
+            f"{percentage:.1f}".replace(
                 ".",
                 ",",
             )

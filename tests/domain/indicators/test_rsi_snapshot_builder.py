@@ -74,10 +74,7 @@ def test_build_returns_latest_rsi_value_for_flat_prices() -> None:
     builder = RsiSnapshotBuilder()
 
     series = _series_from_closes(
-        closes=tuple(
-            100.0
-            for _ in range(8)
-        ),
+        closes=tuple(100.0 for _ in range(8)),
     )
 
     result = builder.build(

@@ -15,13 +15,11 @@ from pocket_option_analyzer.vision.services import (
 
 
 class FakeMaskBuilder:
-
     def build(self, image):
         return image
 
 
 class FakeSegmenter:
-
     def segment(self, mask):
         return [
             CandleCandidate(
@@ -35,19 +33,16 @@ class FakeSegmenter:
 
 
 class FakeFilter:
-
     def filter(self, candles):
         return candles
 
 
 class FakeColorDetector:
-
     def detect(self, image, candle):
         return CandleColor.WHITE
 
 
 class FakeGeometryExtractor:
-
     def __init__(
         self,
         geometry: CandleGeometry,
@@ -75,9 +70,7 @@ def test_detect_returns_candidates() -> None:
         candle_filter=FakeFilter(),
     )
 
-    result = pipeline.detect(
-        np.zeros((100, 100), dtype=np.uint8)
-    )
+    result = pipeline.detect(np.zeros((100, 100), dtype=np.uint8))
 
     assert len(result) == 1
 
@@ -91,9 +84,7 @@ def test_detect_assigns_color_when_color_detector_is_configured() -> None:
         color_detector=FakeColorDetector(),
     )
 
-    result = pipeline.detect(
-        np.zeros((100, 100, 3), dtype=np.uint8)
-    )
+    result = pipeline.detect(np.zeros((100, 100, 3), dtype=np.uint8))
 
     assert len(result) == 1
     assert result[0].color is CandleColor.WHITE
@@ -141,20 +132,9 @@ def test_detection_pipeline_preserves_eighteen_mixed_size_candles() -> None:
     ):
         # La primera vela representa una vela parcialmente recortada
         # por el borde izquierdo del ROI.
-        x = (
-            0
-            if index == 0
-            else 20 + index * 55
-        )
-        body_width = (
-            24
-            if index == 0
-            else 36
-        )
-        top = 160 + (
-            index % 5
-            - 2
-        ) * 20
+        x = 0 if index == 0 else 20 + index * 55
+        body_width = 24 if index == 0 else 36
+        top = 160 + (index % 5 - 2) * 20
 
         color = (
             (
@@ -230,10 +210,7 @@ def test_detection_pipeline_preserves_eighteen_mixed_size_candles() -> None:
 
     assert len(result) == 18
     assert result[0].width == 24
-    assert all(
-        candidate.width == 36
-        for candidate in result[1:]
-    )
+    assert all(candidate.width == 36 for candidate in result[1:])
 
 
 def test_detect_assigns_candle_geometry_when_extractor_is_configured() -> None:
@@ -270,7 +247,4 @@ def test_detect_assigns_candle_geometry_when_extractor_is_configured() -> None:
     assert len(result) == 1
     assert result[0].geometry is geometry
     assert geometry_extractor.received_mask is image
-    assert (
-        geometry_extractor.received_candidate.x
-        == 10
-    )
+    assert geometry_extractor.received_candidate.x == 10

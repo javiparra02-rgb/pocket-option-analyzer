@@ -31,7 +31,6 @@ class WindowFinder:
         title = title.lower()
 
         for window in self._enumerator.enumerate():
-
             if title in window.title.lower():
                 return window
 
@@ -46,7 +45,6 @@ class WindowFinder:
         """
 
         for window in self._enumerator.enumerate():
-
             if predicate(window):
                 return window
 

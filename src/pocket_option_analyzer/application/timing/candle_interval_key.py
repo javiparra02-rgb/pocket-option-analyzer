@@ -27,28 +27,16 @@ class CandleIntervalKey:
         self,
     ) -> None:
         if self.duration_seconds < 1:
-            raise ValueError(
-                "duration_seconds debe ser mayor o igual a 1."
-            )
+            raise ValueError("duration_seconds debe ser mayor o igual a 1.")
 
         if 60 % self.duration_seconds != 0:
-            raise ValueError(
-                "duration_seconds debe dividir exactamente un minuto."
-            )
+            raise ValueError("duration_seconds debe dividir exactamente un minuto.")
 
         if self.started_at.microsecond != 0:
-            raise ValueError(
-                "started_at debe estar alineado sin microsegundos."
-            )
+            raise ValueError("started_at debe estar alineado sin microsegundos.")
 
-        if (
-            self.started_at.second
-            % self.duration_seconds
-            != 0
-        ):
-            raise ValueError(
-                "started_at no está alineado con la duración."
-            )
+        if self.started_at.second % self.duration_seconds != 0:
+            raise ValueError("started_at no está alineado con la duración.")
 
     @property
     def ends_at(
@@ -58,11 +46,8 @@ class CandleIntervalKey:
         Primer instante perteneciente al intervalo siguiente.
         """
 
-        return (
-            self.started_at
-            + timedelta(
-                seconds=self.duration_seconds,
-            )
+        return self.started_at + timedelta(
+            seconds=self.duration_seconds,
         )
 
     def contains(
@@ -73,11 +58,7 @@ class CandleIntervalKey:
         Indica si el instante pertenece a este intervalo.
         """
 
-        return (
-            self.started_at
-            <= value
-            < self.ends_at
-        )
+        return self.started_at <= value < self.ends_at
 
     def elapsed_seconds(
         self,
@@ -87,7 +68,4 @@ class CandleIntervalKey:
         Segundos transcurridos desde el inicio del intervalo.
         """
 
-        return (
-            value
-            - self.started_at
-        ).total_seconds()
+        return (value - self.started_at).total_seconds()

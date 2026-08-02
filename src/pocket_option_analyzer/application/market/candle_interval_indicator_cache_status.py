@@ -44,44 +44,27 @@ class CandleIntervalIndicatorCacheStatus:
     def __post_init__(
         self,
     ) -> None:
-        if (
-            self.has_snapshot
-            and self.cached_key is None
-        ):
-            raise ValueError(
-                "Un snapshot existente debe incluir cached_key."
-            )
+        if self.has_snapshot and self.cached_key is None:
+            raise ValueError("Un snapshot existente debe incluir cached_key.")
 
-        if (
-            not self.has_snapshot
-            and self.cached_key is not None
-        ):
-            raise ValueError(
-                "cached_key no puede existir sin snapshot."
-            )
+        if not self.has_snapshot and self.cached_key is not None:
+            raise ValueError("cached_key no puede existir sin snapshot.")
 
         if self.is_current:
             if not self.has_snapshot:
-                raise ValueError(
-                    "Un estado actual debe contener un snapshot."
-                )
+                raise ValueError("Un estado actual debe contener un snapshot.")
 
             if self.cached_key != self.requested_key:
                 raise ValueError(
-                    "Un snapshot actual debe pertenecer "
-                    "al intervalo solicitado."
+                    "Un snapshot actual debe pertenecer al intervalo solicitado."
                 )
 
         if self.is_settling:
             if not self.has_snapshot:
-                raise ValueError(
-                    "La estabilización requiere un snapshot anterior."
-                )
+                raise ValueError("La estabilización requiere un snapshot anterior.")
 
             if self.is_current:
-                raise ValueError(
-                    "Un snapshot actual no puede estar estabilizando."
-                )
+                raise ValueError("Un snapshot actual no puede estar estabilizando.")
 
             if self.cached_key == self.requested_key:
                 raise ValueError(

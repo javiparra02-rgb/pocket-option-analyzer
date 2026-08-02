@@ -88,17 +88,20 @@ def test_resolver_preserves_timezone() -> None:
     )
 
     assert result.started_at.tzinfo is chile_timezone
-    assert result.contains(
-        datetime(
-            2026,
-            7,
-            30,
-            16,
-            44,
-            59,
-            tzinfo=chile_timezone,
+    assert (
+        result.contains(
+            datetime(
+                2026,
+                7,
+                30,
+                16,
+                44,
+                59,
+                tzinfo=chile_timezone,
+            )
         )
-    ) is True
+        is True
+    )
 
 
 def test_resolver_rejects_duration_that_does_not_divide_minute() -> None:

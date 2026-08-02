@@ -12,7 +12,6 @@ from pocket_option_analyzer.vision.models import ChartRegion
 
 
 class FakeFinder:
-
     def find(self, title):
         return Win32WindowInfo(
             hwnd=1,
@@ -31,19 +30,16 @@ class FakeFinder:
 
 
 class FakeReader:
-
     def read(self, hwnd):
         return FakeFinder().find("Pocket Option")
 
 
 class FakeCapture:
-
     def capture(self, window):
         return np.zeros((200, 200, 3), dtype=np.uint8)
 
 
 class FakeExtractor:
-
     def extract(self, image):
         return ChartRegion(
             x=20,
@@ -54,7 +50,6 @@ class FakeExtractor:
 
 
 class FakeDataset:
-
     def __init__(self):
         self.called = False
 

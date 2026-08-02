@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -20,7 +20,6 @@ from pocket_option_analyzer.domain.signals import (
 
 
 class FakeWriter:
-
     def __init__(
         self,
         error: Exception | None = None,
@@ -61,7 +60,7 @@ def _signal_record(
                 10,
                 0,
                 second,
-                tzinfo=timezone.utc,
+                tzinfo=UTC,
             )
         ),
         source="test_source",
@@ -76,7 +75,7 @@ def _clock() -> datetime:
         10,
         1,
         0,
-        tzinfo=timezone.utc,
+        tzinfo=UTC,
     )
 
 
@@ -315,15 +314,13 @@ def test_manual_result_session_preserves_aware_signal_datetime() -> None:
         22,
         33,
         2,
-        tzinfo=timezone.utc,
+        tzinfo=UTC,
     )
 
     def unexpected_resolver(
         value: datetime,
     ) -> datetime:
-        raise AssertionError(
-            "El resolver no debe usarse para fechas conscientes."
-        )
+        raise AssertionError("El resolver no debe usarse para fechas conscientes.")
 
     service = ManualSignalResultSessionService(
         writer=writer,

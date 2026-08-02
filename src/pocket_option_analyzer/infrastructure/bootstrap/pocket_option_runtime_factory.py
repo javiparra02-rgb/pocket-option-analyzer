@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
-import cv2
-import numpy as np
-
 import ctypes
 from collections.abc import Callable, Iterable
 from ctypes import wintypes
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
+
+import cv2
+import numpy as np
 
 from pocket_option_analyzer.application.runtime import (
     AnalysisRuntimeService,
@@ -226,9 +225,7 @@ class RuntimeWindowReader:
         )
 
         if not success:
-            raise RuntimeError(
-                f"Could not read window rectangle for hwnd: {hwnd}"
-            )
+            raise RuntimeError(f"Could not read window rectangle for hwnd: {hwnd}")
 
         title_buffer = ctypes.create_unicode_buffer(
             512,
@@ -418,7 +415,7 @@ class RuntimeRoiDebugCapture:
         )
 
         timestamp = datetime.now(
-            tz=timezone.utc,
+            tz=UTC,
         ).strftime(
             "%Y%m%d_%H%M%S_%f",
         )
@@ -431,9 +428,7 @@ class RuntimeRoiDebugCapture:
         )
 
         if not success:
-            raise RuntimeError(
-                f"Could not save runtime ROI debug image: {file_path}"
-            )
+            raise RuntimeError(f"Could not save runtime ROI debug image: {file_path}")
 
         self._latest_path = file_path
 
@@ -450,9 +445,12 @@ class PocketOptionRuntimeFactory:
 
     DEFAULT_WINDOW_TITLE = "Pocket Option"
 
-    DEFAULT_SIGNAL_FILE_PATH = Path(
-        "logs",
-    ) / "signals.jsonl"
+    DEFAULT_SIGNAL_FILE_PATH = (
+        Path(
+            "logs",
+        )
+        / "signals.jsonl"
+    )
 
     @staticmethod
     def create_runtime_service(

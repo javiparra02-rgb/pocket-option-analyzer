@@ -12,7 +12,6 @@ from pocket_option_analyzer.vision.services import MarketAnalysisPipeline
 
 
 class FakeCandleAnalysisPipeline:
-
     def analyze(self, image):
         return [
             ClassifiedCandle(
@@ -30,7 +29,6 @@ class FakeCandleAnalysisPipeline:
 
 
 class FakeSeriesBuilder:
-
     def build(self, candles):
         return CandleSeries(
             candles=tuple(candles),
@@ -38,7 +36,6 @@ class FakeSeriesBuilder:
 
 
 class FakeTrendDetector:
-
     def detect(self, series):
         return TrendDirection.BULLISH
 

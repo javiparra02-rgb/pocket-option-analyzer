@@ -26,11 +26,7 @@ class GuiApplication:
         argv: Sequence[str] | None = None,
     ) -> None:
         self._controller = controller
-        self._argv = list(
-            argv
-            if argv is not None
-            else sys.argv
-        )
+        self._argv = list(argv if argv is not None else sys.argv)
 
     def run(self) -> int:
         """

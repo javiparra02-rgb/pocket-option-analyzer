@@ -38,11 +38,7 @@ class Win32WindowLocator:
 
         search = window_title.lower()
 
-        matches = [
-            window
-            for window in candidates
-            if search in window.title.lower()
-        ]
+        matches = [window for window in candidates if search in window.title.lower()]
 
         if not matches:
             return None

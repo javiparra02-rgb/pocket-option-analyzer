@@ -54,12 +54,8 @@ class RsiCalculator:
                 0.0,
             )
 
-            average_gain = (
-                (average_gain * (period - 1)) + gain
-            ) / period
-            average_loss = (
-                (average_loss * (period - 1)) + loss
-            ) / period
+            average_gain = ((average_gain * (period - 1)) + gain) / period
+            average_loss = ((average_loss * (period - 1)) + loss) / period
 
             rsi_values.append(
                 self._calculate_rsi(
@@ -127,6 +123,4 @@ class RsiCalculator:
 
         relative_strength = average_gain / average_loss
 
-        return 100 - (
-            100 / (1 + relative_strength)
-        )
+        return 100 - (100 / (1 + relative_strength))

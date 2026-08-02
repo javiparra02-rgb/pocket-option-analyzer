@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pocket_option_analyzer.application.runtime import (
     AnalysisRuntimeService,
@@ -14,7 +14,6 @@ from pocket_option_analyzer.domain.signals import (
 
 
 class FakeFrameAnalysisLoop:
-
     def __init__(self) -> None:
         self._is_running = False
         self.run_once_calls = 0
@@ -38,7 +37,7 @@ class FakeFrameAnalysisLoop:
                 2026,
                 1,
                 1,
-                tzinfo=timezone.utc,
+                tzinfo=UTC,
             ),
             source="runtime_test",
         )

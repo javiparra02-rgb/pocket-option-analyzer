@@ -31,12 +31,7 @@ class StochasticSnapshot:
         %K cruzó hacia arriba sobre %D.
         """
 
-        return (
-            self.k_previous
-            <= self.d_previous
-            and self.k_value
-            > self.d_value
-        )
+        return self.k_previous <= self.d_previous and self.k_value > self.d_value
 
     @property
     def crossed_down(self) -> bool:
@@ -44,9 +39,4 @@ class StochasticSnapshot:
         %K cruzó hacia abajo bajo %D.
         """
 
-        return (
-            self.k_previous
-            >= self.d_previous
-            and self.k_value
-            < self.d_value
-        )
+        return self.k_previous >= self.d_previous and self.k_value < self.d_value

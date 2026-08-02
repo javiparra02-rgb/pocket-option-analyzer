@@ -134,11 +134,15 @@ class SignalRecordPresenter:
         prefix: str,
     ) -> str:
 
-        first_line = lines[start_index].replace(
-            prefix,
-            "",
-            1,
-        ).strip()
+        first_line = (
+            lines[start_index]
+            .replace(
+                prefix,
+                "",
+                1,
+            )
+            .strip()
+        )
 
         collected_lines = [
             first_line,
@@ -159,11 +163,7 @@ class SignalRecordPresenter:
                 line.rstrip(),
             )
 
-        return "\n".join(
-            line
-            for line in collected_lines
-            if line
-        ).strip()
+        return "\n".join(line for line in collected_lines if line).strip()
 
     def _remove_diagnostics(
         self,
@@ -215,10 +215,7 @@ class SignalRecordPresenter:
         Formatea el motivo técnico de estrategia para la GUI.
         """
 
-        if (
-            "CALL failed:" not in reason
-            or "PUT failed:" not in reason
-        ):
+        if "CALL failed:" not in reason or "PUT failed:" not in reason:
             return self._translate_reason(
                 reason=reason,
             )
@@ -252,16 +249,13 @@ class SignalRecordPresenter:
             return "  - Ninguna."
 
         failures = [
-            failure.strip()
-            for failure in cleaned_text.split(",")
-            if failure.strip()
+            failure.strip() for failure in cleaned_text.split(",") if failure.strip()
         ]
 
         return "\n".join(
-            f"  - {self._translate_failure(failure)}"
-            for failure in failures
+            f"  - {self._translate_failure(failure)}" for failure in failures
         )
-    
+
     def _translate_reason(
         self,
         reason: str,
@@ -273,18 +267,11 @@ class SignalRecordPresenter:
                 "confirmadas completamente."
             ),
             "Not enough visual candles to calculate indicators.": (
-                "No hay suficientes velas visuales para calcular "
-                "indicadores."
+                "No hay suficientes velas visuales para calcular indicadores."
             ),
-            "Detected candles:": (
-                "Velas detectadas:"
-            ),
-            "Minimum visible required:": (
-                "Mínimo visible requerido:"
-            ),
-            "Minimum closed required:": (
-                "Mínimo cerrado requerido:"
-            ),
+            "Detected candles:": ("Velas detectadas:"),
+            "Minimum visible required:": ("Mínimo visible requerido:"),
+            "Minimum closed required:": ("Mínimo cerrado requerido:"),
         }
 
         translated_reason = reason
@@ -303,30 +290,14 @@ class SignalRecordPresenter:
     ) -> str:
 
         translations = {
-            "trend is not bullish": (
-                "La tendencia visual no es alcista."
-            ),
-            "trend is not bearish": (
-                "La tendencia visual no es bajista."
-            ),
-            "EMA alignment is not bullish": (
-                "La alineación EMA no es alcista."
-            ),
-            "EMA alignment is not bearish": (
-                "La alineación EMA no es bajista."
-            ),
-            "EMA separation is insufficient": (
-                "La separación EMA es insuficiente."
-            ),
-            "RSI is not in CALL range": (
-                "El RSI no está en rango CALL."
-            ),
-            "RSI is not in PUT range": (
-                "El RSI no está en rango PUT."
-            ),
-            "stochastic did not cross up": (
-                "El Stochastic no confirmó cruce alcista."
-            ),
+            "trend is not bullish": ("La tendencia visual no es alcista."),
+            "trend is not bearish": ("La tendencia visual no es bajista."),
+            "EMA alignment is not bullish": ("La alineación EMA no es alcista."),
+            "EMA alignment is not bearish": ("La alineación EMA no es bajista."),
+            "EMA separation is insufficient": ("La separación EMA es insuficiente."),
+            "RSI is not in CALL range": ("El RSI no está en rango CALL."),
+            "RSI is not in PUT range": ("El RSI no está en rango PUT."),
+            "stochastic did not cross up": ("El Stochastic no confirmó cruce alcista."),
             "stochastic did not cross down": (
                 "El Stochastic no confirmó cruce bajista."
             ),
@@ -336,12 +307,8 @@ class SignalRecordPresenter:
             "stochastic previous K is below PUT trigger zone": (
                 "El K previo del Stochastic está bajo la zona de activación PUT."
             ),
-            "latest candle is not bullish": (
-                "La última vela no es alcista."
-            ),
-            "latest candle is not bearish": (
-                "La última vela no es bajista."
-            ),
+            "latest candle is not bullish": ("La última vela no es alcista."),
+            "latest candle is not bearish": ("La última vela no es bajista."),
             "recent closed candle is not bullish": (
                 "La vela cerrada reciente no es alcista."
             ),
@@ -354,7 +321,7 @@ class SignalRecordPresenter:
             failure,
             f"{failure}.",
         )
-    
+
     def _operational_summary_label(
         self,
         record: SignalRecord,
@@ -403,9 +370,7 @@ class SignalRecordPresenter:
                 "completa de la estrategia."
             )
 
-        return (
-            "Resumen operativo: ESPERAR — no hay entrada confirmada."
-        )
+        return "Resumen operativo: ESPERAR — no hay entrada confirmada."
 
     def _extract_diagnostic_value(
         self,

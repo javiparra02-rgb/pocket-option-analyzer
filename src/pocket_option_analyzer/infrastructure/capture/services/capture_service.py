@@ -4,19 +4,16 @@ from pocket_option_analyzer.infrastructure.capture.contracts import (
     ScreenCapture,
 )
 from pocket_option_analyzer.infrastructure.capture.models import Frame
-
 from pocket_option_analyzer.infrastructure.capture.services.frame_buffer import (
     FrameBuffer,
 )
 from pocket_option_analyzer.infrastructure.capture.services.frame_factory import (
     FrameFactory,
 )
-
 from pocket_option_analyzer.infrastructure.windows.services import (
     WindowFinder,
     WindowReader,
 )
-
 from pocket_option_analyzer.vision.services import (
     ChartRegionExtractor,
     DatasetCaptureService,

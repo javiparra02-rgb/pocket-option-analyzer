@@ -24,7 +24,6 @@ from pocket_option_analyzer.vision.models import (
 
 
 class FakePriceSeriesBuilder:
-
     def __init__(
         self,
         result: PriceSeries,
@@ -41,7 +40,6 @@ class FakePriceSeriesBuilder:
 
 
 class FakeIndicatorSnapshotBuilder:
-
     def __init__(
         self,
         result: IndicatorSnapshot | None,
@@ -65,7 +63,6 @@ class FakeIndicatorSnapshotBuilder:
 
 
 class MutableNowProvider:
-
     def __init__(
         self,
         current: datetime,
@@ -172,30 +169,16 @@ def test_build_creates_indicator_snapshot_from_visual_series() -> None:
 
     assert result is indicator_snapshot
     assert price_builder.received_series is not visual_series
-    assert price_builder.received_series.candles == (
-        visual_series.candles[0],
-    )
+    assert price_builder.received_series.candles == (visual_series.candles[0],)
     assert len(visual_series) == 2
     assert indicator_builder.received_series is price_series
     assert indicator_builder.received_profile is profile
     assert builder.snapshot_context is not None
 
-    assert (
-        builder.snapshot_context.visible_candle_count
-        == 2
-    )
-    assert (
-        builder.snapshot_context.ohlc_candle_count
-        == 1
-    )
-    assert (
-        builder.snapshot_context.geometry_valid_count
-        == 1
-    )
-    assert (
-        builder.snapshot_context.geometry_total_count
-        == 1
-    )
+    assert builder.snapshot_context.visible_candle_count == 2
+    assert builder.snapshot_context.ohlc_candle_count == 1
+    assert builder.snapshot_context.geometry_valid_count == 1
+    assert builder.snapshot_context.geometry_total_count == 1
 
 
 def test_build_returns_none_when_visual_series_produces_empty_price_series() -> None:
@@ -258,9 +241,7 @@ def test_build_returns_none_when_only_forming_candle_is_visible() -> None:
 
     result = builder.build(
         series=CandleSeries(
-            candles=(
-                visual_series.candles[-1],
-            ),
+            candles=(visual_series.candles[-1],),
         ),
         profile=StrategyProfile.otc_precision_10s(),
     )
@@ -345,10 +326,13 @@ def test_build_recalculates_after_new_candle_settles() -> None:
         now_provider=now_provider,
     )
 
-    assert builder.build(
-        series=_visual_series(),
-        profile=StrategyProfile.otc_precision_10s(),
-    ) is first_snapshot
+    assert (
+        builder.build(
+            series=_visual_series(),
+            profile=StrategyProfile.otc_precision_10s(),
+        )
+        is first_snapshot
+    )
 
     second_snapshot = IndicatorSnapshot(
         ema=EmaSnapshot(

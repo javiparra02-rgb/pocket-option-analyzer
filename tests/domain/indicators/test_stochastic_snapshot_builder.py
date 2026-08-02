@@ -10,15 +10,11 @@ from pocket_option_analyzer.domain.strategy import StrategyProfile
 
 
 class FakeStochasticCalculator:
-
     def __init__(
         self,
         k_values: tuple[float, ...],
         d_values: tuple[float, ...],
-        diagnostics: (
-            StochasticCalculationDiagnostics
-            | None
-        ) = None,
+        diagnostics: (StochasticCalculationDiagnostics | None) = None,
     ) -> None:
         self._k_values = k_values
         self._d_values = d_values
@@ -64,12 +60,8 @@ def test_build_returns_none_when_not_enough_values() -> None:
 
     builder = StochasticSnapshotBuilder(
         calculator=FakeStochasticCalculator(
-            k_values=(
-                20.0,
-            ),
-            d_values=(
-                18.0,
-            ),
+            k_values=(20.0,),
+            d_values=(18.0,),
         ),
     )
 

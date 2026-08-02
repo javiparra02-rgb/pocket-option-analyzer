@@ -12,7 +12,6 @@ from pocket_option_analyzer.domain.strategy import StrategyProfile
 
 
 class FakeSnapshotBuilder:
-
     def __init__(
         self,
         result,

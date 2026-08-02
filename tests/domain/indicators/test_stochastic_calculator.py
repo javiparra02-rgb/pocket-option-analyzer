@@ -61,9 +61,7 @@ def test_stochastic_calculator_calculates_k_and_d_values() -> None:
         80.0,
         80.0,
     )
-    assert d_values == (
-        80.0,
-    )
+    assert d_values == (80.0,)
 
 
 def test_stochastic_calculator_returns_50_when_range_is_zero() -> None:
@@ -91,12 +89,8 @@ def test_stochastic_calculator_returns_50_when_range_is_zero() -> None:
         smooth_period=1,
     )
 
-    assert k_values == (
-        50.0,
-    )
-    assert d_values == (
-        50.0,
-    )
+    assert k_values == (50.0,)
+    assert d_values == (50.0,)
 
 
 def test_stochastic_calculator_applies_smoothing() -> None:
@@ -134,9 +128,7 @@ def test_stochastic_calculator_applies_smoothing() -> None:
         80.0,
         80.0,
     )
-    assert d_values == (
-        80.0,
-    )
+    assert d_values == (80.0,)
 
 
 def test_stochastic_calculator_rejects_invalid_periods() -> None:
@@ -220,9 +212,7 @@ def test_stochastic_calculator_returns_latest_window_diagnostics() -> None:
         80.0,
         80.0,
     )
-    assert d_values == (
-        80.0,
-    )
+    assert d_values == (80.0,)
 
     assert diagnostics is not None
     assert diagnostics.source_candle_count == 5

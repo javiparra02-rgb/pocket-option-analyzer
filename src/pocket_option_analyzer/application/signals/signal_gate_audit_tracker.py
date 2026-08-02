@@ -30,50 +30,31 @@ class SignalGateAuditSnapshot:
 
     duplicate_suppressed_count: int = 0
 
-    last_disposition: (
-        SignalRecordDisposition
-        | None
-    ) = None
+    last_disposition: SignalRecordDisposition | None = None
 
-    last_direction: (
-        SignalDirection
-        | None
-    ) = None
+    last_direction: SignalDirection | None = None
 
-    last_interval_started_at: (
-        datetime
-        | None
-    ) = None
+    last_interval_started_at: datetime | None = None
 
     def __post_init__(
         self,
     ) -> None:
         if self.accepted_count < 0:
-            raise ValueError(
-                "accepted_count no puede ser negativo."
-            )
+            raise ValueError("accepted_count no puede ser negativo.")
 
         if self.duplicate_suppressed_count < 0:
-            raise ValueError(
-                "duplicate_suppressed_count no puede ser negativo."
-            )
+            raise ValueError("duplicate_suppressed_count no puede ser negativo.")
 
-        has_last_event = (
-            self.last_disposition is not None
-        )
+        has_last_event = self.last_disposition is not None
 
         last_event_fields_are_complete = (
             self.last_direction is not None
             and self.last_interval_started_at is not None
         )
 
-        if (
-            has_last_event
-            != last_event_fields_are_complete
-        ):
+        if has_last_event != last_event_fields_are_complete:
             raise ValueError(
-                "Los datos del último evento deben estar "
-                "completos o ausentes."
+                "Los datos del último evento deben estar completos o ausentes."
             )
 
         if self.last_disposition is None:
@@ -89,24 +70,18 @@ class SignalGateAuditSnapshot:
             )
 
         if self.last_direction is SignalDirection.NONE:
-            raise ValueError(
-                "El último evento del gate no puede tener "
-                "dirección NONE."
-            )
+            raise ValueError("El último evento del gate no puede tener dirección NONE.")
 
         if (
-            self.last_disposition
-            is SignalRecordDisposition.ACTIONABLE_ACCEPTED
+            self.last_disposition is SignalRecordDisposition.ACTIONABLE_ACCEPTED
             and self.accepted_count < 1
         ):
             raise ValueError(
-                "Una última señal aceptada requiere "
-                "accepted_count mayor que cero."
+                "Una última señal aceptada requiere accepted_count mayor que cero."
             )
 
         if (
-            self.last_disposition
-            is SignalRecordDisposition.DUPLICATE_SUPPRESSED
+            self.last_disposition is SignalRecordDisposition.DUPLICATE_SUPPRESSED
             and self.duplicate_suppressed_count < 1
         ):
             raise ValueError(
@@ -118,10 +93,7 @@ class SignalGateAuditSnapshot:
     def total_actionable_attempts(
         self,
     ) -> int:
-        return (
-            self.accepted_count
-            + self.duplicate_suppressed_count
-        )
+        return self.accepted_count + self.duplicate_suppressed_count
 
 
 class SignalGateAuditTracker:
@@ -138,20 +110,11 @@ class SignalGateAuditTracker:
         self._accepted_count = 0
         self._duplicate_suppressed_count = 0
 
-        self._last_disposition: (
-            SignalRecordDisposition
-            | None
-        ) = None
+        self._last_disposition: SignalRecordDisposition | None = None
 
-        self._last_direction: (
-            SignalDirection
-            | None
-        ) = None
+        self._last_direction: SignalDirection | None = None
 
-        self._last_interval_started_at: (
-            datetime
-            | None
-        ) = None
+        self._last_interval_started_at: datetime | None = None
 
     def track(
         self,
@@ -164,22 +127,13 @@ class SignalGateAuditTracker:
         el último evento accionable.
         """
 
-        if (
-            record.disposition
-            is SignalRecordDisposition.OBSERVED
-        ):
+        if record.disposition is SignalRecordDisposition.OBSERVED:
             return self.snapshot()
 
-        if (
-            record.disposition
-            is SignalRecordDisposition.ACTIONABLE_ACCEPTED
-        ):
+        if record.disposition is SignalRecordDisposition.ACTIONABLE_ACCEPTED:
             self._accepted_count += 1
 
-        elif (
-            record.disposition
-            is SignalRecordDisposition.DUPLICATE_SUPPRESSED
-        ):
+        elif record.disposition is SignalRecordDisposition.DUPLICATE_SUPPRESSED:
             self._duplicate_suppressed_count += 1
 
         else:
@@ -187,9 +141,7 @@ class SignalGateAuditTracker:
 
         self._last_disposition = record.disposition
         self._last_direction = record.signal.direction
-        self._last_interval_started_at = (
-            record.candle_interval_started_at
-        )
+        self._last_interval_started_at = record.candle_interval_started_at
 
         return self.snapshot()
 
@@ -198,14 +150,10 @@ class SignalGateAuditTracker:
     ) -> SignalGateAuditSnapshot:
         return SignalGateAuditSnapshot(
             accepted_count=self._accepted_count,
-            duplicate_suppressed_count=(
-                self._duplicate_suppressed_count
-            ),
+            duplicate_suppressed_count=(self._duplicate_suppressed_count),
             last_disposition=self._last_disposition,
             last_direction=self._last_direction,
-            last_interval_started_at=(
-                self._last_interval_started_at
-            ),
+            last_interval_started_at=(self._last_interval_started_at),
         )
 
     def reset(

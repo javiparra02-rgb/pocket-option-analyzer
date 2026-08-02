@@ -31,9 +31,7 @@ def test_ema_calculator_uses_sma_as_first_ema() -> None:
         period=3,
     )
 
-    assert result == (
-        101.0,
-    )
+    assert result == (101.0,)
 
 
 def test_ema_calculator_calculates_exponential_values() -> None:

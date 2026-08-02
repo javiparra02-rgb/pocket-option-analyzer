@@ -10,7 +10,6 @@ from pocket_option_analyzer.main import (
 
 
 class FakeApplicationLogger:
-
     def __init__(
         self,
     ) -> None:
@@ -35,7 +34,6 @@ class FakeApplicationLogger:
 
 
 class FakeLoggingManager:
-
     def __init__(
         self,
     ) -> None:
@@ -55,7 +53,6 @@ class FakeLoggingManager:
 
 
 class FakeGuiApplication:
-
     def __init__(
         self,
         exit_code: int = 0,
@@ -140,10 +137,7 @@ def test_main_configures_and_closes_logging_manager(
 
     assert logging_manager.logger.info_messages == [
         "Iniciando Pocket Option Analyzer.",
-        (
-            "Pocket Option Analyzer finalizado "
-            "con código 7."
-        ),
+        ("Pocket Option Analyzer finalizado con código 7."),
     ]
 
 
@@ -180,8 +174,5 @@ def test_main_logs_unhandled_error_and_flushes_logger(
     assert logging_manager.shutdown_calls == 1
 
     assert logging_manager.logger.exception_messages == [
-        (
-            "Error no controlado durante "
-            "la ejecución de Pocket Option Analyzer."
-        ),
+        ("Error no controlado durante la ejecución de Pocket Option Analyzer."),
     ]

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -16,7 +16,6 @@ from pocket_option_analyzer.presentation.gui import (
 
 
 class FakeRuntimeService:
-
     def __init__(
         self,
         records,
@@ -39,7 +38,6 @@ class FakeRuntimeService:
 
 
 class SignalCollector:
-
     def __init__(self) -> None:
         self.records = []
         self.errors: list[str] = []
@@ -69,7 +67,6 @@ class SignalCollector:
 
 
 class FakeSleep:
-
     def __init__(self) -> None:
         self.calls: list[float] = []
 
@@ -81,7 +78,6 @@ class FakeSleep:
 
 
 class StopWorkerSleep:
-
     def __init__(self) -> None:
         self.worker: AnalysisWorker | None = None
         self.calls: list[float] = []
@@ -111,7 +107,7 @@ def _record(
             2026,
             1,
             1,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         source="worker_test",
     )
@@ -321,9 +317,7 @@ def test_worker_stops_before_capture_when_iteration_guard_rejects() -> None:
         runtime_service=runtime,
         interval_seconds=0,
         sleep_function=lambda seconds: None,
-        iteration_guard=lambda: (
-            "El analizador se superpone con Pocket Option."
-        ),
+        iteration_guard=lambda: "El analizador se superpone con Pocket Option.",
     )
 
     worker.error_occurred.connect(

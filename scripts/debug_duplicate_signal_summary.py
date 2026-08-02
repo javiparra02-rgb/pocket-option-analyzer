@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pocket_option_analyzer.domain.signals import (
@@ -16,16 +16,9 @@ from pocket_option_analyzer.infrastructure.signals import (
     JsonlSignalRecordWriter,
 )
 
+OUTPUT_DIRECTORY = Path("debug") / "duplicate_signal_summary"
 
-OUTPUT_DIRECTORY = (
-    Path("debug")
-    / "duplicate_signal_summary"
-)
-
-OUTPUT_FILE = (
-    OUTPUT_DIRECTORY
-    / "signals.jsonl"
-)
+OUTPUT_FILE = OUTPUT_DIRECTORY / "signals.jsonl"
 
 
 def _record(
@@ -42,9 +35,7 @@ def _record(
                 if direction is SignalDirection.NONE
                 else SignalStrength.HIGH
             ),
-            reason=(
-                "Deterministic duplicate summary test."
-            ),
+            reason=("Deterministic duplicate summary test."),
         ),
         created_at=datetime(
             2026,
@@ -53,7 +44,7 @@ def _record(
             20,
             51,
             second,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         source="debug_duplicate_signal_summary",
         disposition=disposition,
@@ -64,7 +55,7 @@ def _record(
             20,
             51,
             30,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
     )
 
@@ -82,9 +73,7 @@ def main() -> None:
 
     writer.write(
         _record(
-            disposition=(
-                SignalRecordDisposition.ACTIONABLE_ACCEPTED
-            ),
+            disposition=(SignalRecordDisposition.ACTIONABLE_ACCEPTED),
             second=32,
             direction=SignalDirection.CALL,
         )
@@ -96,9 +85,7 @@ def main() -> None:
     ):
         writer.write(
             _record(
-                disposition=(
-                    SignalRecordDisposition.DUPLICATE_SUPPRESSED
-                ),
+                disposition=(SignalRecordDisposition.DUPLICATE_SUPPRESSED),
                 second=second,
                 direction=SignalDirection.CALL,
             )
@@ -114,9 +101,7 @@ def main() -> None:
         if line.strip()
     ]
 
-    print(
-        f"Registros físicos: {len(records)}"
-    )
+    print(f"Registros físicos: {len(records)}")
 
     for record in records:
         print(
@@ -132,17 +117,13 @@ def main() -> None:
         for record in records
         if record.get(
             "event_type",
-        ) == "duplicate_signal_summary"
+        )
+        == "duplicate_signal_summary"
     )
 
-    print(
-        "Duplicadas resumidas: "
-        f"{summary['duplicate_suppressed_count']}"
-    )
+    print(f"Duplicadas resumidas: {summary['duplicate_suppressed_count']}")
 
-    print(
-        f"Tamaño: {OUTPUT_FILE.stat().st_size} bytes"
-    )
+    print(f"Tamaño: {OUTPUT_FILE.stat().st_size} bytes")
 
 
 if __name__ == "__main__":

@@ -1,22 +1,43 @@
+from pocket_option_analyzer.infrastructure.windows.models import Win32WindowInfo
 from pocket_option_analyzer.infrastructure.windows.services.window_reader import (
     WindowReader,
 )
-from pocket_option_analyzer.infrastructure.windows.models import Win32WindowInfo
 
 
 class FakeUser32:
-    def get_window_text(self, hwnd): return "Pocket Option"
+    def get_window_text(self, hwnd):
+        return "Pocket Option"
+
     def get_window_rect(self, hwnd):
-        class R: left=0; top=0; right=100; bottom=100
+        class R:
+            left = 0
+            top = 0
+            right = 100
+            bottom = 100
+
         return R()
+
     def get_client_rect(self, hwnd):
-        class R: left=0; top=0; right=80; bottom=80
+        class R:
+            left = 0
+            top = 0
+            right = 80
+            bottom = 80
+
         return R()
+
     def client_to_screen(self, hwnd, point):
-        class P: x=10; y=20
+        class P:
+            x = 10
+            y = 20
+
         return P()
-    def is_window_visible(self, hwnd): return True
-    def is_iconic(self, hwnd): return False
+
+    def is_window_visible(self, hwnd):
+        return True
+
+    def is_iconic(self, hwnd):
+        return False
 
 
 class FakeFactory:

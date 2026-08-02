@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pocket_option_analyzer.domain.session_results import (
     ManualSignalResult,
@@ -22,7 +22,6 @@ from pocket_option_analyzer.presentation.signals import (
 
 
 class FakeSignal:
-
     def __init__(self) -> None:
         self._callbacks = []
 
@@ -43,7 +42,6 @@ class FakeSignal:
 
 
 class FakeRuntimeService:
-
     def __init__(
         self,
         record: SignalRecord | None = None,
@@ -69,7 +67,6 @@ class FakeRuntimeService:
 
 
 class FakeWorker:
-
     def __init__(
         self,
         record: SignalRecord | None = None,
@@ -130,7 +127,6 @@ class FakeWorker:
 
 
 class FakeThread:
-
     def __init__(self) -> None:
         self.started = FakeSignal()
         self.finished = FakeSignal()
@@ -151,7 +147,6 @@ class FakeThread:
 
 
 class FakeWindow:
-
     def __init__(
         self,
         accept_signal: bool = True,
@@ -183,10 +178,7 @@ class FakeWindow:
             view_model,
         )
 
-        return (
-            self.accept_signal
-            and view_model.is_actionable
-        )
+        return self.accept_signal and view_model.is_actionable
 
     def set_error_message(
         self,
@@ -232,7 +224,6 @@ class FakeWindow:
 
 
 class FakeVoiceNotifier:
-
     def __init__(self) -> None:
         self.view_models = []
         self.enabled_changes: list[bool] = []
@@ -267,7 +258,6 @@ class FakeVoiceNotifier:
 
 
 class FakeWindowCaptureExcluder:
-
     def __init__(
         self,
         result: bool = True,
@@ -312,7 +302,6 @@ class FakeWindowCaptureExcluder:
 
 
 class FakeManualResultSession:
-
     def __init__(
         self,
         error: Exception | None = None,
@@ -356,7 +345,6 @@ class FakeManualResultSession:
 
 
 class FakeRecordingSafetyStatus:
-
     def __init__(
         self,
         is_safe: bool,
@@ -367,7 +355,6 @@ class FakeRecordingSafetyStatus:
 
 
 class FakeRecordingSafetyGuard:
-
     def __init__(
         self,
         is_safe: bool = True,
@@ -406,7 +393,7 @@ def _record() -> SignalRecord:
             10,
             30,
             45,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         source="controller_test",
     )
@@ -831,8 +818,7 @@ def test_controller_preserves_gui_state_when_result_persistence_fails() -> None:
 
     assert success is False
     assert (
-        window.error_messages[-1]
-        == "No fue posible guardar el resultado manual: "
+        window.error_messages[-1] == "No fue posible guardar el resultado manual: "
         "disk unavailable"
     )
 
@@ -912,9 +898,7 @@ def test_controller_does_not_start_when_capture_excluder_raises() -> None:
     )
     thread = FakeThread()
     excluder = FakeWindowCaptureExcluder(
-        error=RuntimeError(
-            "affinity unavailable"
-        ),
+        error=RuntimeError("affinity unavailable"),
     )
 
     controller = MainWindowController(
@@ -932,8 +916,7 @@ def test_controller_does_not_start_when_capture_excluder_raises() -> None:
     assert worker.run_calls == 0
     assert window.running_states[-1] is False
     assert window.error_messages[-1] == (
-        "No fue posible configurar la protección de captura: "
-        "affinity unavailable"
+        "No fue posible configurar la protección de captura: affinity unavailable"
     )
 
 
@@ -950,17 +933,23 @@ def test_controller_enables_and_disables_evidence_mode() -> None:
         window=window,
     )
 
-    assert controller.set_evidence_mode(
-        True,
-    ) is True
+    assert (
+        controller.set_evidence_mode(
+            True,
+        )
+        is True
+    )
 
     assert excluder.allowed_handles == [
         window.native_window_handle,
     ]
 
-    assert controller.set_evidence_mode(
-        False,
-    ) is True
+    assert (
+        controller.set_evidence_mode(
+            False,
+        )
+        is True
+    )
 
     assert excluder.excluded_handles == [
         window.native_window_handle,
@@ -1013,9 +1002,12 @@ def test_controller_blocks_start_while_evidence_mode_is_enabled() -> None:
         thread_factory=lambda: thread,
     )
 
-    assert controller.set_evidence_mode(
-        True,
-    ) is True
+    assert (
+        controller.set_evidence_mode(
+            True,
+        )
+        is True
+    )
 
     controller.start()
 
@@ -1061,9 +1053,7 @@ def test_controller_rejects_recording_mode_when_windows_overlap() -> None:
     excluder = FakeWindowCaptureExcluder()
     safety_guard = FakeRecordingSafetyGuard(
         is_safe=False,
-        message=(
-            "El analizador se superpone con Pocket Option."
-        ),
+        message=("El analizador se superpone con Pocket Option."),
     )
 
     controller = MainWindowController(
@@ -1106,9 +1096,12 @@ def test_controller_starts_recording_without_excluding_window() -> None:
         thread_factory=lambda: thread,
     )
 
-    assert controller.set_recording_mode(
-        True,
-    ) is True
+    assert (
+        controller.set_recording_mode(
+            True,
+        )
+        is True
+    )
 
     controller.start()
 
@@ -1141,14 +1134,15 @@ def test_controller_blocks_start_when_recording_location_changed() -> None:
         thread_factory=lambda: thread,
     )
 
-    assert controller.set_recording_mode(
-        True,
-    ) is True
+    assert (
+        controller.set_recording_mode(
+            True,
+        )
+        is True
+    )
 
     safety_guard.is_safe = False
-    safety_guard.message = (
-        "El analizador se superpone con Pocket Option."
-    )
+    safety_guard.message = "El analizador se superpone con Pocket Option."
 
     controller.start()
 
@@ -1174,9 +1168,12 @@ def test_controller_rejects_evidence_mode_during_recording_mode() -> None:
         window=window,
     )
 
-    assert controller.set_recording_mode(
-        True,
-    ) is True
+    assert (
+        controller.set_recording_mode(
+            True,
+        )
+        is True
+    )
 
     result = controller.set_evidence_mode(
         True,
@@ -1184,8 +1181,7 @@ def test_controller_rejects_evidence_mode_during_recording_mode() -> None:
 
     assert result is False
     assert window.error_messages[-1] == (
-        "Sal del modo grabación antes de activar "
-        "el modo evidencia."
+        "Sal del modo grabación antes de activar el modo evidencia."
     )
 
 
@@ -1198,7 +1194,7 @@ def test_controller_suppresses_duplicate_side_effects() -> None:
         10,
         30,
         0,
-        tzinfo=timezone.utc,
+        tzinfo=UTC,
     )
 
     duplicate_record = SignalRecord(
@@ -1214,12 +1210,10 @@ def test_controller_suppresses_duplicate_side_effects() -> None:
             10,
             30,
             15,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         source="controller_test",
-        disposition=(
-            SignalRecordDisposition.DUPLICATE_SUPPRESSED
-        ),
+        disposition=(SignalRecordDisposition.DUPLICATE_SUPPRESSED),
         candle_interval_started_at=interval_started_at,
     )
 
@@ -1246,10 +1240,7 @@ def test_controller_suppresses_duplicate_side_effects() -> None:
     assert manual_session.tracked_records == []
     assert len(window.gate_audit_view_models) == 1
 
-    assert (
-        "1 duplicada suprimida"
-        in window.gate_audit_view_models[-1].text
-    )
+    assert "1 duplicada suprimida" in window.gate_audit_view_models[-1].text
 
 
 def test_controller_resets_voice_for_new_accepted_interval() -> None:
@@ -1261,7 +1252,7 @@ def test_controller_resets_voice_for_new_accepted_interval() -> None:
         10,
         30,
         30,
-        tzinfo=timezone.utc,
+        tzinfo=UTC,
     )
 
     accepted_record = SignalRecord(
@@ -1277,12 +1268,10 @@ def test_controller_resets_voice_for_new_accepted_interval() -> None:
             10,
             30,
             35,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         source="controller_test",
-        disposition=(
-            SignalRecordDisposition.ACTIONABLE_ACCEPTED
-        ),
+        disposition=(SignalRecordDisposition.ACTIONABLE_ACCEPTED),
         candle_interval_started_at=interval_started_at,
     )
 
@@ -1306,7 +1295,4 @@ def test_controller_resets_voice_for_new_accepted_interval() -> None:
     assert voice.view_models[0].is_actionable is True
     assert len(window.gate_audit_view_models) == 1
 
-    assert (
-        "1 aceptada"
-        in window.gate_audit_view_models[-1].text
-    )
+    assert "1 aceptada" in window.gate_audit_view_models[-1].text

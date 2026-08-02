@@ -91,42 +91,32 @@ class VisualStrategySignalAnalysisPipeline:
                 ),
             )
 
-        snapshot_timing_status = (
-            self._resolve_snapshot_timing_status()
-        )
+        snapshot_timing_status = self._resolve_snapshot_timing_status()
 
         if (
             snapshot_timing_status is not None
             and not snapshot_timing_status.allows_actionable_signals
         ):
-            visual_diagnostics_line = (
-                self._visual_diagnostics_line(
-                    market_analysis=market_analysis,
-                    signal_state_label=(
-                        "ESPERANDO_SNAPSHOT_NUEVO"
-                    ),
-                )
+            visual_diagnostics_line = self._visual_diagnostics_line(
+                market_analysis=market_analysis,
+                signal_state_label=("ESPERANDO_SNAPSHOT_NUEVO"),
             )
 
-            indicator_diagnostics_line = (
-                self._indicator_diagnostics_line(
-                    indicators=indicators,
-                    snapshot_context=(
-                        self._indicator_snapshot_builder.snapshot_context
-                    ),
-                    snapshot_timing_status=(
-                        snapshot_timing_status
-                    ),
-                )
+            indicator_diagnostics_line = self._indicator_diagnostics_line(
+                indicators=indicators,
+                snapshot_context=(self._indicator_snapshot_builder.snapshot_context),
+                snapshot_timing_status=(snapshot_timing_status),
             )
 
             return MarketSignal.neutral(
                 reason=(
                     f"{visual_diagnostics_line}\n"
                     f"{indicator_diagnostics_line}\n"
-                    f"{self._snapshot_timing_line(
-                        status=snapshot_timing_status,
-                    )}"
+                    f"{
+                        self._snapshot_timing_line(
+                            status=snapshot_timing_status,
+                        )
+                    }"
                 ),
             )
 
@@ -147,15 +137,15 @@ class VisualStrategySignalAnalysisPipeline:
             strength=signal.strength,
             reason=(
                 f"{visual_diagnostics_line}\n"
-                f"{self._indicator_diagnostics_line(
-                    indicators=indicators,
-                    snapshot_context=(
-                        self._indicator_snapshot_builder.snapshot_context
-                    ),
-                    snapshot_timing_status=(
-                        snapshot_timing_status
-                    ),
-                )}\n"
+                f"{
+                    self._indicator_diagnostics_line(
+                        indicators=indicators,
+                        snapshot_context=(
+                            self._indicator_snapshot_builder.snapshot_context
+                        ),
+                        snapshot_timing_status=(snapshot_timing_status),
+                    )
+                }\n"
                 f"{signal.reason}"
             ),
         )
@@ -182,7 +172,6 @@ class VisualStrategySignalAnalysisPipeline:
         """
 
         return self._minimum_required_closed_candles() + 1
-
 
     def _minimum_required_closed_candles(
         self,
@@ -254,7 +243,7 @@ class VisualStrategySignalAnalysisPipeline:
             f"  Vigilancia: {self._watch_label(entry_context.entry_state_label)}\n"
             f"  Estado: {signal_state_label}"
         )
-    
+
     def _recent_directional_candles(
         self,
         candles,
@@ -266,26 +255,19 @@ class VisualStrategySignalAnalysisPipeline:
             for candle in candles
             if candle.candle_type.name
             in {
-            "BULLISH",
+                "BULLISH",
                 "BEARISH",
             }
         ]
 
-        return tuple(
-            directional_candles[
-                -limit:
-            ]
-        )
+        return tuple(directional_candles[-limit:])
 
     def _candle_types_text(
         self,
         candles,
     ) -> str:
 
-        labels = [
-            candle.candle_type.name
-            for candle in candles
-        ]
+        labels = [candle.candle_type.name for candle in candles]
 
         return (
             ", ".join(
@@ -317,7 +299,7 @@ class VisualStrategySignalAnalysisPipeline:
             return "SEÑAL_CONFIRMADA"
 
         return "ESPERANDO_CONFIRMACION"
-    
+
     def _missing_indicator_diagnostics_line(
         self,
     ) -> str:
@@ -330,18 +312,11 @@ class VisualStrategySignalAnalysisPipeline:
             "  Estado: velas insuficientes"
         )
 
-
     def _indicator_diagnostics_line(
         self,
         indicators,
-        snapshot_context: (
-            VisualIndicatorSnapshotContext
-            | None
-        ),
-        snapshot_timing_status: (
-            CandleIntervalIndicatorCacheStatus
-            | None
-        ) = None,
+        snapshot_context: (VisualIndicatorSnapshotContext | None),
+        snapshot_timing_status: (CandleIntervalIndicatorCacheStatus | None) = None,
     ) -> str:
 
         indicator_state = (
@@ -359,13 +334,14 @@ class VisualStrategySignalAnalysisPipeline:
             f"  {self._ema_label(indicators)}\n"
             f"  {self._rsi_label(indicators)}\n"
             f"  {self._stochastic_label(indicators)}\n"
-            f"{self._stochastic_audit_lines(
-                indicators=indicators,
-                snapshot_context=snapshot_context,
-            )}\n"
+            f"{
+                self._stochastic_audit_lines(
+                    indicators=indicators,
+                    snapshot_context=snapshot_context,
+                )
+            }\n"
             f"  Estado: {indicator_state}"
         )
-
 
     def _resolve_snapshot_timing_status(
         self,
@@ -380,7 +356,6 @@ class VisualStrategySignalAnalysisPipeline:
             None,
         )
 
-
     def _snapshot_timing_line(
         self,
         status: CandleIntervalIndicatorCacheStatus,
@@ -389,10 +364,8 @@ class VisualStrategySignalAnalysisPipeline:
         Informa por qué una CALL o PUT está temporalmente bloqueada.
         """
 
-        requested_label = (
-            status.requested_key.started_at.strftime(
-                "%H:%M:%S",
-            )
+        requested_label = status.requested_key.started_at.strftime(
+            "%H:%M:%S",
         )
 
         cached_label = (
@@ -413,7 +386,6 @@ class VisualStrategySignalAnalysisPipeline:
             "  Entrada: ESPERAR — el snapshot de indicadores "
             "todavía no pertenece a la vela actual."
         )
-
 
     def _ema_label(
         self,
@@ -470,12 +442,7 @@ class VisualStrategySignalAnalysisPipeline:
             else "PUT fuera de rango"
         )
 
-        return (
-            "RSI: "
-            f"{indicators.rsi.value:.2f} | "
-            f"{call_state} | "
-            f"{put_state}"
-        )
+        return f"RSI: {indicators.rsi.value:.2f} | {call_state} | {put_state}"
 
     def _stochastic_label(
         self,
@@ -501,10 +468,7 @@ class VisualStrategySignalAnalysisPipeline:
     def _stochastic_audit_lines(
         self,
         indicators,
-        snapshot_context: (
-            VisualIndicatorSnapshotContext
-            | None
-        ),
+        snapshot_context: (VisualIndicatorSnapshotContext | None),
     ) -> str:
         """
         Formatea el Stochastic y el contexto exacto del snapshot.
@@ -512,20 +476,14 @@ class VisualStrategySignalAnalysisPipeline:
         No mezcla los conteos almacenados con la captura visual actual.
         """
 
-        diagnostics = (
-            indicators.stochastic.diagnostics
-        )
+        diagnostics = indicators.stochastic.diagnostics
 
         if diagnostics is None:
-            return (
-                "  Auditoría Stoch: no disponible"
-            )
+            return "  Auditoría Stoch: no disponible"
 
-        snapshot_source_line = (
-            self._stochastic_snapshot_source_line(
-                diagnostics=diagnostics,
-                snapshot_context=snapshot_context,
-            )
+        snapshot_source_line = self._stochastic_snapshot_source_line(
+            diagnostics=diagnostics,
+            snapshot_context=snapshot_context,
         )
 
         return (
@@ -542,14 +500,10 @@ class VisualStrategySignalAnalysisPipeline:
             f"D={diagnostics.latest_d:.2f}"
         )
 
-
     def _stochastic_snapshot_source_line(
         self,
         diagnostics,
-        snapshot_context: (
-            VisualIndicatorSnapshotContext
-            | None
-        ),
+        snapshot_context: (VisualIndicatorSnapshotContext | None),
     ) -> str:
         """
         Formatea los conteos pertenecientes al snapshot almacenado.
@@ -565,15 +519,10 @@ class VisualStrategySignalAnalysisPipeline:
             )
 
         is_consistent = (
-            snapshot_context.ohlc_candle_count
-            == diagnostics.source_candle_count
+            snapshot_context.ohlc_candle_count == diagnostics.source_candle_count
         )
 
-        consistency_label = (
-            "OK"
-            if is_consistent
-            else "REVISAR"
-        )
+        consistency_label = "OK" if is_consistent else "REVISAR"
 
         return (
             "  Auditoría Stoch snapshot: "

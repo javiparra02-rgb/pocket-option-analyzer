@@ -28,19 +28,13 @@ class StochasticCalculationDiagnostics:
         self,
     ) -> None:
         if self.source_candle_count < 1:
-            raise ValueError(
-                "source_candle_count debe ser mayor o igual a 1."
-            )
+            raise ValueError("source_candle_count debe ser mayor o igual a 1.")
 
         if self.k_period < 1:
-            raise ValueError(
-                "k_period debe ser mayor o igual a 1."
-            )
+            raise ValueError("k_period debe ser mayor o igual a 1.")
 
         if self.highest_high < self.lowest_low:
-            raise ValueError(
-                "highest_high no puede ser menor que lowest_low."
-            )
+            raise ValueError("highest_high no puede ser menor que lowest_low.")
 
     @property
     def price_range(self) -> float:
@@ -48,7 +42,4 @@ class StochasticCalculationDiagnostics:
         Rango máximo-mínimo de la última ventana de %K.
         """
 
-        return (
-            self.highest_high
-            - self.lowest_low
-        )
+        return self.highest_high - self.lowest_low

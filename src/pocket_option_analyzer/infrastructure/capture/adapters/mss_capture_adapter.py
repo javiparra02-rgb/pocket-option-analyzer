@@ -3,8 +3,6 @@ from __future__ import annotations
 import mss
 import numpy as np
 
-from pocket_option_analyzer.infrastructure.capture.models import WindowInfo
-
 
 class MSSCaptureAdapter:
     """
@@ -29,11 +27,11 @@ class MSSCaptureAdapter:
         """
 
         monitor = {
-          "left": region.left,
-          "top": region.top,
-          "width": region.width,
-         "height": region.height,
-}
+            "left": region.left,
+            "top": region.top,
+            "width": region.width,
+            "height": region.height,
+        }
 
         with mss.MSS() as sct:
             print("========== MSS REGION ==========")

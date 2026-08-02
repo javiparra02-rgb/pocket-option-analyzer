@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 
@@ -22,7 +22,6 @@ from pocket_option_analyzer.domain.signals import (
 
 
 class FakeStrategySignalAnalysisPipeline:
-
     def analyze(self, image, indicators):
         return MarketSignal(
             direction=SignalDirection.CALL,
@@ -32,7 +31,6 @@ class FakeStrategySignalAnalysisPipeline:
 
 
 class FakeSignalRecordWriter:
-
     def __init__(self) -> None:
         self.records: list[SignalRecord] = []
 
@@ -76,7 +74,7 @@ def test_analyze_and_record_adds_generated_signal_to_history() -> None:
         2026,
         1,
         1,
-        tzinfo=timezone.utc,
+        tzinfo=UTC,
     )
 
     record = pipeline.analyze_and_record(

@@ -47,9 +47,7 @@ class SessionResultTracker:
         max_consecutive_losses: int = DEFAULT_MAX_CONSECUTIVE_LOSSES,
     ) -> None:
         if max_consecutive_losses < 1:
-            raise ValueError(
-                "max_consecutive_losses debe ser mayor o igual a 1."
-            )
+            raise ValueError("max_consecutive_losses debe ser mayor o igual a 1.")
 
         self._max_consecutive_losses = max_consecutive_losses
         self._history: list[SessionResult] = []
@@ -95,18 +93,11 @@ class SessionResultTracker:
         if self.total == 0:
             return None
 
-        return (
-            self.wins
-            / self.total
-            * 100.0
-        )
+        return self.wins / self.total * 100.0
 
     @property
     def pause_recommended(self) -> bool:
-        return (
-            self.consecutive_losses
-            >= self._max_consecutive_losses
-        )
+        return self.consecutive_losses >= self._max_consecutive_losses
 
     @property
     def history(self) -> tuple[SessionResult, ...]:

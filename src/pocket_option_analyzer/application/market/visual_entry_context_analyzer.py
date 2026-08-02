@@ -163,9 +163,7 @@ class VisualEntryContextAnalyzer:
             }
         )
 
-        return directional_candles[
-            -self._recent_closed_candles :
-        ]
+        return directional_candles[-self._recent_closed_candles :]
 
     def _count_type(
         self,
@@ -173,8 +171,4 @@ class VisualEntryContextAnalyzer:
         candle_type: CandleType,
     ) -> int:
 
-        return sum(
-            1
-            for candle in candles
-            if candle.candle_type is candle_type
-        )
+        return sum(1 for candle in candles if candle.candle_type is candle_type)

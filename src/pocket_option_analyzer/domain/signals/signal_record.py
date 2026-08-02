@@ -25,9 +25,7 @@ class SignalRecord:
 
     source: str = "signal_analysis"
 
-    disposition: SignalRecordDisposition = (
-        SignalRecordDisposition.OBSERVED
-    )
+    disposition: SignalRecordDisposition = SignalRecordDisposition.OBSERVED
 
     candle_interval_started_at: datetime | None = None
 
@@ -35,8 +33,7 @@ class SignalRecord:
         self,
     ) -> None:
         if (
-            self.disposition
-            is not SignalRecordDisposition.OBSERVED
+            self.disposition is not SignalRecordDisposition.OBSERVED
             and self.candle_interval_started_at is None
         ):
             raise ValueError(
@@ -48,10 +45,7 @@ class SignalRecord:
     def is_duplicate_suppressed(
         self,
     ) -> bool:
-        return (
-            self.disposition
-            is SignalRecordDisposition.DUPLICATE_SUPPRESSED
-        )
+        return self.disposition is SignalRecordDisposition.DUPLICATE_SUPPRESSED
 
     @property
     def is_actionable(
@@ -64,7 +58,4 @@ class SignalRecord:
         pero deja de considerarse accionable.
         """
 
-        return (
-            self.signal.is_actionable
-            and not self.is_duplicate_suppressed
-        )
+        return self.signal.is_actionable and not self.is_duplicate_suppressed

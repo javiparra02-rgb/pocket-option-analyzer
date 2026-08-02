@@ -16,7 +16,6 @@ from pocket_option_analyzer.infrastructure.logging import (
 
 
 class FakeLogger:
-
     def __init__(
         self,
     ) -> None:
@@ -86,27 +85,23 @@ def test_manager_configures_console_and_rotating_file(
         None,
     ]
 
-    assert len(
-        fake_logger.add_calls,
-    ) == 2
-
-    console_sink, console_options = (
-        fake_logger.add_calls[0]
+    assert (
+        len(
+            fake_logger.add_calls,
+        )
+        == 2
     )
 
-    file_sink, file_options = (
-        fake_logger.add_calls[1]
-    )
+    console_sink, console_options = fake_logger.add_calls[0]
+
+    file_sink, file_options = fake_logger.add_calls[1]
 
     assert console_sink is sys.stdout
     assert console_options["level"] == "DEBUG"
     assert console_options["enqueue"] is True
     assert console_options["diagnose"] is False
 
-    assert file_sink == (
-        tmp_path
-        / "application.log"
-    )
+    assert file_sink == (tmp_path / "application.log")
     assert file_options["rotation"] == 2048
     assert file_options["retention"] == 3
     assert file_options["compression"] is None
@@ -118,10 +113,7 @@ def test_manager_configures_console_and_rotating_file(
         1,
         2,
     )
-    assert manager.log_file_path == (
-        tmp_path
-        / "application.log"
-    )
+    assert manager.log_file_path == (tmp_path / "application.log")
 
 
 def test_manager_can_disable_console_and_flush_logger(
@@ -143,16 +135,16 @@ def test_manager_can_disable_console_and_flush_logger(
     manager.configure()
     manager.shutdown()
 
-    assert len(
-        fake_logger.add_calls,
-    ) == 1
+    assert (
+        len(
+            fake_logger.add_calls,
+        )
+        == 1
+    )
 
     file_sink, _ = fake_logger.add_calls[0]
 
-    assert file_sink == (
-        tmp_path
-        / "application.log"
-    )
+    assert file_sink == (tmp_path / "application.log")
     assert fake_logger.complete_calls == 1
 
 

@@ -7,11 +7,9 @@ from pocket_option_analyzer.infrastructure.windows.services import (
 
 
 class FakeEnumerator:
-
     def enumerate(self):
 
         return [
-
             Win32WindowInfo(
                 hwnd=1,
                 title="Chrome",
@@ -26,7 +24,6 @@ class FakeEnumerator:
                 visible=True,
                 minimized=False,
             ),
-
             Win32WindowInfo(
                 hwnd=2,
                 title="Pocket Option",
@@ -41,7 +38,6 @@ class FakeEnumerator:
                 visible=True,
                 minimized=False,
             ),
-
         ]
 
 

@@ -17,14 +17,10 @@ class CandleIntervalResolver:
         duration_seconds: int = 30,
     ) -> None:
         if duration_seconds < 1:
-            raise ValueError(
-                "duration_seconds debe ser mayor o igual a 1."
-            )
+            raise ValueError("duration_seconds debe ser mayor o igual a 1.")
 
         if 60 % duration_seconds != 0:
-            raise ValueError(
-                "duration_seconds debe dividir exactamente un minuto."
-            )
+            raise ValueError("duration_seconds debe dividir exactamente un minuto.")
 
         self._duration_seconds = duration_seconds
 
@@ -42,12 +38,8 @@ class CandleIntervalResolver:
         Obtiene la clave temporal de la vela correspondiente.
         """
 
-        aligned_second = (
-            observed_at.second
-            - (
-                observed_at.second
-                % self._duration_seconds
-            )
+        aligned_second = observed_at.second - (
+            observed_at.second % self._duration_seconds
         )
 
         started_at = observed_at.replace(

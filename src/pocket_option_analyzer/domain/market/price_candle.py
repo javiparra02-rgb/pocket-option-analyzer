@@ -55,10 +55,13 @@ class PriceCandle:
         Tamaño de la mecha inferior.
         """
 
-        return min(
-            self.open,
-            self.close,
-        ) - self.low
+        return (
+            min(
+                self.open,
+                self.close,
+            )
+            - self.low
+        )
 
     @property
     def is_bullish(self) -> bool:

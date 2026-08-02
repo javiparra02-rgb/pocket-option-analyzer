@@ -37,4 +37,4 @@ class RegionExtractor:
         numpy.ndarray
             Región extraída.
         """
-        return image[y:y + height, x:x + width]
+        return image[y : y + height, x : x + width]

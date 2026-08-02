@@ -49,49 +49,27 @@ class JsonlSignalRecordWriter:
         backup_count: int = DEFAULT_BACKUP_COUNT,
     ) -> None:
         if max_bytes < 1:
-            raise ValueError(
-                "max_bytes debe ser mayor o igual a 1."
-            )
+            raise ValueError("max_bytes debe ser mayor o igual a 1.")
 
         if backup_count < 0:
-            raise ValueError(
-                "backup_count no puede ser negativo."
-            )
+            raise ValueError("backup_count no puede ser negativo.")
 
         self._file_path = file_path
 
-        self._serializer = (
-            serializer
-            or SignalRecordSerializer()
-        )
+        self._serializer = serializer or SignalRecordSerializer()
 
         self._max_bytes = max_bytes
         self._backup_count = backup_count
 
-        self._last_observed_interval_started_at: (
-            datetime
-            | None
-        ) = None
+        self._last_observed_interval_started_at: datetime | None = None
 
-        self._last_accepted_interval_started_at: (
-            datetime
-            | None
-        ) = None
+        self._last_accepted_interval_started_at: datetime | None = None
 
-        self._last_accepted_direction: (
-            SignalDirection
-            | None
-        ) = None
+        self._last_accepted_direction: SignalDirection | None = None
 
-        self._active_duplicate_summary: (
-            DuplicateSignalSummary
-            | None
-        ) = None
+        self._active_duplicate_summary: DuplicateSignalSummary | None = None
 
-        self._active_duplicate_summary_offset: (
-            int
-            | None
-        ) = None
+        self._active_duplicate_summary_offset: int | None = None
 
     @property
     def file_path(
@@ -129,10 +107,7 @@ class JsonlSignalRecordWriter:
             record=record,
         )
 
-        if (
-            record.disposition
-            is SignalRecordDisposition.DUPLICATE_SUPPRESSED
-        ):
+        if record.disposition is SignalRecordDisposition.DUPLICATE_SUPPRESSED:
             self._write_duplicate_summary(
                 record=record,
             )
@@ -164,95 +139,61 @@ class JsonlSignalRecordWriter:
         ya persistida dentro de la misma vela.
         """
 
-        if (
-            record.disposition
-            is not SignalRecordDisposition.OBSERVED
-        ):
+        if record.disposition is not SignalRecordDisposition.OBSERVED:
             return False
 
-        interval_started_at = (
-            record.candle_interval_started_at
-        )
+        interval_started_at = record.candle_interval_started_at
 
         if interval_started_at is None:
             return False
 
-        if (
-            interval_started_at
-            == self._last_observed_interval_started_at
-        ):
+        if interval_started_at == self._last_observed_interval_started_at:
             return True
 
-        if (
-            interval_started_at
-            == self._last_accepted_interval_started_at
-        ):
+        if interval_started_at == self._last_accepted_interval_started_at:
             return True
 
-        active_summary = (
-            self._active_duplicate_summary
-        )
+        active_summary = self._active_duplicate_summary
 
         return (
             active_summary is not None
-            and interval_started_at
-            == active_summary.candle_interval_started_at
+            and interval_started_at == active_summary.candle_interval_started_at
         )
 
     def _remember_record(
         self,
         record: SignalRecord,
     ) -> None:
-        interval_started_at = (
-            record.candle_interval_started_at
-        )
+        interval_started_at = record.candle_interval_started_at
 
         if interval_started_at is None:
             return
 
-        if (
-            record.disposition
-            is SignalRecordDisposition.OBSERVED
-        ):
-            self._last_observed_interval_started_at = (
-                interval_started_at
-            )
+        if record.disposition is SignalRecordDisposition.OBSERVED:
+            self._last_observed_interval_started_at = interval_started_at
             return
 
-        if (
-            record.disposition
-            is SignalRecordDisposition.ACTIONABLE_ACCEPTED
-        ):
-            self._last_accepted_interval_started_at = (
-                interval_started_at
-            )
+        if record.disposition is SignalRecordDisposition.ACTIONABLE_ACCEPTED:
+            self._last_accepted_interval_started_at = interval_started_at
 
-            self._last_accepted_direction = (
-                record.signal.direction
-            )
+            self._last_accepted_direction = record.signal.direction
 
     def _write_duplicate_summary(
         self,
         record: SignalRecord,
     ) -> None:
-        interval_started_at = (
-            record.candle_interval_started_at
-        )
+        interval_started_at = record.candle_interval_started_at
 
         if interval_started_at is None:
             raise ValueError(
-                "La señal duplicada debe incluir "
-                "candle_interval_started_at."
+                "La señal duplicada debe incluir candle_interval_started_at."
             )
 
-        active_summary = (
-            self._active_duplicate_summary
-        )
+        active_summary = self._active_duplicate_summary
 
         if (
             active_summary is not None
-            and active_summary.candle_interval_started_at
-            == interval_started_at
+            and active_summary.candle_interval_started_at == interval_started_at
         ):
             updated_summary = active_summary.add(
                 record=record,
@@ -264,8 +205,7 @@ class JsonlSignalRecordWriter:
             return
 
         accepted_record_found = (
-            self._last_accepted_interval_started_at
-            == interval_started_at
+            self._last_accepted_interval_started_at == interval_started_at
             and self._last_accepted_direction is not None
         )
 
@@ -276,9 +216,7 @@ class JsonlSignalRecordWriter:
         )
 
         if accepted_direction is None:
-            accepted_direction = (
-                record.signal.direction
-            )
+            accepted_direction = record.signal.direction
 
         summary = DuplicateSignalSummary.start(
             record=record,
@@ -305,9 +243,7 @@ class JsonlSignalRecordWriter:
         Reemplaza la última línea del archivo por el resumen actualizado.
         """
 
-        offset = (
-            self._active_duplicate_summary_offset
-        )
+        offset = self._active_duplicate_summary_offset
 
         if (
             offset is None
@@ -323,9 +259,7 @@ class JsonlSignalRecordWriter:
             )
 
             self._active_duplicate_summary = summary
-            self._active_duplicate_summary_offset = (
-                new_offset
-            )
+            self._active_duplicate_summary_offset = new_offset
             return
 
         encoded_line = self._encode_data(
@@ -359,9 +293,7 @@ class JsonlSignalRecordWriter:
         El resumen anterior ya permanece finalizado en disco.
         """
 
-        active_summary = (
-            self._active_duplicate_summary
-        )
+        active_summary = self._active_duplicate_summary
 
         if active_summary is None:
             return
@@ -398,11 +330,7 @@ class JsonlSignalRecordWriter:
             ),
         )
 
-        offset = (
-            self._file_path.stat().st_size
-            if self._file_path.exists()
-            else 0
-        )
+        offset = self._file_path.stat().st_size if self._file_path.exists() else 0
 
         with self._file_path.open(
             mode="ab",
@@ -426,10 +354,7 @@ class JsonlSignalRecordWriter:
             ),
         )
 
-        return (
-            serialized_line
-            + "\n"
-        ).encode(
+        return (serialized_line + "\n").encode(
             "utf-8",
         )
 
@@ -440,18 +365,12 @@ class JsonlSignalRecordWriter:
         if not self._file_path.exists():
             return
 
-        current_size = (
-            self._file_path.stat().st_size
-        )
+        current_size = self._file_path.stat().st_size
 
         if current_size == 0:
             return
 
-        if (
-            current_size
-            + incoming_size
-            <= self._max_bytes
-        ):
+        if current_size + incoming_size <= self._max_bytes:
             return
 
         self._rotate_files()
@@ -502,6 +421,4 @@ class JsonlSignalRecordWriter:
         self,
         index: int,
     ) -> Path:
-        return Path(
-            f"{self._file_path}.{index}"
-        )
+        return Path(f"{self._file_path}.{index}")

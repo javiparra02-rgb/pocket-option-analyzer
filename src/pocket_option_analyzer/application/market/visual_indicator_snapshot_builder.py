@@ -53,28 +53,15 @@ class VisualIndicatorSnapshotBuilder:
         indicator_cache: CandleIntervalIndicatorCache | None = None,
         now_provider: NowProvider | None = None,
     ) -> None:
-        self._price_series_builder = (
-            price_series_builder
-            or VisualPriceSeriesBuilder()
-        )
+        self._price_series_builder = price_series_builder or VisualPriceSeriesBuilder()
         self._indicator_snapshot_builder = (
-            indicator_snapshot_builder
-            or IndicatorSnapshotBuilder()
+            indicator_snapshot_builder or IndicatorSnapshotBuilder()
         )
-        self._indicator_cache = (
-            indicator_cache
-            or CandleIntervalIndicatorCache(
-                settling_seconds=2.0,
-            )
+        self._indicator_cache = indicator_cache or CandleIntervalIndicatorCache(
+            settling_seconds=2.0,
         )
-        self._now_provider = (
-            now_provider
-            or self._local_now
-        )
-        self._snapshot_context: (
-            VisualIndicatorSnapshotContext
-            | None
-        ) = None
+        self._now_provider = now_provider or self._local_now
+        self._snapshot_context: VisualIndicatorSnapshotContext | None = None
 
     @property
     def snapshot_context(
@@ -175,19 +162,17 @@ class VisualIndicatorSnapshotBuilder:
             if candle.candidate.geometry is not None
         )
 
-        self._snapshot_context = (
-            VisualIndicatorSnapshotContext(
-                visible_candle_count=len(
-                    series,
-                ),
-                ohlc_candle_count=len(
-                    price_series,
-                ),
-                geometry_valid_count=geometry_valid_count,
-                geometry_total_count=len(
-                    eligible_closed_candles,
-                ),
-            )
+        self._snapshot_context = VisualIndicatorSnapshotContext(
+            visible_candle_count=len(
+                series,
+            ),
+            ohlc_candle_count=len(
+                price_series,
+            ),
+            geometry_valid_count=geometry_valid_count,
+            geometry_total_count=len(
+                eligible_closed_candles,
+            ),
         )
 
         return snapshot

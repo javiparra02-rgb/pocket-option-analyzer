@@ -46,10 +46,7 @@ def test_gate_accepts_first_actionable_signal() -> None:
         ),
     )
 
-    assert (
-        decision.disposition
-        is SignalRecordDisposition.ACTIONABLE_ACCEPTED
-    )
+    assert decision.disposition is SignalRecordDisposition.ACTIONABLE_ACCEPTED
     assert decision.interval_key.started_at.second == 0
 
 
@@ -85,10 +82,7 @@ def test_gate_suppresses_any_second_direction_in_same_candle() -> None:
         ),
     )
 
-    assert (
-        duplicate.disposition
-        is SignalRecordDisposition.DUPLICATE_SUPPRESSED
-    )
+    assert duplicate.disposition is SignalRecordDisposition.DUPLICATE_SUPPRESSED
 
 
 def test_gate_accepts_signal_in_next_candle() -> None:
@@ -123,14 +117,8 @@ def test_gate_accepts_signal_in_next_candle() -> None:
         ),
     )
 
-    assert (
-        first.disposition
-        is SignalRecordDisposition.ACTIONABLE_ACCEPTED
-    )
-    assert (
-        second.disposition
-        is SignalRecordDisposition.ACTIONABLE_ACCEPTED
-    )
+    assert first.disposition is SignalRecordDisposition.ACTIONABLE_ACCEPTED
+    assert second.disposition is SignalRecordDisposition.ACTIONABLE_ACCEPTED
     assert first.interval_key != second.interval_key
 
 
@@ -166,11 +154,5 @@ def test_neutral_signal_does_not_reserve_candle() -> None:
         ),
     )
 
-    assert (
-        neutral.disposition
-        is SignalRecordDisposition.OBSERVED
-    )
-    assert (
-        actionable.disposition
-        is SignalRecordDisposition.ACTIONABLE_ACCEPTED
-    )
+    assert neutral.disposition is SignalRecordDisposition.OBSERVED
+    assert actionable.disposition is SignalRecordDisposition.ACTIONABLE_ACCEPTED

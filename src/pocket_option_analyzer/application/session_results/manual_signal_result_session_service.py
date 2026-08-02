@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from pocket_option_analyzer.application.session_results.manual_signal_result_writer import (
@@ -25,7 +25,7 @@ NaiveDatetimeResolver = Callable[[datetime], datetime]
 
 def _utc_now() -> datetime:
     return datetime.now(
-        timezone.utc,
+        UTC,
     )
 
 
@@ -64,15 +64,11 @@ class ManualSignalResultSessionService:
         writer: ManualSignalResultWriter,
         clock: Clock = _utc_now,
         event_id_factory: EventIdFactory = _new_event_id,
-        naive_datetime_resolver: NaiveDatetimeResolver = (
-            _localize_system_datetime
-        ),
+        naive_datetime_resolver: NaiveDatetimeResolver = (_localize_system_datetime),
         strategy_name: str = DEFAULT_STRATEGY_NAME,
     ) -> None:
         if not strategy_name.strip():
-            raise ValueError(
-                "strategy_name no puede estar vacío."
-            )
+            raise ValueError("strategy_name no puede estar vacío.")
 
         self._writer = writer
         self._clock = clock
@@ -138,13 +134,9 @@ class ManualSignalResultSessionService:
             value,
         )
 
-        if (
-            resolved_value.tzinfo is None
-            or resolved_value.utcoffset() is None
-        ):
+        if resolved_value.tzinfo is None or resolved_value.utcoffset() is None:
             raise ValueError(
-                "naive_datetime_resolver debe devolver una fecha "
-                "con zona horaria."
+                "naive_datetime_resolver debe devolver una fecha con zona horaria."
             )
 
         return resolved_value

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pocket_option_analyzer.domain.session_results import (
     ManualSignalResult,
@@ -28,7 +28,7 @@ def _record(
             16,
             3,
             25,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         direction=SignalDirection.PUT,
         strength=SignalStrength.HIGH,
@@ -40,7 +40,7 @@ def _record(
             16,
             3,
             47,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         source="captured_frame_visual_analysis",
         reason=reason,
@@ -50,11 +50,7 @@ def _record(
 def test_jsonl_writer_creates_parent_directory_and_file(
     tmp_path,
 ) -> None:
-    output_path = (
-        tmp_path
-        / "logs"
-        / "manual_results.jsonl"
-    )
+    output_path = tmp_path / "logs" / "manual_results.jsonl"
     writer = JsonlManualSignalResultWriter(
         output_path=output_path,
     )
@@ -93,12 +89,18 @@ def test_jsonl_writer_appends_without_overwriting_existing_records(
     ).splitlines()
 
     assert len(lines) == 2
-    assert json.loads(
-        lines[0],
-    )["result"] == "WIN"
-    assert json.loads(
-        lines[1],
-    )["result"] == "LOSS"
+    assert (
+        json.loads(
+            lines[0],
+        )["result"]
+        == "WIN"
+    )
+    assert (
+        json.loads(
+            lines[1],
+        )["result"]
+        == "LOSS"
+    )
 
 
 def test_jsonl_writer_writes_valid_utf8_json(

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 
@@ -24,13 +24,11 @@ from pocket_option_analyzer.vision.models import ChartRegion
 
 @dataclass(frozen=True, slots=True)
 class FakeFrame:
-
     image: np.ndarray
     captured_at: datetime
 
 
 class FakeCaptureService:
-
     def __init__(
         self,
         frames,
@@ -56,12 +54,14 @@ def _frame() -> FakeFrame:
             2026,
             1,
             1,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
     )
 
 
-def test_pocket_option_runtime_factory_creates_runtime_with_injected_capture_service() -> None:
+def test_pocket_option_runtime_factory_creates_runtime_with_injected_capture_service() -> (
+    None
+):
 
     history = SignalHistory()
     frame = _frame()
@@ -240,7 +240,6 @@ def test_pocket_option_chart_region_extractor_returns_candle_chart_area() -> Non
     assert region.y + region.height == 765
 
 
-
 def test_runtime_roi_debug_capture_saves_image(
     tmp_path,
 ) -> None:
@@ -281,7 +280,7 @@ def test_pocket_option_runtime_factory_disables_roi_debug_by_default() -> None:
 
     assert capture_service is not None
 
-    
+
 def test_pocket_option_runtime_factory_can_enable_roi_debug(
     tmp_path,
 ) -> None:

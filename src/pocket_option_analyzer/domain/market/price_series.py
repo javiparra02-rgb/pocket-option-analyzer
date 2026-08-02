@@ -36,24 +36,15 @@ class PriceSeries:
 
     @property
     def closes(self) -> tuple[float, ...]:
-        return tuple(
-            candle.close
-            for candle in self.candles
-        )
+        return tuple(candle.close for candle in self.candles)
 
     @property
     def highs(self) -> tuple[float, ...]:
-        return tuple(
-            candle.high
-            for candle in self.candles
-        )
+        return tuple(candle.high for candle in self.candles)
 
     @property
     def lows(self) -> tuple[float, ...]:
-        return tuple(
-            candle.low
-            for candle in self.candles
-        )
+        return tuple(candle.low for candle in self.candles)
 
     def last(
         self,

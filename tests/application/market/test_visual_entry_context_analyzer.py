@@ -183,7 +183,9 @@ def test_visual_entry_context_analyzer_ignores_unknown_candles() -> None:
     assert context.entry_state_label == "BUSCAR_PUT"
 
 
-def test_visual_entry_context_analyzer_detects_bullish_pullback_from_directional_candles() -> None:
+def test_visual_entry_context_analyzer_detects_bullish_pullback_from_directional_candles() -> (
+    None
+):
 
     analyzer = VisualEntryContextAnalyzer()
 
@@ -209,7 +211,9 @@ def test_visual_entry_context_analyzer_detects_bullish_pullback_from_directional
     assert context.entry_state_label == "ESPERAR"
 
 
-def test_visual_entry_context_analyzer_detects_bearish_pullback_from_directional_candles() -> None:
+def test_visual_entry_context_analyzer_detects_bearish_pullback_from_directional_candles() -> (
+    None
+):
 
     analyzer = VisualEntryContextAnalyzer()
 

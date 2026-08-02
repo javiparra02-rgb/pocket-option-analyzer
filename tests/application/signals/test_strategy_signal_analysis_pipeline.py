@@ -22,7 +22,6 @@ from pocket_option_analyzer.vision.models import (
 
 
 class FakeMarketAnalysisPipeline:
-
     def analyze(self, image):
         return MarketAnalysis(
             series=CandleSeries(
@@ -33,7 +32,6 @@ class FakeMarketAnalysisPipeline:
 
 
 class FakeStrategySignalGenerator:
-
     def generate(self, analysis, indicators):
         return MarketSignal(
             direction=SignalDirection.CALL,

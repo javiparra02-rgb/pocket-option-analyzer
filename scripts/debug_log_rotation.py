@@ -10,10 +10,7 @@ from pocket_option_analyzer.infrastructure.logging import (
     LoggingManager,
 )
 
-OUTPUT_DIRECTORY = (
-    Path("debug")
-    / "log_rotation"
-)
+OUTPUT_DIRECTORY = Path("debug") / "log_rotation"
 
 
 def main() -> None:
@@ -43,14 +40,7 @@ def main() -> None:
     for index in range(
         250,
     ):
-        manager.logger.info(
-            "Rotación de prueba "
-            f"{index:03d} | "
-            + (
-                "X"
-                * 200
-            )
-        )
+        manager.logger.info(f"Rotación de prueba {index:03d} | " + ("X" * 200))
 
     manager.shutdown()
 
@@ -60,19 +50,12 @@ def main() -> None:
         )
     )
 
-    print(
-        "Archivos generados:"
-    )
+    print("Archivos generados:")
 
     for file_path in generated_files:
-        print(
-            f"- {file_path.name}: "
-            f"{file_path.stat().st_size} bytes"
-        )
+        print(f"- {file_path.name}: {file_path.stat().st_size} bytes")
 
-    print(
-        f"Total: {len(generated_files)} archivos"
-    )
+    print(f"Total: {len(generated_files)} archivos")
 
 
 if __name__ == "__main__":

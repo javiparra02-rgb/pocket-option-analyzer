@@ -44,9 +44,7 @@ class SignalRecordSerializer:
             "reason": record.signal.reason,
             "disposition": record.disposition.value,
             "is_actionable": record.is_actionable,
-            "is_duplicate_suppressed": (
-                record.is_duplicate_suppressed
-            ),
+            "is_duplicate_suppressed": (record.is_duplicate_suppressed),
             "storage_format": "full",
         }
 
@@ -60,33 +58,21 @@ class SignalRecordSerializer:
 
         return {
             "event_type": "duplicate_signal_summary",
-            "created_at": (
-                summary.last_duplicate_at.isoformat()
-            ),
+            "created_at": (summary.last_duplicate_at.isoformat()),
             "candle_interval_started_at": (
                 summary.candle_interval_started_at.isoformat()
             ),
             "source": summary.source,
-            "accepted_direction": (
-                summary.accepted_direction.value
-            ),
-            "accepted_record_found": (
-                summary.accepted_record_found
-            ),
+            "accepted_direction": (summary.accepted_direction.value),
+            "accepted_record_found": (summary.accepted_record_found),
             "disposition": "duplicate_suppressed",
-            "duplicate_suppressed_count": (
-                summary.duplicate_suppressed_count
-            ),
+            "duplicate_suppressed_count": (summary.duplicate_suppressed_count),
             "duplicate_direction_counts": {
                 "call": summary.call_duplicate_count,
                 "put": summary.put_duplicate_count,
             },
-            "first_duplicate_at": (
-                summary.first_duplicate_at.isoformat()
-            ),
-            "last_duplicate_at": (
-                summary.last_duplicate_at.isoformat()
-            ),
+            "first_duplicate_at": (summary.first_duplicate_at.isoformat()),
+            "last_duplicate_at": (summary.last_duplicate_at.isoformat()),
             "is_actionable": False,
             "is_duplicate_suppressed": True,
             "storage_format": "summary",

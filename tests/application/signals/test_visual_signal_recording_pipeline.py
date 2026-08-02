@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 
@@ -17,7 +17,6 @@ from pocket_option_analyzer.domain.signals import (
 
 
 class FakeVisualStrategySignalAnalysisPipeline:
-
     def analyze(
         self,
         image,
@@ -30,7 +29,6 @@ class FakeVisualStrategySignalAnalysisPipeline:
 
 
 class FakeSignalRecordWriter:
-
     def __init__(self) -> None:
         self.records: list[SignalRecord] = []
 
@@ -54,7 +52,7 @@ def test_analyze_and_record_adds_visual_signal_to_history() -> None:
         2026,
         1,
         1,
-        tzinfo=timezone.utc,
+        tzinfo=UTC,
     )
 
     record = pipeline.analyze_and_record(
@@ -103,9 +101,7 @@ def test_pipeline_suppresses_second_actionable_signal_in_same_candle() -> None:
     writer = FakeSignalRecordWriter()
 
     pipeline = VisualSignalRecordingPipeline(
-        analysis_pipeline=(
-            FakeVisualStrategySignalAnalysisPipeline()
-        ),
+        analysis_pipeline=(FakeVisualStrategySignalAnalysisPipeline()),
         recorder=SignalRecorder(
             history,
         ),
@@ -124,7 +120,7 @@ def test_pipeline_suppresses_second_actionable_signal_in_same_candle() -> None:
             10,
             30,
             5,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
     )
 
@@ -140,20 +136,14 @@ def test_pipeline_suppresses_second_actionable_signal_in_same_candle() -> None:
             10,
             30,
             20,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
     )
 
-    assert (
-        first.disposition
-        is SignalRecordDisposition.ACTIONABLE_ACCEPTED
-    )
+    assert first.disposition is SignalRecordDisposition.ACTIONABLE_ACCEPTED
     assert first.is_actionable is True
 
-    assert (
-        duplicate.disposition
-        is SignalRecordDisposition.DUPLICATE_SUPPRESSED
-    )
+    assert duplicate.disposition is SignalRecordDisposition.DUPLICATE_SUPPRESSED
     assert duplicate.signal.direction is SignalDirection.CALL
     assert duplicate.is_actionable is False
 
@@ -166,9 +156,7 @@ def test_pipeline_suppresses_second_actionable_signal_in_same_candle() -> None:
 def test_pipeline_accepts_same_direction_in_next_candle() -> None:
 
     pipeline = VisualSignalRecordingPipeline(
-        analysis_pipeline=(
-            FakeVisualStrategySignalAnalysisPipeline()
-        ),
+        analysis_pipeline=(FakeVisualStrategySignalAnalysisPipeline()),
         recorder=SignalRecorder(
             SignalHistory(),
         ),
@@ -186,7 +174,7 @@ def test_pipeline_accepts_same_direction_in_next_candle() -> None:
             10,
             30,
             20,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
     )
 
@@ -202,7 +190,7 @@ def test_pipeline_accepts_same_direction_in_next_candle() -> None:
             10,
             30,
             35,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
     )
 

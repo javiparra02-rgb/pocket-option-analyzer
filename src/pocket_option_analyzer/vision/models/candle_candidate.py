@@ -10,6 +10,7 @@ if TYPE_CHECKING:
         CandleGeometry,
     )
 
+
 @dataclass(frozen=True, slots=True)
 class CandleCandidate:
     """

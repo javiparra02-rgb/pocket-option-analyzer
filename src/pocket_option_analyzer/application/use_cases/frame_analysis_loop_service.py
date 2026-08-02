@@ -107,10 +107,7 @@ class FrameAnalysisLoopService:
 
                 iterations += 1
 
-                if (
-                    max_iterations is not None
-                    and iterations >= max_iterations
-                ):
+                if max_iterations is not None and iterations >= max_iterations:
                     break
 
                 self._sleep_function(

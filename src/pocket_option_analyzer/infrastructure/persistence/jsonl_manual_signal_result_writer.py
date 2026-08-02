@@ -27,10 +27,7 @@ class JsonlManualSignalResultWriter:
         self._output_path = Path(
             output_path,
         )
-        self._serializer = (
-            serializer
-            or ManualSignalResultSerializer()
-        )
+        self._serializer = serializer or ManualSignalResultSerializer()
 
     @property
     def output_path(self) -> Path:

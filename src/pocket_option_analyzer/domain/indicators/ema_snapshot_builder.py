@@ -80,7 +80,7 @@ class EmaSnapshotBuilder:
         """
 
         return tuple(
-            fast_values[-len(slow_values):],
+            fast_values[-len(slow_values) :],
         )
 
     def _calculate_separation_candles(

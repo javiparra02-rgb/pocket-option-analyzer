@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 import pytest
@@ -19,14 +19,12 @@ from pocket_option_analyzer.domain.signals import (
 
 @dataclass(frozen=True, slots=True)
 class FakeFrame:
-
     image: np.ndarray
 
     captured_at: datetime
 
 
 class FakeCaptureService:
-
     def __init__(
         self,
         frames,
@@ -46,7 +44,6 @@ class FakeCaptureService:
 
 
 class FakeAnalysisUseCase:
-
     def __init__(self) -> None:
         self.received_frames = []
 
@@ -68,7 +65,6 @@ class FakeAnalysisUseCase:
 
 
 class FakeSleep:
-
     def __init__(self) -> None:
         self.calls: list[float] = []
 
@@ -90,7 +86,7 @@ def _frame() -> FakeFrame:
             2026,
             1,
             1,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
     )
 

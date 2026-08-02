@@ -38,43 +38,25 @@ class CandleIntervalIndicatorCache:
         interval_resolver: CandleIntervalResolver | None = None,
         settling_seconds: float = 2.0,
     ) -> None:
-        self._interval_resolver = (
-            interval_resolver
-            or CandleIntervalResolver(
-                duration_seconds=30,
-            )
+        self._interval_resolver = interval_resolver or CandleIntervalResolver(
+            duration_seconds=30,
         )
 
         if settling_seconds < 0:
-            raise ValueError(
-                "settling_seconds no puede ser negativo."
-            )
+            raise ValueError("settling_seconds no puede ser negativo.")
 
-        if (
-            settling_seconds
-            >= self._interval_resolver.duration_seconds
-        ):
+        if settling_seconds >= self._interval_resolver.duration_seconds:
             raise ValueError(
-                "settling_seconds debe ser menor "
-                "que la duración del intervalo."
+                "settling_seconds debe ser menor que la duración del intervalo."
             )
 
         self._settling_seconds = settling_seconds
 
-        self._cached_key: (
-            CandleIntervalKey
-            | None
-        ) = None
+        self._cached_key: CandleIntervalKey | None = None
 
-        self._cached_snapshot: (
-            IndicatorSnapshot
-            | None
-        ) = None
+        self._cached_snapshot: IndicatorSnapshot | None = None
 
-        self._last_status: (
-            CandleIntervalIndicatorCacheStatus
-            | None
-        ) = None
+        self._last_status: CandleIntervalIndicatorCacheStatus | None = None
 
     @property
     def cached_key(
@@ -114,10 +96,7 @@ class CandleIntervalIndicatorCache:
             observed_at=observed_at,
         )
 
-        if (
-            self._cached_snapshot is not None
-            and requested_key == self._cached_key
-        ):
+        if self._cached_snapshot is not None and requested_key == self._cached_key:
             self._set_status(
                 requested_key=requested_key,
                 is_current=True,
@@ -126,12 +105,9 @@ class CandleIntervalIndicatorCache:
 
             return self._cached_snapshot
 
-        if (
-            self._cached_snapshot is not None
-            and self._is_settling(
-                key=requested_key,
-                observed_at=observed_at,
-            )
+        if self._cached_snapshot is not None and self._is_settling(
+            key=requested_key,
+            observed_at=observed_at,
         ):
             self._set_status(
                 requested_key=requested_key,
@@ -180,16 +156,12 @@ class CandleIntervalIndicatorCache:
         is_current: bool,
         is_settling: bool,
     ) -> None:
-        self._last_status = (
-            CandleIntervalIndicatorCacheStatus(
-                requested_key=requested_key,
-                cached_key=self._cached_key,
-                has_snapshot=(
-                    self._cached_snapshot is not None
-                ),
-                is_current=is_current,
-                is_settling=is_settling,
-            )
+        self._last_status = CandleIntervalIndicatorCacheStatus(
+            requested_key=requested_key,
+            cached_key=self._cached_key,
+            has_snapshot=(self._cached_snapshot is not None),
+            is_current=is_current,
+            is_settling=is_settling,
         )
 
     def _is_settling(

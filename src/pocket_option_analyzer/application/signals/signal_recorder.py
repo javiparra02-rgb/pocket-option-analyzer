@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pocket_option_analyzer.domain.signals import (
     MarketSignal,
@@ -30,9 +30,7 @@ class SignalRecorder:
         signal: MarketSignal,
         created_at: datetime | None = None,
         source: str = "strategy_signal_analysis",
-        disposition: SignalRecordDisposition = (
-            SignalRecordDisposition.OBSERVED
-        ),
+        disposition: SignalRecordDisposition = (SignalRecordDisposition.OBSERVED),
         candle_interval_started_at: datetime | None = None,
     ) -> SignalRecord:
         """
@@ -44,14 +42,12 @@ class SignalRecorder:
             created_at=(
                 created_at
                 or datetime.now(
-                    timezone.utc,
+                    UTC,
                 )
             ),
             source=source,
             disposition=disposition,
-            candle_interval_started_at=(
-                candle_interval_started_at
-            ),
+            candle_interval_started_at=(candle_interval_started_at),
         )
 
         self._history.append(

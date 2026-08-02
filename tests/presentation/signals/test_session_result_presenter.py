@@ -18,9 +18,7 @@ def test_session_result_presenter_shows_empty_session() -> None:
         "Resultados: 0 ganadas | 0 perdidas | "
         "Tasa observada: - | Racha de pérdidas: 0/3"
     )
-    assert view_model.compact_text == (
-        "Resultados: 0G | 0P | - | Racha: 0/3"
-    )
+    assert view_model.compact_text == ("Resultados: 0G | 0P | - | Racha: 0/3")
     assert view_model.pause_recommended is False
     assert view_model.pause_alert_text == ""
 
@@ -56,9 +54,7 @@ def test_session_result_presenter_builds_compact_text() -> None:
         snapshot=tracker.snapshot(),
     )
 
-    assert view_model.compact_text == (
-        "Resultados: 1G | 1P | 50,0 % | Racha: 1/3"
-    )
+    assert view_model.compact_text == ("Resultados: 1G | 1P | 50,0 % | Racha: 1/3")
 
 
 def test_session_result_presenter_recommends_pause_after_loss_limit() -> None:
@@ -100,6 +96,4 @@ def test_session_result_presenter_respects_custom_loss_limit() -> None:
         "Se alcanzaron 2 pérdidas consecutivas\n"
         "Detén la sesión y revisa las operaciones"
     )
-    assert view_model.text.endswith(
-        "Racha de pérdidas: 2/2"
-    )
+    assert view_model.text.endswith("Racha de pérdidas: 2/2")

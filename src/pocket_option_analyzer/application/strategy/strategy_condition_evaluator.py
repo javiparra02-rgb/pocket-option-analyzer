@@ -96,10 +96,7 @@ class StrategyConditionEvaluator:
                 "EMA alignment is not bullish",
             )
 
-        if (
-            indicators.ema.separation_candles
-            < profile.ema_min_separation_candles
-        ):
+        if indicators.ema.separation_candles < profile.ema_min_separation_candles:
             failures.append(
                 "EMA separation is insufficient",
             )
@@ -151,10 +148,7 @@ class StrategyConditionEvaluator:
                 "EMA alignment is not bearish",
             )
 
-        if (
-            indicators.ema.separation_candles
-            < profile.ema_min_separation_candles
-        ):
+        if indicators.ema.separation_candles < profile.ema_min_separation_candles:
             failures.append(
                 "EMA separation is insufficient",
             )
@@ -197,10 +191,7 @@ class StrategyConditionEvaluator:
             analysis=analysis,
         )
 
-        return any(
-            candle.candle_type is candle_type
-            for candle in recent_candles
-        )
+        return any(candle.candle_type is candle_type for candle in recent_candles)
 
     def _recent_candles(
         self,
@@ -224,11 +215,7 @@ class StrategyConditionEvaluator:
             }
         )
 
-        return tuple(
-            directional_candles[
-                -self._recent_confirmation_candles :
-            ]
-        )
+        return tuple(directional_candles[-self._recent_confirmation_candles :])
 
     def _neutral_reason(
         self,

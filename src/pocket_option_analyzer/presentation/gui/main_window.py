@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QSettings, Qt
+from PySide6.QtCore import QSettings
 from PySide6.QtGui import QTextCursor, QTextOption
 from PySide6.QtWidgets import (
     QApplication,
@@ -351,10 +351,8 @@ class MainWindow(QMainWindow):
         self._capture_note_label.setWordWrap(
             True,
         )
-        self._capture_note_label.setStyleSheet(
-            "color: #5f6368; font-style: italic;"
-        )
-        
+        self._capture_note_label.setStyleSheet("color: #5f6368; font-style: italic;")
+
         self._entry_alert_label = QLabel(
             "",
         )
@@ -383,10 +381,7 @@ class MainWindow(QMainWindow):
             "Sesión: 0 CALL | 0 PUT | 0 total",
         )
         self._gate_audit_label = QLabel(
-            "Gate S30 (ejecución): "
-            "0 aceptadas | "
-            "0 duplicadas suprimidas | "
-            "último: -",
+            "Gate S30 (ejecución): 0 aceptadas | 0 duplicadas suprimidas | último: -",
         )
         self._gate_audit_label.setWordWrap(
             True,
@@ -501,18 +496,14 @@ class MainWindow(QMainWindow):
         self._visual_diagnostics_label.setWordWrap(
             True,
         )
-        self._visual_diagnostics_label.setStyleSheet(
-            "color: #3c4043;"
-        )
+        self._visual_diagnostics_label.setStyleSheet("color: #3c4043;")
         self._indicator_diagnostics_label = QLabel(
             "Diagnóstico de indicadores: -",
         )
         self._indicator_diagnostics_label.setWordWrap(
             True,
         )
-        self._indicator_diagnostics_label.setStyleSheet(
-            "color: #3c4043;"
-        )
+        self._indicator_diagnostics_label.setStyleSheet("color: #3c4043;")
 
         self._reason_text = QTextEdit()
         self._reason_text.setReadOnly(
@@ -672,7 +663,7 @@ class MainWindow(QMainWindow):
     @property
     def strength_style(self) -> str:
         return self._strength_label.styleSheet()
-    
+
     @property
     def has_scrollable_content(self) -> bool:
         return isinstance(
@@ -703,11 +694,11 @@ class MainWindow(QMainWindow):
     @property
     def run_once_button_enabled(self) -> bool:
         return self._run_once_button.isEnabled()
-    
+
     @property
     def clear_history_button_enabled(self) -> bool:
         return self._clear_history_button.isEnabled()
-    
+
     @property
     def signal_history_texts(self) -> list[str]:
         return [
@@ -720,7 +711,7 @@ class MainWindow(QMainWindow):
     @property
     def max_signal_history_items(self) -> int:
         return self.MAX_SIGNAL_HISTORY_ITEMS
-    
+
     @property
     def signal_history_count(self) -> int:
         return self._history_list.count()
@@ -735,7 +726,7 @@ class MainWindow(QMainWindow):
         )
 
         return item.text()
-    
+
     @property
     def signal_history_maximum_height(self) -> int:
         return self._history_list.maximumHeight()
@@ -743,19 +734,19 @@ class MainWindow(QMainWindow):
     @property
     def operational_summary_text(self) -> str:
         return self._operational_summary_label.text()
-    
+
     @property
     def operational_summary_style(self) -> str:
         return self._operational_summary_label.styleSheet()
-    
+
     @property
     def visual_diagnostics_text(self) -> str:
         return self._visual_diagnostics_label.text()
-    
+
     @property
     def indicator_diagnostics_text(self) -> str:
         return self._indicator_diagnostics_label.text()
-    
+
     @property
     def compact_mode_button_text(self) -> str:
         return self._compact_mode_button.text()
@@ -788,9 +779,7 @@ class MainWindow(QMainWindow):
         En Windows corresponde al HWND utilizado por la API Win32.
         """
 
-        return int(
-            self.winId()
-        )
+        return int(self.winId())
 
     @property
     def window_size(self) -> tuple[int, int]:
@@ -809,7 +798,7 @@ class MainWindow(QMainWindow):
     @property
     def layout_spacing(self) -> int:
         return self._main_layout.spacing()
-    
+
     @property
     def signal_label_visible(self) -> bool:
         return not self._direction_label.isHidden()
@@ -821,7 +810,7 @@ class MainWindow(QMainWindow):
     @property
     def operational_summary_visible(self) -> bool:
         return not self._operational_summary_label.isHidden()
-    
+
     @property
     def confirmation_checklist_text(self) -> str:
         return self._confirmation_checklist_label.text()
@@ -845,7 +834,7 @@ class MainWindow(QMainWindow):
     @property
     def entry_alert_style(self) -> str:
         return self._entry_alert_label.styleSheet()
-    
+
     @property
     def session_counter_text(self) -> str:
         return self._session_counter_label.text()
@@ -860,13 +849,11 @@ class MainWindow(QMainWindow):
     ) -> str:
         return self._gate_audit_label.text()
 
-
     @property
     def gate_audit_visible(
         self,
     ) -> bool:
         return not self._gate_audit_label.isHidden()
-
 
     @property
     def gate_audit_style(
@@ -878,16 +865,14 @@ class MainWindow(QMainWindow):
     def session_call_count(self) -> int:
         return self._session_signal_counter.call_count
 
-
     @property
     def session_put_count(self) -> int:
         return self._session_signal_counter.put_count
 
-
     @property
     def session_total_count(self) -> int:
         return self._session_signal_counter.total_count
-    
+
     @property
     def reset_session_button_text(self) -> str:
         return self._reset_session_button.text()
@@ -895,7 +880,7 @@ class MainWindow(QMainWindow):
     @property
     def reset_session_button_visible(self) -> bool:
         return not self._reset_session_button.isHidden()
-    
+
     @property
     def session_risk_text(self) -> str:
         return self._session_risk_label.text()
@@ -919,7 +904,7 @@ class MainWindow(QMainWindow):
     @property
     def session_pause_alert_style(self) -> str:
         return self._session_pause_alert_label.styleSheet()
-    
+
     @property
     def voice_enabled(self) -> bool:
         return self._voice_enabled
@@ -947,7 +932,7 @@ class MainWindow(QMainWindow):
     @property
     def test_voice_button_visible(self) -> bool:
         return not self._test_voice_button.isHidden()
-    
+
     @property
     def session_result_text(self) -> str:
         return self._session_result_label.text()
@@ -1036,21 +1021,17 @@ class MainWindow(QMainWindow):
     def recording_mode_enabled(self) -> bool:
         return self._recording_mode_enabled
 
-
     @property
     def recording_mode_button_text(self) -> str:
         return self._recording_mode_button.text()
-
 
     @property
     def recording_mode_button_checked(self) -> bool:
         return self._recording_mode_button.isChecked()
 
-
     @property
     def recording_mode_button_visible(self) -> bool:
         return not self._recording_mode_button.isHidden()
-    
 
     def set_running_state(
         self,
@@ -1172,11 +1153,7 @@ class MainWindow(QMainWindow):
         self._update_session_counter(
             view_model=view_model,
         )
-        return (
-            self._session_signal_counter.total_count
-            > previous_session_total
-        )
-
+        return self._session_signal_counter.total_count > previous_session_total
 
     def update_diagnostics_only(
         self,
@@ -1218,7 +1195,6 @@ class MainWindow(QMainWindow):
             f"Fecha: {view_model.created_at_label}",
         )
 
-
     def update_gate_audit(
         self,
         view_model: SignalGateAuditViewModel,
@@ -1249,7 +1225,6 @@ class MainWindow(QMainWindow):
         self._gate_audit_label.setStyleSheet(
             self.GATE_AUDIT_NEUTRAL_STYLE,
         )
-    
 
     def _setup_layout(self) -> None:
         content_widget = QWidget()
@@ -1472,9 +1447,7 @@ class MainWindow(QMainWindow):
             enabled,
         )
         self._voice_toggle_button.setText(
-            "Voz activada"
-            if enabled
-            else "Voz desactivada",
+            "Voz activada" if enabled else "Voz desactivada",
         )
         self._test_voice_button.setEnabled(
             enabled,
@@ -1491,9 +1464,7 @@ class MainWindow(QMainWindow):
     def _handle_evidence_mode_clicked(
         self,
     ) -> None:
-        requested_enabled = (
-            self._evidence_mode_button.isChecked()
-        )
+        requested_enabled = self._evidence_mode_button.isChecked()
 
         was_applied = True
 
@@ -1512,7 +1483,6 @@ class MainWindow(QMainWindow):
             enabled=requested_enabled,
         )
 
-
     def _set_evidence_mode_enabled(
         self,
         enabled: bool,
@@ -1523,17 +1493,13 @@ class MainWindow(QMainWindow):
             enabled,
         )
         self._evidence_mode_button.setText(
-            "Restaurar protección"
-            if enabled
-            else "Modo evidencia",
+            "Restaurar protección" if enabled else "Modo evidencia",
         )
 
     def _handle_recording_mode_clicked(
         self,
     ) -> None:
-        requested_enabled = (
-            self._recording_mode_button.isChecked()
-        )
+        requested_enabled = self._recording_mode_button.isChecked()
 
         was_applied = True
 
@@ -1569,9 +1535,7 @@ class MainWindow(QMainWindow):
             enabled,
         )
         self._recording_mode_button.setText(
-            "Salir de modo grabación"
-            if enabled
-            else "Modo grabación",
+            "Salir de modo grabación" if enabled else "Modo grabación",
         )
 
     def _apply_signal_style(
@@ -1580,34 +1544,16 @@ class MainWindow(QMainWindow):
     ) -> None:
 
         if css_class == "signal-call":
-            label_style = (
-                "font-weight: bold; "
-                "color: #0f9d58;"
-            )
-            reason_style = (
-                "border: 1px solid #0f9d58; "
-                "background-color: #eefaf3;"
-            )
+            label_style = "font-weight: bold; color: #0f9d58;"
+            reason_style = "border: 1px solid #0f9d58; background-color: #eefaf3;"
 
         elif css_class == "signal-put":
-            label_style = (
-                "font-weight: bold; "
-                "color: #d93025;"
-            )
-            reason_style = (
-                "border: 1px solid #d93025; "
-                "background-color: #fff0f0;"
-            )
+            label_style = "font-weight: bold; color: #d93025;"
+            reason_style = "border: 1px solid #d93025; background-color: #fff0f0;"
 
         else:
-            label_style = (
-                "font-weight: bold; "
-                "color: #5f6368;"
-            )
-            reason_style = (
-                "border: 1px solid #9aa0a6; "
-                "background-color: #f8f9fa;"
-            )
+            label_style = "font-weight: bold; color: #5f6368;"
+            reason_style = "border: 1px solid #9aa0a6; background-color: #f8f9fa;"
 
         self._direction_label.setStyleSheet(
             label_style,
@@ -1784,7 +1730,7 @@ class MainWindow(QMainWindow):
         self._confirmation_checklist_label.setStyleSheet(
             self.CONFIRMATION_CHECKLIST_NEUTRAL_STYLE,
         )
-    
+
     def clear_signal_history(self) -> None:
         """
         Limpia el historial visible de señales.
@@ -1809,7 +1755,6 @@ class MainWindow(QMainWindow):
         self._session_signal_counter.reset()
         self._session_result_tracker.reset()
         self._refresh_session_counter_label()
-
 
     def reset_session_counter(
         self,
@@ -1843,7 +1788,6 @@ class MainWindow(QMainWindow):
         self._session_result_tracker.register_win()
         self._refresh_session_result_ui()
 
-
     def register_session_loss(
         self,
     ) -> None:
@@ -1867,7 +1811,6 @@ class MainWindow(QMainWindow):
         self._session_result_tracker.register_loss()
         self._refresh_session_result_ui()
 
-
     def undo_last_session_result(
         self,
     ) -> None:
@@ -1889,7 +1832,6 @@ class MainWindow(QMainWindow):
         self._session_result_tracker.undo_last_result()
         self._refresh_session_result_ui()
 
-
     def _has_pending_session_result(
         self,
     ) -> bool:
@@ -1901,7 +1843,6 @@ class MainWindow(QMainWindow):
             self._session_result_tracker.total
             < self._session_signal_counter.total_count
         )
-
 
     def _refresh_session_result_ui(
         self,
@@ -2038,7 +1979,7 @@ class MainWindow(QMainWindow):
         self._clear_history_button.setVisible(
             not enabled,
         )
-        
+
         self._entry_alert_label.setVisible(
             not self._entry_alert_label.isHidden(),
         )
@@ -2125,7 +2066,7 @@ class MainWindow(QMainWindow):
                 compact=False,
             )
             self._apply_full_geometry()
-        
+
         self._refresh_session_risk_label()
         self._refresh_session_result_ui()
 
@@ -2174,9 +2115,7 @@ class MainWindow(QMainWindow):
 
         x = max(
             available_geometry.left(),
-            available_geometry.right()
-            - self.width()
-            - self.SAFE_WINDOW_MARGIN,
+            available_geometry.right() - self.width() - self.SAFE_WINDOW_MARGIN,
         )
         y = max(
             available_geometry.top(),
@@ -2192,16 +2131,8 @@ class MainWindow(QMainWindow):
         self,
         compact: bool,
     ) -> None:
-        margin = (
-            self.COMPACT_LAYOUT_MARGIN
-            if compact
-            else self.FULL_LAYOUT_MARGIN
-        )
-        spacing = (
-            self.COMPACT_LAYOUT_SPACING
-            if compact
-            else self.FULL_LAYOUT_SPACING
-        )
+        margin = self.COMPACT_LAYOUT_MARGIN if compact else self.FULL_LAYOUT_MARGIN
+        spacing = self.COMPACT_LAYOUT_SPACING if compact else self.FULL_LAYOUT_SPACING
 
         self._main_layout.setContentsMargins(
             margin,

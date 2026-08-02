@@ -29,9 +29,7 @@ def test_session_result_tracker_registers_win() -> None:
     assert snapshot.total == 1
     assert snapshot.consecutive_losses == 0
     assert snapshot.win_rate_percentage == 100.0
-    assert tracker.history == (
-        SessionResult.WIN,
-    )
+    assert tracker.history == (SessionResult.WIN,)
 
 
 def test_session_result_tracker_registers_loss() -> None:
@@ -44,9 +42,7 @@ def test_session_result_tracker_registers_loss() -> None:
     assert snapshot.total == 1
     assert snapshot.consecutive_losses == 1
     assert snapshot.win_rate_percentage == 0.0
-    assert tracker.history == (
-        SessionResult.LOSS,
-    )
+    assert tracker.history == (SessionResult.LOSS,)
 
 
 def test_session_result_tracker_win_resets_loss_streak() -> None:

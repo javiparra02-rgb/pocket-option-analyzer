@@ -28,7 +28,4 @@ class CandleClassificationPipeline:
         Clasifica una lista de velas candidatas.
         """
 
-        return [
-            self._classifier.classify(candle)
-            for candle in candles
-        ]
+        return [self._classifier.classify(candle) for candle in candles]

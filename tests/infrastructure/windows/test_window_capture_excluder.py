@@ -50,9 +50,7 @@ def test_window_capture_excluder_applies_exclude_from_capture() -> None:
 def test_window_capture_excluder_preserves_win32_error_code() -> None:
 
     excluder = WindowsWindowCaptureExcluder(
-        set_window_display_affinity=(
-            lambda window_handle, affinity: False
-        ),
+        set_window_display_affinity=(lambda window_handle, affinity: False),
         last_error_reader=lambda: 5,
         platform_name="win32",
     )
@@ -68,9 +66,7 @@ def test_window_capture_excluder_preserves_win32_error_code() -> None:
 def test_window_capture_excluder_rejects_invalid_handle() -> None:
 
     excluder = WindowsWindowCaptureExcluder(
-        set_window_display_affinity=(
-            lambda window_handle, affinity: True
-        ),
+        set_window_display_affinity=(lambda window_handle, affinity: True),
         platform_name="win32",
     )
 
@@ -151,9 +147,7 @@ def test_window_capture_excluder_allows_capture_with_wda_none() -> None:
 def test_window_capture_excluder_records_allow_capture_error() -> None:
 
     excluder = WindowsWindowCaptureExcluder(
-        set_window_display_affinity=(
-            lambda window_handle, affinity: False
-        ),
+        set_window_display_affinity=(lambda window_handle, affinity: False),
         last_error_reader=lambda: 87,
         platform_name="win32",
     )

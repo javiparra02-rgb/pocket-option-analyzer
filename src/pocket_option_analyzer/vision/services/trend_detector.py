@@ -59,9 +59,7 @@ class TrendDetector:
             candles=candles,
         )
 
-        recent_candles = tuple(
-            analysis_candles[-self._recent_candles :]
-        )
+        recent_candles = tuple(analysis_candles[-self._recent_candles :])
 
         directional_candles = self._directional_candles(
             candles=recent_candles,
@@ -128,10 +126,7 @@ class TrendDetector:
         candles: tuple[ClassifiedCandle, ...],
     ) -> tuple[ClassifiedCandle, ...]:
 
-        if (
-            self._ignore_latest_candle
-            and len(candles) > self._min_candles
-        ):
+        if self._ignore_latest_candle and len(candles) > self._min_candles:
             return candles[:-1]
 
         return candles
@@ -141,23 +136,15 @@ class TrendDetector:
         directional_candles: tuple[ClassifiedCandle, ...],
     ) -> TrendDirection:
 
-        recent = directional_candles[
-            -self._recent_momentum_candles :
-        ]
+        recent = directional_candles[-self._recent_momentum_candles :]
 
         if len(recent) < self._recent_momentum_candles:
             return TrendDirection.UNKNOWN
 
-        if all(
-            candle.candle_type is CandleType.BEARISH
-            for candle in recent
-        ):
+        if all(candle.candle_type is CandleType.BEARISH for candle in recent):
             return TrendDirection.BEARISH
 
-        if all(
-            candle.candle_type is CandleType.BULLISH
-            for candle in recent
-        ):
+        if all(candle.candle_type is CandleType.BULLISH for candle in recent):
             return TrendDirection.BULLISH
 
         return TrendDirection.UNKNOWN
@@ -183,11 +170,7 @@ class TrendDetector:
         candle_type: CandleType,
     ) -> int:
 
-        return sum(
-            1
-            for candle in candles
-            if candle.candle_type is candle_type
-        )
+        return sum(1 for candle in candles if candle.candle_type is candle_type)
 
     def _center_y(
         self,

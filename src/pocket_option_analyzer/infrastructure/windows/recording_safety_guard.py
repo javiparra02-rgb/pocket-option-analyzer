@@ -28,14 +28,10 @@ class ScreenRectangle:
         self,
     ) -> None:
         if self.right <= self.left:
-            raise ValueError(
-                "right debe ser mayor que left."
-            )
+            raise ValueError("right debe ser mayor que left.")
 
         if self.bottom <= self.top:
-            raise ValueError(
-                "bottom debe ser mayor que top."
-            )
+            raise ValueError("bottom debe ser mayor que top.")
 
     @property
     def width(self) -> int:
@@ -58,9 +54,7 @@ class ScreenRectangle:
         """
 
         if margin < 0:
-            raise ValueError(
-                "margin no puede ser negativo."
-            )
+            raise ValueError("margin no puede ser negativo.")
 
         return ScreenRectangle(
             left=self.left - margin,
@@ -104,9 +98,7 @@ class NativeWindowSnapshot:
         self,
     ) -> None:
         if self.handle <= 0:
-            raise ValueError(
-                "handle debe ser mayor que cero."
-            )
+            raise ValueError("handle debe ser mayor que cero.")
 
 
 @dataclass(
@@ -147,27 +139,16 @@ class WindowsRecordingSafetyGuard:
         platform_name: str | None = None,
     ) -> None:
         if not target_title_fragment.strip():
-            raise ValueError(
-                "target_title_fragment no puede estar vacío."
-            )
+            raise ValueError("target_title_fragment no puede estar vacío.")
 
         if safety_margin_px < 0:
-            raise ValueError(
-                "safety_margin_px no puede ser negativo."
-            )
+            raise ValueError("safety_margin_px no puede ser negativo.")
 
-        self._target_title_fragment = (
-            target_title_fragment.casefold()
-        )
+        self._target_title_fragment = target_title_fragment.casefold()
         self._safety_margin_px = safety_margin_px
-        self._snapshot_provider = (
-            snapshot_provider
-            or self._capture_native_snapshots
-        )
+        self._snapshot_provider = snapshot_provider or self._capture_native_snapshots
         self._platform_name = (
-            platform_name
-            if platform_name is not None
-            else sys.platform
+            platform_name if platform_name is not None else sys.platform
         )
         self._last_status: RecordingSafetyStatus | None = None
 
@@ -190,17 +171,14 @@ class WindowsRecordingSafetyGuard:
         """
 
         if analyzer_window_handle <= 0:
-            raise ValueError(
-                "analyzer_window_handle debe ser mayor que cero."
-            )
+            raise ValueError("analyzer_window_handle debe ser mayor que cero.")
 
         if not self.is_supported:
             return self._store_status(
                 RecordingSafetyStatus(
                     is_safe=False,
                     message=(
-                        "El modo grabación segura solo está "
-                        "disponible en Windows."
+                        "El modo grabación segura solo está disponible en Windows."
                     ),
                 )
             )
@@ -221,8 +199,7 @@ class WindowsRecordingSafetyGuard:
                 RecordingSafetyStatus(
                     is_safe=False,
                     message=(
-                        "No se pudo leer la posición de la "
-                        "ventana del analizador."
+                        "No se pudo leer la posición de la ventana del analizador."
                     ),
                 )
             )
@@ -240,10 +217,7 @@ class WindowsRecordingSafetyGuard:
             return self._store_status(
                 RecordingSafetyStatus(
                     is_safe=False,
-                    message=(
-                        "No se encontró una ventana visible "
-                        "de Pocket Option."
-                    ),
+                    message=("No se encontró una ventana visible de Pocket Option."),
                     analyzer_rectangle=analyzer_window.rectangle,
                 )
             )
@@ -253,10 +227,8 @@ class WindowsRecordingSafetyGuard:
             key=lambda snapshot: snapshot.rectangle.area,
         )
 
-        protected_analyzer_rectangle = (
-            analyzer_window.rectangle.expanded(
-                margin=self._safety_margin_px,
-            )
+        protected_analyzer_rectangle = analyzer_window.rectangle.expanded(
+            margin=self._safety_margin_px,
         )
 
         if protected_analyzer_rectangle.intersects(
@@ -279,9 +251,7 @@ class WindowsRecordingSafetyGuard:
         return self._store_status(
             RecordingSafetyStatus(
                 is_safe=True,
-                message=(
-                    "Ubicación segura para grabación."
-                ),
+                message=("Ubicación segura para grabación."),
                 analyzer_rectangle=analyzer_window.rectangle,
                 target_rectangle=target_window.rectangle,
                 target_title=target_window.title,
@@ -308,10 +278,7 @@ class WindowsRecordingSafetyGuard:
         if "pocket option analyzer" in normalized_title:
             return False
 
-        return (
-            self._target_title_fragment
-            in normalized_title
-        )
+        return self._target_title_fragment in normalized_title
 
     def _store_status(
         self,
@@ -321,8 +288,7 @@ class WindowsRecordingSafetyGuard:
         return status
 
     @staticmethod
-    def _capture_native_snapshots(
-    ) -> tuple[NativeWindowSnapshot, ...]:
+    def _capture_native_snapshots() -> tuple[NativeWindowSnapshot, ...]:
         """
         Enumera ventanas superiores visibles mediante user32.
         """
@@ -430,10 +396,8 @@ class WindowsRecordingSafetyGuard:
                 return True
 
             if (
-                native_rectangle.right
-                <= native_rectangle.left
-                or native_rectangle.bottom
-                <= native_rectangle.top
+                native_rectangle.right <= native_rectangle.left
+                or native_rectangle.bottom <= native_rectangle.top
             ):
                 return True
 

@@ -21,10 +21,7 @@ def test_presenter_formats_empty_audit() -> None:
     )
 
     assert result.text == (
-        "Gate S30 (ejecución): "
-        "0 aceptadas | "
-        "0 duplicadas suprimidas | "
-        "último: -"
+        "Gate S30 (ejecución): 0 aceptadas | 0 duplicadas suprimidas | último: -"
     )
     assert result.css_class == "gate-neutral"
 
@@ -35,9 +32,7 @@ def test_presenter_formats_last_suppressed_signal() -> None:
         SignalGateAuditSnapshot(
             accepted_count=1,
             duplicate_suppressed_count=2,
-            last_disposition=(
-                SignalRecordDisposition.DUPLICATE_SUPPRESSED
-            ),
+            last_disposition=(SignalRecordDisposition.DUPLICATE_SUPPRESSED),
             last_direction=SignalDirection.PUT,
             last_interval_started_at=datetime(
                 2026,

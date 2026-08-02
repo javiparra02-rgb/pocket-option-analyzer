@@ -33,9 +33,7 @@ def test_rsi_calculator_returns_100_when_all_values_are_rising() -> None:
         period=3,
     )
 
-    assert result == (
-        100.0,
-    )
+    assert result == (100.0,)
 
 
 def test_rsi_calculator_returns_0_when_all_values_are_falling() -> None:
@@ -52,9 +50,7 @@ def test_rsi_calculator_returns_0_when_all_values_are_falling() -> None:
         period=3,
     )
 
-    assert result == (
-        0.0,
-    )
+    assert result == (0.0,)
 
 
 def test_rsi_calculator_returns_50_when_values_are_flat() -> None:
@@ -71,9 +67,7 @@ def test_rsi_calculator_returns_50_when_values_are_flat() -> None:
         period=3,
     )
 
-    assert result == (
-        50.0,
-    )
+    assert result == (50.0,)
 
 
 def test_rsi_calculator_calculates_multiple_values() -> None:

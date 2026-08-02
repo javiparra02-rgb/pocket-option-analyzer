@@ -121,16 +121,10 @@ class ConfirmationChecklistPresenter:
             return False
 
         if target_direction == "CALL":
-            return (
-                "EMA: ALCISTA" in indicator_text
-                and "SUFICIENTE" in indicator_text
-            )
+            return "EMA: ALCISTA" in indicator_text and "SUFICIENTE" in indicator_text
 
         if target_direction == "PUT":
-            return (
-                "EMA: BAJISTA" in indicator_text
-                and "SUFICIENTE" in indicator_text
-            )
+            return "EMA: BAJISTA" in indicator_text and "SUFICIENTE" in indicator_text
 
         return False
 

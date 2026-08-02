@@ -37,7 +37,6 @@ from pocket_option_analyzer.vision.models import (
 
 
 class FakeMarketAnalysisPipeline:
-
     def __init__(
         self,
         result: MarketAnalysis,
@@ -54,18 +53,11 @@ class FakeMarketAnalysisPipeline:
 
 
 class FakeVisualIndicatorSnapshotBuilder:
-
     def __init__(
         self,
         result: IndicatorSnapshot | None,
-        snapshot_context: (
-            VisualIndicatorSnapshotContext
-            | None
-        ) = None,
-        snapshot_timing_status: (
-            CandleIntervalIndicatorCacheStatus
-            | None
-        ) = None,
+        snapshot_context: (VisualIndicatorSnapshotContext | None) = None,
+        snapshot_timing_status: (CandleIntervalIndicatorCacheStatus | None) = None,
     ) -> None:
         self.result = result
         self.snapshot_context = snapshot_context
@@ -84,7 +76,6 @@ class FakeVisualIndicatorSnapshotBuilder:
 
 
 class FakeStrategySignalGenerator:
-
     def __init__(
         self,
         result: MarketSignal,
@@ -236,19 +227,16 @@ def test_analyze_generates_signal_from_visual_indicators() -> None:
         "Auditoría Stoch snapshot: "
         "visibles=2 | OHLC cerradas=1 | "
         "K-periodo=5 | geometría=1/1 | "
-        "consistencia=OK"
-        in result.reason
+        "consistencia=OK" in result.reason
     )
     assert (
         "Auditoría Stoch OHLC: "
         "máximo=120.00 | mínimo=80.00 | "
-        "cierre=104.00 | rango=40.00"
-        in result.reason
+        "cierre=104.00 | rango=40.00" in result.reason
     )
     assert (
         "Auditoría Stoch cálculo: "
-        "K bruto=60.00 | K suavizado=24.00 | D=21.00"
-        in result.reason
+        "K bruto=60.00 | K suavizado=24.00 | D=21.00" in result.reason
     )
 
 
@@ -298,10 +286,7 @@ def test_analyze_returns_neutral_signal_when_indicators_are_missing() -> None:
     assert "RSI: no disponible" in result.reason
     assert "Stochastic: no disponible" in result.reason
     assert "Estado: velas insuficientes" in result.reason
-    assert (
-        "Not enough visual candles to calculate indicators."
-        in result.reason
-    )
+    assert "Not enough visual candles to calculate indicators." in result.reason
     assert "Minimum visible required: 14." in result.reason
     assert "Minimum closed required: 13." in result.reason
 
@@ -371,16 +356,9 @@ def test_audit_does_not_mix_current_capture_with_cached_context() -> None:
 
     assert "Velas detectadas: 3" in result.reason
 
-    assert (
-        "Auditoría Stoch snapshot: "
-        "visibles=2 | OHLC cerradas=1"
-        in result.reason
-    )
+    assert "Auditoría Stoch snapshot: visibles=2 | OHLC cerradas=1" in result.reason
 
-    assert (
-        "Auditoría Stoch snapshot: visibles=3"
-        not in result.reason
-    )
+    assert "Auditoría Stoch snapshot: visibles=3" not in result.reason
 
 
 def _timing_status(
@@ -521,7 +499,4 @@ def test_analyze_blocks_actionable_signal_when_snapshot_is_outdated() -> None:
     assert result.direction is SignalDirection.NONE
     assert signal_generator.was_called is False
     assert "estado=DESACTUALIZADO" in result.reason
-    assert (
-        "Estado: esperando snapshot nuevo"
-        in result.reason
-    )
+    assert "Estado: esperando snapshot nuevo" in result.reason

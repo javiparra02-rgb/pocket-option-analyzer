@@ -18,7 +18,6 @@ from pocket_option_analyzer.vision.models import (
 
 
 class FakeFinder:
-
     def find(self, title: str):
         class W:
             hwnd = 123
@@ -27,7 +26,6 @@ class FakeFinder:
 
 
 class FakeReader:
-
     def read(self, hwnd: int):
         return Win32WindowInfo(
             hwnd=hwnd,
@@ -46,7 +44,6 @@ class FakeReader:
 
 
 class FakeCapture:
-
     def capture(self, window):
         return np.zeros(
             (200, 200, 3),
@@ -55,7 +52,6 @@ class FakeCapture:
 
 
 class FakeRegionExtractor:
-
     def extract(self, image):
         return ChartRegion(
             x=20,

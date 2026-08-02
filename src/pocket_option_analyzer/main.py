@@ -73,18 +73,11 @@ def ensure_qapplication(
     if app is not None:
         return app
 
-    return QApplication(
-        list(
-            argv
-            if argv is not None
-            else sys.argv
-        )
-    )
+    return QApplication(list(argv if argv is not None else sys.argv))
 
-DEFAULT_MANUAL_RESULT_FILE_PATH = (
-    Path("logs")
-    / "manual_signal_results.jsonl"
-)
+
+DEFAULT_MANUAL_RESULT_FILE_PATH = Path("logs") / "manual_signal_results.jsonl"
+
 
 def build_gui_application(
     argv: Sequence[str] | None = None,
@@ -120,33 +113,18 @@ def build_gui_application(
 
     resolved_manual_result_session = manual_result_session
     resolved_window_capture_excluder = window_capture_excluder
-    resolved_recording_safety_guard = (
-        recording_safety_guard
-    )
+    resolved_recording_safety_guard = recording_safety_guard
 
-    if (
-        resolved_recording_safety_guard is None
-        and runtime_service is None
-    ):
-        resolved_recording_safety_guard = (
-            WindowsRecordingSafetyGuard(
-                target_title_fragment="Pocket Option",
-                safety_margin_px=8,
-            )
+    if resolved_recording_safety_guard is None and runtime_service is None:
+        resolved_recording_safety_guard = WindowsRecordingSafetyGuard(
+            target_title_fragment="Pocket Option",
+            safety_margin_px=8,
         )
 
-    if (
-        resolved_window_capture_excluder is None
-        and runtime_service is None
-    ):
-        resolved_window_capture_excluder = (
-            WindowsWindowCaptureExcluder()
-        )
+    if resolved_window_capture_excluder is None and runtime_service is None:
+        resolved_window_capture_excluder = WindowsWindowCaptureExcluder()
 
-    if (
-        resolved_manual_result_session is None
-        and runtime_service is None
-    ):
+    if resolved_manual_result_session is None and runtime_service is None:
         resolved_manual_result_session = ManualSignalResultSessionService(
             writer=JsonlManualSignalResultWriter(
                 output_path=DEFAULT_MANUAL_RESULT_FILE_PATH,
@@ -188,13 +166,9 @@ def main(
 
     resolved_logging_manager.configure()
 
-    application_logger = (
-        resolved_logging_manager.logger
-    )
+    application_logger = resolved_logging_manager.logger
 
-    application_logger.info(
-        "Iniciando Pocket Option Analyzer."
-    )
+    application_logger.info("Iniciando Pocket Option Analyzer.")
 
     try:
         application = build_gui_application(
@@ -204,16 +178,14 @@ def main(
         exit_code = application.run()
 
         application_logger.info(
-            "Pocket Option Analyzer finalizado "
-            f"con código {exit_code}."
+            f"Pocket Option Analyzer finalizado con código {exit_code}."
         )
 
         return exit_code
 
     except Exception:
         application_logger.exception(
-            "Error no controlado durante "
-            "la ejecución de Pocket Option Analyzer."
+            "Error no controlado durante la ejecución de Pocket Option Analyzer."
         )
         raise
 

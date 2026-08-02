@@ -219,9 +219,12 @@ def test_pocket_option_candle_mask_builder_does_not_merge_neighbors() -> None:
         image=image,
     )
 
-    assert np.count_nonzero(
-        mask[
-            :,
-            43,
-        ]
-    ) == 0
+    assert (
+        np.count_nonzero(
+            mask[
+                :,
+                43,
+            ]
+        )
+        == 0
+    )

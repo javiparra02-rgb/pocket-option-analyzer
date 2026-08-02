@@ -48,8 +48,4 @@ class SignalHistory:
         Devuelve solo los registros con señales CALL o PUT.
         """
 
-        return [
-            record
-            for record in self.records
-            if record.is_actionable
-        ]
+        return [record for record in self.records if record.is_actionable]

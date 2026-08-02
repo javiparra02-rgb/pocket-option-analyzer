@@ -116,7 +116,9 @@ def test_evaluator_returns_put_when_all_put_conditions_match() -> None:
     assert signal.reason == "OTC Precision 10S PUT setup confirmed."
 
 
-def test_evaluator_returns_neutral_with_diagnostics_when_conditions_do_not_match() -> None:
+def test_evaluator_returns_neutral_with_diagnostics_when_conditions_do_not_match() -> (
+    None
+):
 
     evaluator = StrategyConditionEvaluator()
 

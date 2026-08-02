@@ -30,23 +30,14 @@ class WindowsWindowCaptureExcluder:
 
     def __init__(
         self,
-        set_window_display_affinity: (
-            SetWindowDisplayAffinityCallable | None
-        ) = None,
+        set_window_display_affinity: (SetWindowDisplayAffinityCallable | None) = None,
         last_error_reader: LastErrorReader | None = None,
         platform_name: str | None = None,
     ) -> None:
-        self._set_window_display_affinity = (
-            set_window_display_affinity
-        )
-        self._last_error_reader = (
-            last_error_reader
-            or self._read_last_error
-        )
+        self._set_window_display_affinity = set_window_display_affinity
+        self._last_error_reader = last_error_reader or self._read_last_error
         self._platform_name = (
-            platform_name
-            if platform_name is not None
-            else sys.platform
+            platform_name if platform_name is not None else sys.platform
         )
         self._last_error_code: int | None = None
 
@@ -75,15 +66,12 @@ class WindowsWindowCaptureExcluder:
         self,
     ) -> SetWindowDisplayAffinityCallable:
         if self._set_window_display_affinity is None:
-            self._set_window_display_affinity = (
-                self._create_native_setter()
-            )
+            self._set_window_display_affinity = self._create_native_setter()
 
         return self._set_window_display_affinity
 
     @staticmethod
-    def _create_native_setter(
-    ) -> SetWindowDisplayAffinityCallable:
+    def _create_native_setter() -> SetWindowDisplayAffinityCallable:
         """
         Configura la firma nativa de SetWindowDisplayAffinity.
         """
@@ -95,9 +83,7 @@ class WindowsWindowCaptureExcluder:
             use_last_error=True,
         )
 
-        native_function = (
-            user32.SetWindowDisplayAffinity
-        )
+        native_function = user32.SetWindowDisplayAffinity
         native_function.argtypes = [
             wintypes.HWND,
             wintypes.DWORD,
@@ -128,9 +114,7 @@ class WindowsWindowCaptureExcluder:
         if reader is None:
             return 0
 
-        return int(
-            reader()
-        )
+        return int(reader())
 
     def allow_capture(
         self,
@@ -159,9 +143,7 @@ class WindowsWindowCaptureExcluder:
             return False
 
         if window_handle <= 0:
-            raise ValueError(
-                "window_handle debe ser mayor que cero."
-            )
+            raise ValueError("window_handle debe ser mayor que cero.")
 
         setter = self._resolve_setter()
 
@@ -175,8 +157,6 @@ class WindowsWindowCaptureExcluder:
         if was_applied:
             return True
 
-        self._last_error_code = int(
-            self._last_error_reader()
-        )
+        self._last_error_code = int(self._last_error_reader())
 
         return False

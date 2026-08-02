@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import numpy as np
 
@@ -23,14 +23,12 @@ from pocket_option_analyzer.infrastructure.bootstrap import (
 
 @dataclass(frozen=True, slots=True)
 class FakeFrame:
-
     image: np.ndarray
 
     captured_at: datetime
 
 
 class FakeCaptureService:
-
     def __init__(
         self,
         frames,
@@ -77,7 +75,7 @@ def _frame() -> FakeFrame:
             2026,
             1,
             1,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
     )
 

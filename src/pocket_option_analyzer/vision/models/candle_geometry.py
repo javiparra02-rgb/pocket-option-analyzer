@@ -34,20 +34,10 @@ class CandleGeometry:
             self.low_y,
         )
 
-        if any(
-            coordinate < 0
-            for coordinate in coordinates
-        ):
-            raise ValueError(
-                "Las coordenadas de la geometría no pueden ser negativas."
-            )
+        if any(coordinate < 0 for coordinate in coordinates):
+            raise ValueError("Las coordenadas de la geometría no pueden ser negativas.")
 
-        if not (
-            self.high_y
-            <= self.body_top_y
-            <= self.body_bottom_y
-            <= self.low_y
-        ):
+        if not (self.high_y <= self.body_top_y <= self.body_bottom_y <= self.low_y):
             raise ValueError(
                 "La geometría debe respetar el orden "
                 "high_y <= body_top_y <= body_bottom_y <= low_y."
@@ -59,10 +49,7 @@ class CandleGeometry:
         Altura vertical de la mecha superior.
         """
 
-        return (
-            self.body_top_y
-            - self.high_y
-        )
+        return self.body_top_y - self.high_y
 
     @property
     def body_height(self) -> int:
@@ -70,11 +57,7 @@ class CandleGeometry:
         Cantidad de píxeles verticales ocupados por el cuerpo.
         """
 
-        return (
-            self.body_bottom_y
-            - self.body_top_y
-            + 1
-        )
+        return self.body_bottom_y - self.body_top_y + 1
 
     @property
     def lower_wick_height(self) -> int:
@@ -82,10 +65,7 @@ class CandleGeometry:
         Altura vertical de la mecha inferior.
         """
 
-        return (
-            self.low_y
-            - self.body_bottom_y
-        )
+        return self.low_y - self.body_bottom_y
 
     @property
     def total_height(self) -> int:
@@ -93,11 +73,7 @@ class CandleGeometry:
         Cantidad total de píxeles desde máximo hasta mínimo.
         """
 
-        return (
-            self.low_y
-            - self.high_y
-            + 1
-        )
+        return self.low_y - self.high_y + 1
 
     @property
     def is_doji_like(self) -> bool:

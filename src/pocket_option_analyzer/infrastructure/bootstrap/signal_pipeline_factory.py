@@ -31,19 +31,18 @@ from pocket_option_analyzer.infrastructure.signals import (
 )
 from pocket_option_analyzer.vision.models import CandleColorProfile
 from pocket_option_analyzer.vision.services import (
-    BinaryMaskBuilder,
     CandleAnalysisPipeline,
     CandleClassificationPipeline,
     CandleClassifier,
     CandleColorDetector,
     CandleDetectionPipeline,
     CandleFilter,
+    CandleGeometryExtractor,
     CandleSegmenter,
     CandleSeriesBuilder,
     MarketAnalysisPipeline,
     PocketOptionCandleMaskBuilder,
     TrendDetector,
-    CandleGeometryExtractor,
 )
 
 
@@ -139,13 +138,11 @@ class SignalPipelineFactory:
             )
         )
 
-        visual_strategy_signal_analysis_pipeline = (
-            VisualStrategySignalAnalysisPipeline(
-                market_analysis_pipeline=market_analysis_pipeline,
-                indicator_snapshot_builder=VisualIndicatorSnapshotBuilder(),
-                signal_generator=strategy_signal_generator,
-                profile=profile,
-            )
+        visual_strategy_signal_analysis_pipeline = VisualStrategySignalAnalysisPipeline(
+            market_analysis_pipeline=market_analysis_pipeline,
+            indicator_snapshot_builder=VisualIndicatorSnapshotBuilder(),
+            signal_generator=strategy_signal_generator,
+            profile=profile,
         )
 
         recorder = SignalRecorder(

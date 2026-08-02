@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -38,7 +38,7 @@ def test_jsonl_signal_record_writer_creates_file_with_record(
             2026,
             1,
             1,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         source="test_source",
     )
@@ -90,7 +90,7 @@ def _record(
             20,
             51,
             created_second,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         source="writer_test",
         disposition=disposition,
@@ -101,7 +101,7 @@ def _record(
             20,
             51,
             interval_second,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
     )
 
@@ -125,10 +125,7 @@ def test_writer_persists_only_first_observed_record_per_interval(
     tmp_path: Path,
 ) -> None:
 
-    file_path = (
-        tmp_path
-        / "signals.jsonl"
-    )
+    file_path = tmp_path / "signals.jsonl"
 
     writer = JsonlSignalRecordWriter(
         file_path=file_path,
@@ -172,28 +169,18 @@ def test_writer_persists_only_first_observed_record_per_interval(
 
     assert len(records) == 2
 
-    assert records[0][
-        "candle_interval_started_at"
-    ] == "2026-08-01T20:51:00+00:00"
+    assert records[0]["candle_interval_started_at"] == "2026-08-01T20:51:00+00:00"
 
-    assert records[1][
-        "candle_interval_started_at"
-    ] == "2026-08-01T20:51:30+00:00"
+    assert records[1]["candle_interval_started_at"] == "2026-08-01T20:51:30+00:00"
 
-    assert all(
-        record["storage_format"] == "full"
-        for record in records
-    )
+    assert all(record["storage_format"] == "full" for record in records)
 
 
 def test_writer_updates_single_duplicate_summary_in_place(
     tmp_path: Path,
 ) -> None:
 
-    file_path = (
-        tmp_path
-        / "signals.jsonl"
-    )
+    file_path = tmp_path / "signals.jsonl"
 
     writer = JsonlSignalRecordWriter(
         file_path=file_path,
@@ -201,9 +188,7 @@ def test_writer_updates_single_duplicate_summary_in_place(
 
     writer.write(
         _record(
-            disposition=(
-                SignalRecordDisposition.ACTIONABLE_ACCEPTED
-            ),
+            disposition=(SignalRecordDisposition.ACTIONABLE_ACCEPTED),
             created_second=32,
             interval_second=30,
             direction=SignalDirection.CALL,
@@ -218,9 +203,7 @@ def test_writer_updates_single_duplicate_summary_in_place(
     ):
         writer.write(
             _record(
-                disposition=(
-                    SignalRecordDisposition.DUPLICATE_SUPPRESSED
-                ),
+                disposition=(SignalRecordDisposition.DUPLICATE_SUPPRESSED),
                 created_second=created_second,
                 interval_second=30,
                 direction=SignalDirection.CALL,
@@ -238,20 +221,13 @@ def test_writer_updates_single_duplicate_summary_in_place(
     summary = records[1]
 
     assert accepted["storage_format"] == "full"
-    assert accepted["reason"] == (
-        "Accepted diagnostics."
-    )
+    assert accepted["reason"] == ("Accepted diagnostics.")
 
     assert summary["storage_format"] == "summary"
-    assert summary["event_type"] == (
-        "duplicate_signal_summary"
-    )
+    assert summary["event_type"] == ("duplicate_signal_summary")
     assert summary["accepted_direction"] == "call"
 
-    assert (
-        summary["duplicate_suppressed_count"]
-        == 3
-    )
+    assert summary["duplicate_suppressed_count"] == 3
 
     assert summary["duplicate_direction_counts"] == {
         "call": 3,
@@ -262,20 +238,14 @@ def test_writer_updates_single_duplicate_summary_in_place(
 
     assert summary["is_actionable"] is False
 
-    assert (
-        summary["is_duplicate_suppressed"]
-        is True
-    )
+    assert summary["is_duplicate_suppressed"] is True
 
 
 def test_writer_rotates_files_and_respects_backup_limit(
     tmp_path: Path,
 ) -> None:
 
-    file_path = (
-        tmp_path
-        / "signals.jsonl"
-    )
+    file_path = tmp_path / "signals.jsonl"
 
     writer = JsonlSignalRecordWriter(
         file_path=file_path,
@@ -287,9 +257,7 @@ def test_writer_rotates_files_and_respects_backup_limit(
 
     writer.write(
         _record(
-            disposition=(
-                SignalRecordDisposition.ACTIONABLE_ACCEPTED
-            ),
+            disposition=(SignalRecordDisposition.ACTIONABLE_ACCEPTED),
             created_second=5,
             interval_second=0,
             direction=SignalDirection.CALL,
@@ -299,9 +267,7 @@ def test_writer_rotates_files_and_respects_backup_limit(
 
     writer.write(
         _record(
-            disposition=(
-                SignalRecordDisposition.ACTIONABLE_ACCEPTED
-            ),
+            disposition=(SignalRecordDisposition.ACTIONABLE_ACCEPTED),
             created_second=10,
             interval_second=0,
             direction=SignalDirection.PUT,
@@ -311,9 +277,7 @@ def test_writer_rotates_files_and_respects_backup_limit(
 
     writer.write(
         _record(
-            disposition=(
-                SignalRecordDisposition.ACTIONABLE_ACCEPTED
-            ),
+            disposition=(SignalRecordDisposition.ACTIONABLE_ACCEPTED),
             created_second=35,
             interval_second=30,
             direction=SignalDirection.CALL,
@@ -323,17 +287,11 @@ def test_writer_rotates_files_and_respects_backup_limit(
 
     assert file_path.exists() is True
 
-    assert Path(
-        f"{file_path}.1"
-    ).exists() is True
+    assert Path(f"{file_path}.1").exists() is True
 
-    assert Path(
-        f"{file_path}.2"
-    ).exists() is True
+    assert Path(f"{file_path}.2").exists() is True
 
-    assert Path(
-        f"{file_path}.3"
-    ).exists() is False
+    assert Path(f"{file_path}.3").exists() is False
 
 
 def test_writer_rejects_invalid_rotation_configuration(
@@ -345,10 +303,7 @@ def test_writer_rejects_invalid_rotation_configuration(
         match="max_bytes debe ser mayor o igual a 1",
     ):
         JsonlSignalRecordWriter(
-            file_path=(
-                tmp_path
-                / "signals.jsonl"
-            ),
+            file_path=(tmp_path / "signals.jsonl"),
             max_bytes=0,
         )
 
@@ -357,10 +312,7 @@ def test_writer_rejects_invalid_rotation_configuration(
         match="backup_count no puede ser negativo",
     ):
         JsonlSignalRecordWriter(
-            file_path=(
-                tmp_path
-                / "signals.jsonl"
-            ),
+            file_path=(tmp_path / "signals.jsonl"),
             backup_count=-1,
         )
 
@@ -369,10 +321,7 @@ def test_writer_creates_independent_summary_for_next_interval(
     tmp_path: Path,
 ) -> None:
 
-    file_path = (
-        tmp_path
-        / "signals.jsonl"
-    )
+    file_path = tmp_path / "signals.jsonl"
 
     writer = JsonlSignalRecordWriter(
         file_path=file_path,
@@ -380,9 +329,7 @@ def test_writer_creates_independent_summary_for_next_interval(
 
     writer.write(
         _record(
-            disposition=(
-                SignalRecordDisposition.ACTIONABLE_ACCEPTED
-            ),
+            disposition=(SignalRecordDisposition.ACTIONABLE_ACCEPTED),
             created_second=5,
             interval_second=0,
             direction=SignalDirection.CALL,
@@ -391,9 +338,7 @@ def test_writer_creates_independent_summary_for_next_interval(
 
     writer.write(
         _record(
-            disposition=(
-                SignalRecordDisposition.DUPLICATE_SUPPRESSED
-            ),
+            disposition=(SignalRecordDisposition.DUPLICATE_SUPPRESSED),
             created_second=10,
             interval_second=0,
             direction=SignalDirection.CALL,
@@ -402,9 +347,7 @@ def test_writer_creates_independent_summary_for_next_interval(
 
     writer.write(
         _record(
-            disposition=(
-                SignalRecordDisposition.ACTIONABLE_ACCEPTED
-            ),
+            disposition=(SignalRecordDisposition.ACTIONABLE_ACCEPTED),
             created_second=35,
             interval_second=30,
             direction=SignalDirection.PUT,
@@ -413,9 +356,7 @@ def test_writer_creates_independent_summary_for_next_interval(
 
     writer.write(
         _record(
-            disposition=(
-                SignalRecordDisposition.DUPLICATE_SUPPRESSED
-            ),
+            disposition=(SignalRecordDisposition.DUPLICATE_SUPPRESSED),
             created_second=40,
             interval_second=30,
             direction=SignalDirection.PUT,
@@ -431,28 +372,22 @@ def test_writer_creates_independent_summary_for_next_interval(
         for record in records
         if record.get(
             "event_type",
-        ) == "duplicate_signal_summary"
+        )
+        == "duplicate_signal_summary"
     ]
 
     assert len(summaries) == 2
 
-    assert summaries[0][
-        "accepted_direction"
-    ] == "call"
+    assert summaries[0]["accepted_direction"] == "call"
 
-    assert summaries[1][
-        "accepted_direction"
-    ] == "put"
+    assert summaries[1]["accepted_direction"] == "put"
 
 
 def test_writer_skips_observed_after_accepted_signal(
     tmp_path: Path,
 ) -> None:
 
-    file_path = (
-        tmp_path
-        / "signals.jsonl"
-    )
+    file_path = tmp_path / "signals.jsonl"
 
     writer = JsonlSignalRecordWriter(
         file_path=file_path,
@@ -460,9 +395,7 @@ def test_writer_skips_observed_after_accepted_signal(
 
     writer.write(
         _record(
-            disposition=(
-                SignalRecordDisposition.ACTIONABLE_ACCEPTED
-            ),
+            disposition=(SignalRecordDisposition.ACTIONABLE_ACCEPTED),
             created_second=5,
             interval_second=0,
             direction=SignalDirection.CALL,
@@ -484,6 +417,4 @@ def test_writer_skips_observed_after_accepted_signal(
 
     assert len(records) == 1
 
-    assert records[0]["disposition"] == (
-        "actionable_accepted"
-    )
+    assert records[0]["disposition"] == ("actionable_accepted")

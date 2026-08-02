@@ -14,7 +14,6 @@ from pocket_option_analyzer.presentation.signals import (
 
 
 class CallbackSpy:
-
     def __init__(self) -> None:
         self.calls = 0
 
@@ -60,11 +59,7 @@ def _confirmed_signal(
         source="test_source",
         created_at_label=f"2026-01-01 11:00:{index:02d}",
         is_actionable=True,
-        css_class=(
-            "signal-call"
-            if direction == "CALL"
-            else "signal-put"
-        ),
+        css_class=("signal-call" if direction == "CALL" else "signal-put"),
         operational_summary_label=(
             f"Resumen operativo: ENTRADA {direction} confirmada — "
             "revisar gestión de riesgo antes de operar manualmente."
@@ -375,10 +370,7 @@ def test_main_window_keeps_long_reason_scrolled_to_top() -> None:
 
     window = MainWindow()
 
-    long_reason = " ".join(
-        f"condition-{index}"
-        for index in range(100)
-    )
+    long_reason = " ".join(f"condition-{index}" for index in range(100))
 
     view_model = SignalRecordViewModel(
         direction_label="SIN SEÑAL",
@@ -394,9 +386,7 @@ def test_main_window_keeps_long_reason_scrolled_to_top() -> None:
         view_model=view_model,
     )
 
-    assert window.reason_text.startswith(
-        "Motivo: condition-0"
-    )
+    assert window.reason_text.startswith("Motivo: condition-0")
     assert window.reason_scroll_position == 0
 
 
@@ -470,10 +460,7 @@ def test_main_window_appends_signal_to_history() -> None:
     )
 
     assert window.signal_history_count == 1
-    assert (
-        window.latest_signal_history_text
-        == "2026-01-01 10:30:45 | CALL | ALTA"
-    )
+    assert window.latest_signal_history_text == "2026-01-01 10:30:45 | CALL | ALTA"
 
 
 def test_main_window_keeps_latest_signal_at_top_of_history() -> None:
@@ -510,10 +497,7 @@ def test_main_window_keeps_latest_signal_at_top_of_history() -> None:
     )
 
     assert window.signal_history_count == 2
-    assert (
-        window.latest_signal_history_text
-        == "2026-01-01 10:31:45 | PUT | ALTA"
-    )
+    assert window.latest_signal_history_text == "2026-01-01 10:31:45 | PUT | ALTA"
 
 
 def test_main_window_limits_signal_history_size() -> None:
@@ -539,12 +523,10 @@ def test_main_window_limits_signal_history_size() -> None:
 
     assert window.signal_history_count == window.max_signal_history_items
     assert (
-        window.latest_signal_history_text
-        == "2026-01-01 10:30:54 | SIN SEÑAL | NINGUNA"
+        window.latest_signal_history_text == "2026-01-01 10:30:54 | SIN SEÑAL | NINGUNA"
     )
     assert (
-        window.signal_history_texts[-1]
-        == "2026-01-01 10:30:05 | SIN SEÑAL | NINGUNA"
+        window.signal_history_texts[-1] == "2026-01-01 10:30:05 | SIN SEÑAL | NINGUNA"
     )
 
 
@@ -942,18 +924,27 @@ def test_main_window_saves_window_preferences_when_enabled(
         MainWindow.SETTINGS_GROUP,
     )
 
-    assert settings.value(
-        MainWindow.SETTING_COMPACT_MODE,
-        type=bool,
-    ) is True
-    assert settings.value(
-        MainWindow.SETTING_WIDTH,
-        type=int,
-    ) == MainWindow.COMPACT_WINDOW_WIDTH
-    assert settings.value(
-        MainWindow.SETTING_HEIGHT,
-        type=int,
-    ) == MainWindow.COMPACT_WINDOW_HEIGHT
+    assert (
+        settings.value(
+            MainWindow.SETTING_COMPACT_MODE,
+            type=bool,
+        )
+        is True
+    )
+    assert (
+        settings.value(
+            MainWindow.SETTING_WIDTH,
+            type=int,
+        )
+        == MainWindow.COMPACT_WINDOW_WIDTH
+    )
+    assert (
+        settings.value(
+            MainWindow.SETTING_HEIGHT,
+            type=int,
+        )
+        == MainWindow.COMPACT_WINDOW_HEIGHT
+    )
 
     settings.endGroup()
 
@@ -1025,18 +1016,27 @@ def test_main_window_reset_view_saves_clean_preferences(
         MainWindow.SETTINGS_GROUP,
     )
 
-    assert settings.value(
-        MainWindow.SETTING_COMPACT_MODE,
-        type=bool,
-    ) is False
-    assert settings.value(
-        MainWindow.SETTING_WIDTH,
-        type=int,
-    ) == MainWindow.FULL_WINDOW_WIDTH
-    assert settings.value(
-        MainWindow.SETTING_HEIGHT,
-        type=int,
-    ) == MainWindow.FULL_WINDOW_HEIGHT
+    assert (
+        settings.value(
+            MainWindow.SETTING_COMPACT_MODE,
+            type=bool,
+        )
+        is False
+    )
+    assert (
+        settings.value(
+            MainWindow.SETTING_WIDTH,
+            type=int,
+        )
+        == MainWindow.FULL_WINDOW_WIDTH
+    )
+    assert (
+        settings.value(
+            MainWindow.SETTING_HEIGHT,
+            type=int,
+        )
+        == MainWindow.FULL_WINDOW_HEIGHT
+    )
 
     settings.endGroup()
 
@@ -1426,7 +1426,9 @@ def test_main_window_keeps_confirmation_checklist_visible_in_compact_mode() -> N
     assert window.confirmation_checklist_visible is True
 
 
-def test_main_window_marks_call_ema_as_missing_when_separation_is_insufficient() -> None:
+def test_main_window_marks_call_ema_as_missing_when_separation_is_insufficient() -> (
+    None
+):
 
     _application()
 
@@ -1516,7 +1518,9 @@ def test_main_window_marks_put_ema_as_missing_when_separation_is_insufficient() 
     )
 
 
-def test_main_window_keeps_visual_missing_when_all_indicators_are_ready_but_signal_is_not_confirmed() -> None:
+def test_main_window_keeps_visual_missing_when_all_indicators_are_ready_but_signal_is_not_confirmed() -> (
+    None
+):
 
     _application()
 
@@ -2008,7 +2012,9 @@ def test_main_window_reset_session_counter_hides_session_pause_alert() -> None:
     assert window.session_pause_alert_text == ""
 
 
-def test_main_window_keeps_session_pause_alert_visible_in_compact_mode_when_limit_is_reached() -> None:
+def test_main_window_keeps_session_pause_alert_visible_in_compact_mode_when_limit_is_reached() -> (
+    None
+):
 
     _application()
 
@@ -2051,7 +2057,9 @@ def test_main_window_uses_compact_session_risk_text_in_compact_mode() -> None:
     assert window.session_risk_text == "Riesgo: OK 0/12"
 
 
-def test_main_window_restores_full_session_risk_text_when_leaving_compact_mode() -> None:
+def test_main_window_restores_full_session_risk_text_when_leaving_compact_mode() -> (
+    None
+):
 
     _application()
 
@@ -2282,10 +2290,13 @@ def test_main_window_saves_voice_preference(
         MainWindow.SETTINGS_GROUP,
     )
 
-    assert settings.value(
-        MainWindow.SETTING_VOICE_ENABLED,
-        type=bool,
-    ) is False
+    assert (
+        settings.value(
+            MainWindow.SETTING_VOICE_ENABLED,
+            type=bool,
+        )
+        is False
+    )
 
     settings.endGroup()
 
@@ -2623,9 +2634,7 @@ def test_main_window_uses_compact_result_view_and_keeps_controls_visible() -> No
     window._compact_mode_button.click()
 
     assert window.is_compact_mode_enabled is True
-    assert window.session_result_text == (
-        "Resultados: 1G | 0P | 100,0 % | Racha: 0/3"
-    )
+    assert window.session_result_text == ("Resultados: 1G | 0P | 100,0 % | Racha: 0/3")
     assert window.session_result_visible is True
     assert window.register_win_button_visible is True
     assert window.register_loss_button_visible is True
@@ -2661,8 +2670,7 @@ def test_main_window_notifies_successful_manual_result_callback() -> None:
 
     window = MainWindow(
         on_session_result_registered=lambda result: (
-            received_results.append(result)
-            or True
+            received_results.append(result) or True
         ),
     )
 
@@ -2707,10 +2715,7 @@ def test_main_window_notifies_undo_and_reset_callbacks() -> None:
 
     window = MainWindow(
         on_session_result_registered=lambda result: True,
-        on_session_result_undone=lambda: (
-            undo_calls.append(True)
-            or True
-        ),
+        on_session_result_undone=lambda: undo_calls.append(True) or True,
         on_session_reset_requested=lambda: reset_calls.append(True),
     )
 
@@ -2739,8 +2744,7 @@ def test_main_window_enables_and_disables_evidence_mode() -> None:
 
     window = MainWindow(
         on_evidence_mode_changed=lambda enabled: (
-            requested_states.append(enabled)
-            or True
+            requested_states.append(enabled) or True
         ),
     )
 
@@ -2753,10 +2757,7 @@ def test_main_window_enables_and_disables_evidence_mode() -> None:
 
     assert window.evidence_mode_enabled is True
     assert window.evidence_mode_button_checked is True
-    assert (
-        window.evidence_mode_button_text
-        == "Restaurar protección"
-    )
+    assert window.evidence_mode_button_text == "Restaurar protección"
 
     button.click()
 
@@ -2807,8 +2808,7 @@ def test_main_window_enables_and_disables_recording_mode() -> None:
 
     window = MainWindow(
         on_recording_mode_changed=lambda enabled: (
-            requested_states.append(enabled)
-            or True
+            requested_states.append(enabled) or True
         ),
     )
 
@@ -2821,10 +2821,7 @@ def test_main_window_enables_and_disables_recording_mode() -> None:
 
     assert window.recording_mode_enabled is True
     assert window.recording_mode_button_checked is True
-    assert (
-        window.recording_mode_button_text
-        == "Salir de modo grabación"
-    )
+    assert window.recording_mode_button_text == "Salir de modo grabación"
 
     button.click()
 

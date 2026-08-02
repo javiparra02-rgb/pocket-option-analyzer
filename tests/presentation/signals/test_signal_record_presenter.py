@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pocket_option_analyzer.domain.signals import (
     MarketSignal,
@@ -30,7 +30,7 @@ def _record(
             10,
             30,
             45,
-            tzinfo=timezone.utc,
+            tzinfo=UTC,
         ),
         source="test_source",
     )
@@ -162,8 +162,7 @@ def test_presenter_extracts_visual_diagnostics_from_reason() -> None:
     )
 
     assert (
-        view_model.visual_diagnostics_label
-        == "Diagnóstico visual:\n"
+        view_model.visual_diagnostics_label == "Diagnóstico visual:\n"
         "  Tendencia: BEARISH\n"
         "  Velas detectadas: 24\n"
         "  Últimas: BEARISH, BULLISH, BULLISH\n"
@@ -177,7 +176,9 @@ def test_presenter_extracts_visual_diagnostics_from_reason() -> None:
     assert "Tendencia: BEARISH" not in view_model.reason
 
 
-def test_presenter_hides_visual_diagnostics_from_reason_when_indicators_are_missing() -> None:
+def test_presenter_hides_visual_diagnostics_from_reason_when_indicators_are_missing() -> (
+    None
+):
 
     presenter = SignalRecordPresenter()
 
@@ -205,8 +206,7 @@ def test_presenter_hides_visual_diagnostics_from_reason_when_indicators_are_miss
     )
 
     assert (
-        view_model.visual_diagnostics_label
-        == "Diagnóstico visual:\n"
+        view_model.visual_diagnostics_label == "Diagnóstico visual:\n"
         "  Tendencia: BEARISH\n"
         "  Velas detectadas: 9\n"
         "  Últimas: BEARISH, BEARISH, BEARISH\n"
@@ -253,8 +253,7 @@ def test_presenter_extracts_indicator_diagnostics_from_reason() -> None:
     )
 
     assert (
-        view_model.indicator_diagnostics_label
-        == "Diagnóstico de indicadores:\n"
+        view_model.indicator_diagnostics_label == "Diagnóstico de indicadores:\n"
         "  EMA: bajista | rápida=10.00 | lenta=12.00 | "
         "separación=3/3 suficiente\n"
         "  RSI: 42.00 | CALL fuera de rango | PUT en rango\n"
@@ -286,8 +285,7 @@ def test_presenter_translates_strategy_failure_reason_to_spanish() -> None:
     )
 
     assert (
-        view_model.reason
-        == "Las condiciones de OTC Precision 10S no fueron "
+        view_model.reason == "Las condiciones de OTC Precision 10S no fueron "
         "confirmadas completamente.\n\n"
         "Condiciones CALL no confirmadas:\n"
         "  - La tendencia visual no es alcista.\n"
