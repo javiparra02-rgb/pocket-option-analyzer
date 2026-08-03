@@ -3,40 +3,50 @@ from __future__ import annotations
 import mss
 import numpy as np
 
+from pocket_option_analyzer.infrastructure.capture.models import (
+    WindowInfo,
+)
+
 
 class MSSCaptureAdapter:
     """
     Adaptador para capturar una región de pantalla utilizando MSS.
 
-    Esta clase es stateless: no mantiene recursos abiertos entre llamadas.
+    La clase no conserva recursos nativos ni capturas entre llamadas.
+    Cada sesión MSS se abre y cierra dentro de capture().
     """
 
-    def capture(self, region: ChartRegion) -> np.ndarray:
+    def capture(
+        self,
+        window: WindowInfo,
+    ) -> np.ndarray:
         """
-        Captura la región indicada por WindowInfo.
+        Captura la región de pantalla indicada.
 
         Parameters
         ----------
         window:
-            Región de la ventana.
+            Región rectangular de la ventana.
 
         Returns
         -------
         numpy.ndarray
-            Imagen capturada en formato BGRA.
+            Copia independiente de la captura en formato BGRA.
         """
 
         monitor = {
-            "left": region.left,
-            "top": region.top,
-            "width": region.width,
-            "height": region.height,
+            "left": window.left,
+            "top": window.top,
+            "width": window.width,
+            "height": window.height,
         }
 
-        with mss.MSS() as sct:
-            print("========== MSS REGION ==========")
-            print(monitor)
-            print("===============================\n")
-            image = sct.grab(monitor)
+        with mss.MSS() as screen_capture:
+            screenshot = screen_capture.grab(
+                monitor,
+            )
 
-        return np.asarray(image)
+        return np.array(
+            screenshot,
+            copy=True,
+        )
