@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from threading import Event, Thread
 
 import pytest
 
@@ -35,6 +36,30 @@ class FakeRuntimeService:
             return None
 
         return self._records.pop(0)
+
+
+class BlockingRuntimeService:
+    """
+    Runtime que avisa cuando completó su primera iteración.
+
+    Permite comprobar la espera interrumpible sin depender de pausas
+    arbitrarias dentro del test.
+    """
+
+    def __init__(
+        self,
+    ) -> None:
+        self.run_once_calls = 0
+        self.first_iteration_completed = Event()
+
+    def run_once(
+        self,
+    ) -> None:
+        self.run_once_calls += 1
+
+        self.first_iteration_completed.set()
+
+        return None
 
 
 class SignalCollector:
@@ -332,3 +357,66 @@ def test_worker_stops_before_capture_when_iteration_guard_rejects() -> None:
     assert errors == [
         "El analizador se superpone con Pocket Option.",
     ]
+
+
+def test_worker_honors_stop_requested_before_run() -> None:
+
+    runtime = FakeRuntimeService(
+        records=[
+            _record(),
+        ],
+    )
+    collector = SignalCollector()
+
+    worker = AnalysisWorker(
+        runtime_service=runtime,
+        interval_seconds=0.0,
+    )
+
+    _connect(
+        worker=worker,
+        collector=collector,
+    )
+
+    worker.stop()
+    worker.run()
+
+    assert runtime.run_once_calls == 0
+    assert worker.is_running is False
+    assert collector.records == []
+    assert collector.errors == []
+    assert collector.running_states == []
+    assert collector.finished_calls == 1
+
+
+def test_worker_stop_interrupts_default_wait() -> None:
+
+    runtime = BlockingRuntimeService()
+
+    worker = AnalysisWorker(
+        runtime_service=runtime,
+        interval_seconds=60.0,
+    )
+
+    worker_thread = Thread(
+        target=worker.run,
+        daemon=True,
+    )
+
+    worker_thread.start()
+
+    first_iteration_completed = runtime.first_iteration_completed.wait(
+        timeout=1.0,
+    )
+
+    assert first_iteration_completed is True
+
+    worker.stop()
+
+    worker_thread.join(
+        timeout=1.0,
+    )
+
+    assert not worker_thread.is_alive()
+    assert runtime.run_once_calls == 1
+    assert worker.is_running is False

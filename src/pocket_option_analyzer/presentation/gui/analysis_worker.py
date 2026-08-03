@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import time
 from collections.abc import Callable
+from threading import Event
 
 from PySide6.QtCore import QObject, Signal
 
@@ -40,7 +40,7 @@ class AnalysisWorker(QObject):
         self,
         runtime_service: AnalysisRuntimeService,
         interval_seconds: float = 1.0,
-        sleep_function: Callable[[float], None] = time.sleep,
+        sleep_function: Callable[[float], None] | None = None,
         iteration_guard: IterationGuard | None = None,
     ) -> None:
         super().__init__()
@@ -52,11 +52,14 @@ class AnalysisWorker(QObject):
         self._interval_seconds = interval_seconds
         self._sleep_function = sleep_function
         self._iteration_guard = iteration_guard
+
         self._is_running = False
-        self._stop_requested = False
+        self._stop_event = Event()
 
     @property
-    def is_running(self) -> bool:
+    def is_running(
+        self,
+    ) -> bool:
         return self._is_running
 
     def run(
@@ -68,19 +71,27 @@ class AnalysisWorker(QObject):
 
         max_iterations se usa principalmente para pruebas.
         En la GUI real se dejará como None y se detendrá con stop().
+
+        Una solicitud de detención realizada antes de iniciar el método
+        también se conserva y evita ejecutar capturas.
         """
 
         if max_iterations is not None and max_iterations <= 0:
             return
 
-        self._stop_requested = False
+        if self._stop_event.is_set():
+            self.finished.emit()
+            return
+
         self._is_running = True
-        self.running_changed.emit(True)
+        self.running_changed.emit(
+            True,
+        )
 
         iterations = 0
 
         try:
-            while not self._stop_requested:
+            while not self._stop_event.is_set():
                 try:
                     guard_error = self._validate_iteration()
 
@@ -89,6 +100,7 @@ class AnalysisWorker(QObject):
                             guard_error,
                         )
                         break
+
                     record = self._runtime_service.run_once()
                 except Exception as error:
                     self.error_occurred.emit(
@@ -106,13 +118,40 @@ class AnalysisWorker(QObject):
                 if max_iterations is not None and iterations >= max_iterations:
                     break
 
-                self._sleep_function(
-                    self._interval_seconds,
-                )
+                if self._wait_for_next_iteration():
+                    break
         finally:
             self._is_running = False
-            self.running_changed.emit(False)
+
+            self.running_changed.emit(
+                False,
+            )
+
             self.finished.emit()
+
+    def _wait_for_next_iteration(
+        self,
+    ) -> bool:
+        """
+        Espera hasta el siguiente ciclo.
+
+        En producción usa Event.wait(), que puede ser interrumpido
+        inmediatamente por stop().
+
+        sleep_function se conserva únicamente para pruebas deterministas
+        y adaptadores existentes.
+        """
+
+        if self._sleep_function is None:
+            return self._stop_event.wait(
+                timeout=self._interval_seconds,
+            )
+
+        self._sleep_function(
+            self._interval_seconds,
+        )
+
+        return self._stop_event.is_set()
 
     def _validate_iteration(
         self,
@@ -131,9 +170,11 @@ class AnalysisWorker(QObject):
         except Exception as error:
             return f"Falló la validación previa a la captura: {error}"
 
-    def stop(self) -> None:
+    def stop(
+        self,
+    ) -> None:
         """
-        Solicita detener el worker.
+        Solicita detener el worker y despierta cualquier espera activa.
         """
 
-        self._stop_requested = True
+        self._stop_event.set()
