@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from threading import Event, Thread
 
 import numpy as np
 import pytest
@@ -41,6 +42,33 @@ class FakeCaptureService:
             return None
 
         return self._frames.pop(0)
+
+
+class SynchronizedCaptureService(FakeCaptureService):
+    """
+    Captura falsa que informa cuándo terminó la primera captura.
+
+    Evita usar pausas arbitrarias para sincronizar los tests con el
+    hilo donde se ejecuta FrameAnalysisLoopService.
+    """
+
+    def __init__(
+        self,
+        frames,
+    ) -> None:
+        super().__init__(
+            frames=frames,
+        )
+        self.first_capture_completed = Event()
+
+    def capture_once(
+        self,
+    ):
+        frame = super().capture_once()
+
+        self.first_capture_completed.set()
+
+        return frame
 
 
 class FakeAnalysisUseCase:
@@ -182,3 +210,102 @@ def test_service_rejects_negative_interval() -> None:
             analysis_use_case=FakeAnalysisUseCase(),
             interval_seconds=-1.0,
         )
+
+
+def test_stop_interrupts_default_wait_and_service_can_restart() -> None:
+
+    capture_service = SynchronizedCaptureService(
+        frames=[
+            _frame(),
+            _frame(),
+        ],
+    )
+    analysis_use_case = FakeAnalysisUseCase()
+
+    service = FrameAnalysisLoopService(
+        capture_service=capture_service,
+        analysis_use_case=analysis_use_case,
+        interval_seconds=60.0,
+    )
+
+    service_thread = Thread(
+        target=service.start,
+        daemon=True,
+    )
+
+    service_thread.start()
+
+    first_capture_completed = capture_service.first_capture_completed.wait(
+        timeout=1.0,
+    )
+
+    assert first_capture_completed is True
+    assert service.is_running is True
+    assert capture_service.capture_calls == 1
+
+    service.stop()
+
+    service_thread.join(
+        timeout=1.0,
+    )
+
+    assert not service_thread.is_alive()
+    assert service.is_running is False
+    assert capture_service.capture_calls == 1
+    assert len(analysis_use_case.received_frames) == 1
+
+    service.start(
+        max_iterations=1,
+    )
+
+    assert service.is_running is False
+    assert capture_service.capture_calls == 2
+    assert len(analysis_use_case.received_frames) == 2
+
+
+def test_service_ignores_concurrent_start() -> None:
+
+    capture_service = SynchronizedCaptureService(
+        frames=[
+            _frame(),
+            _frame(),
+        ],
+    )
+    analysis_use_case = FakeAnalysisUseCase()
+
+    service = FrameAnalysisLoopService(
+        capture_service=capture_service,
+        analysis_use_case=analysis_use_case,
+        interval_seconds=60.0,
+    )
+
+    service_thread = Thread(
+        target=service.start,
+        daemon=True,
+    )
+
+    service_thread.start()
+
+    first_capture_completed = capture_service.first_capture_completed.wait(
+        timeout=1.0,
+    )
+
+    assert first_capture_completed is True
+    assert service.is_running is True
+    assert capture_service.capture_calls == 1
+
+    service.start(
+        max_iterations=1,
+    )
+
+    assert capture_service.capture_calls == 1
+    assert len(analysis_use_case.received_frames) == 1
+
+    service.stop()
+
+    service_thread.join(
+        timeout=1.0,
+    )
+
+    assert not service_thread.is_alive()
+    assert service.is_running is False
