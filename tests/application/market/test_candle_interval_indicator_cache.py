@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from pocket_option_analyzer.application.market import (
     CandleIntervalIndicatorCache,
@@ -281,3 +281,108 @@ def test_cache_reports_settling_status_for_previous_snapshot() -> None:
     assert status.requested_key.started_at.second == 30
     assert status.cached_key is not None
     assert status.cached_key.started_at.second == 0
+
+
+def test_cache_keeps_only_latest_snapshot_during_long_session() -> None:
+
+    cache = CandleIntervalIndicatorCache(
+        settling_seconds=0.0,
+    )
+
+    session_started_at = datetime(
+        2026,
+        7,
+        30,
+        16,
+        44,
+        0,
+    )
+
+    latest_snapshot: IndicatorSnapshot | None = None
+    latest_observed_at = session_started_at
+
+    for interval_index in range(
+        1_000,
+    ):
+        latest_observed_at = session_started_at + timedelta(
+            seconds=interval_index * 30,
+        )
+
+        candidate_snapshot = _snapshot(
+            value=50.0 + interval_index % 10,
+        )
+
+        result = cache.resolve(
+            observed_at=latest_observed_at,
+            snapshot_factory=(
+                lambda candidate_snapshot=candidate_snapshot: candidate_snapshot
+            ),
+        )
+
+        assert result is candidate_snapshot
+        assert cache.cached_snapshot is candidate_snapshot
+
+        latest_snapshot = candidate_snapshot
+
+    assert cache.cached_snapshot is latest_snapshot
+
+    assert cache.cached_key is not None
+
+    assert cache.cached_key.started_at == latest_observed_at
+
+    assert cache.last_status is not None
+    assert cache.last_status.is_current is True
+    assert cache.last_status.allows_actionable_signals is True
+
+
+def test_cache_reset_clears_state_and_allows_reuse() -> None:
+
+    cache = CandleIntervalIndicatorCache()
+
+    first_snapshot = _snapshot(
+        value=50.0,
+    )
+
+    cache.resolve(
+        observed_at=datetime(
+            2026,
+            7,
+            30,
+            16,
+            44,
+            10,
+        ),
+        snapshot_factory=lambda: first_snapshot,
+    )
+
+    assert cache.cached_key is not None
+    assert cache.cached_snapshot is first_snapshot
+    assert cache.last_status is not None
+
+    cache.reset()
+
+    assert cache.cached_key is None
+    assert cache.cached_snapshot is None
+    assert cache.last_status is None
+
+    second_snapshot = _snapshot(
+        value=70.0,
+    )
+
+    result = cache.resolve(
+        observed_at=datetime(
+            2026,
+            7,
+            30,
+            16,
+            45,
+            10,
+        ),
+        snapshot_factory=lambda: second_snapshot,
+    )
+
+    assert result is second_snapshot
+    assert cache.cached_snapshot is second_snapshot
+    assert cache.cached_key is not None
+    assert cache.last_status is not None
+    assert cache.last_status.is_current is True
