@@ -57,21 +57,33 @@ class CaptureService:
 
         window = self._reader.read(window.hwnd)
 
-        image = self._capture.capture(window)
+        image = self._capture.capture(
+            window,
+        )
 
-        region = self._region_extractor.extract(image)
+        region = self._region_extractor.extract(
+            image,
+        )
 
         roi = image[
             region.y : region.y + region.height,
             region.x : region.x + region.width,
-        ]
+        ].copy(
+            order="C",
+        )
 
         if self._dataset_capture is not None:
-            self._dataset_capture.save(roi)
+            self._dataset_capture.save(
+                roi,
+            )
 
-        frame = self._frame_factory.create(roi)
+        frame = self._frame_factory.create(
+            roi,
+        )
 
-        self._frame_buffer.append(frame)
+        self._frame_buffer.append(
+            frame,
+        )
 
         return frame
 

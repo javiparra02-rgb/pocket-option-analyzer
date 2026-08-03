@@ -44,11 +44,24 @@ class FakeReader:
 
 
 class FakeCapture:
-    def capture(self, window):
-        return np.zeros(
-            (200, 200, 3),
-            dtype=np.uint8,
+    def __init__(
+        self,
+        image: np.ndarray | None = None,
+    ) -> None:
+        self.image = (
+            image
+            if image is not None
+            else np.zeros(
+                (200, 200, 3),
+                dtype=np.uint8,
+            )
         )
+
+    def capture(
+        self,
+        window,
+    ) -> np.ndarray:
+        return self.image
 
 
 class FakeRegionExtractor:
@@ -75,3 +88,68 @@ def test_capture_once_returns_frame():
     frame = service.capture_once()
 
     assert frame is not None
+
+
+def test_capture_once_detaches_roi_from_full_capture() -> None:
+
+    source_image = np.arange(
+        200 * 200 * 3,
+        dtype=np.uint8,
+    ).reshape(
+        200,
+        200,
+        3,
+    )
+
+    expected_roi = source_image[
+        20:120,
+        20:120,
+    ].copy()
+
+    capture = FakeCapture(
+        image=source_image,
+    )
+
+    frame_buffer = FrameBuffer()
+
+    service = CaptureService(
+        finder=FakeFinder(),
+        reader=FakeReader(),
+        capture=capture,
+        region_extractor=FakeRegionExtractor(),
+        frame_factory=FrameFactory(),
+        frame_buffer=frame_buffer,
+    )
+
+    frame = service.capture_once()
+
+    assert frame is not None
+
+    assert frame.image.shape == (
+        100,
+        100,
+        3,
+    )
+
+    assert frame.image.flags.c_contiguous is True
+
+    assert not np.shares_memory(
+        frame.image,
+        source_image,
+    )
+
+    assert np.array_equal(
+        frame.image,
+        expected_roi,
+    )
+
+    source_image.fill(
+        0,
+    )
+
+    assert np.array_equal(
+        frame.image,
+        expected_roi,
+    )
+
+    assert frame_buffer.latest() is frame
