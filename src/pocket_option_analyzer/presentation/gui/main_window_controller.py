@@ -59,7 +59,7 @@ class WorkerLike(Protocol):
         Solicita detener el worker.
         """
 
-    def moveToThread(
+    def moveToThread(  # noqa: N802
         self,
         thread,
     ) -> None:
@@ -285,7 +285,7 @@ class MainWindowController(QObject):
         principal de Qt, evitando modificar la GUI desde el hilo secundario.
         """
 
-        if self._worker is not None and self._worker.is_running:
+        if self._worker is not None or self._thread is not None:
             return
 
         self._window.set_error_message(

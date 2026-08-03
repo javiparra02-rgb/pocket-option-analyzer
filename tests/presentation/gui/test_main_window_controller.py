@@ -89,7 +89,7 @@ class FakeWorker:
     def is_running(self) -> bool:
         return self._is_running
 
-    def moveToThread(
+    def moveToThread(  # noqa: N802
         self,
         thread,
     ) -> None:
@@ -122,7 +122,7 @@ class FakeWorker:
         )
         self.finished.emit()
 
-    def deleteLater(self) -> None:
+    def deleteLater(self) -> None:  # noqa: N802
         self.delete_later_calls += 1
 
 
@@ -142,8 +142,27 @@ class FakeThread:
         self.quit_calls += 1
         self.finished.emit()
 
-    def deleteLater(self) -> None:
+    def deleteLater(self) -> None:  # noqa: N802
         self.delete_later_calls += 1
+
+
+class DelayedFinishThread(FakeThread):
+    """
+    Thread falso que separa quit() de finished.
+
+    Permite representar el pequeño intervalo real en el que el worker
+    ya terminó, pero QThread todavía no ha emitido finished.
+    """
+
+    def quit(
+        self,
+    ) -> None:
+        self.quit_calls += 1
+
+    def finish(
+        self,
+    ) -> None:
+        self.finished.emit()
 
 
 class FakeWindow:
@@ -540,6 +559,74 @@ def test_controller_ignores_start_when_worker_is_already_running() -> None:
 
     assert thread.start_calls == 1
     assert worker.run_calls == 1
+
+
+def test_controller_waits_for_thread_cleanup_before_restarting() -> None:
+
+    runtime = FakeRuntimeService()
+    window = FakeWindow()
+
+    first_worker = FakeWorker(
+        auto_finish=True,
+    )
+    first_thread = DelayedFinishThread()
+
+    second_worker = FakeWorker(
+        auto_finish=False,
+    )
+    second_thread = FakeThread()
+
+    workers = iter(
+        (
+            first_worker,
+            second_worker,
+        )
+    )
+
+    threads = iter(
+        (
+            first_thread,
+            second_thread,
+        )
+    )
+
+    controller = MainWindowController(
+        runtime_service=runtime,
+        presenter=SignalRecordPresenter(),
+        window=window,
+        worker_factory=lambda runtime_service: next(
+            workers,
+        ),
+        thread_factory=lambda: next(
+            threads,
+        ),
+    )
+
+    controller.start()
+
+    assert first_worker.run_calls == 1
+    assert first_worker.is_running is False
+    assert first_thread.start_calls == 1
+    assert first_thread.quit_calls == 1
+
+    # El worker terminó, pero el QThread todavía no ha emitido finished.
+    # El segundo inicio debe ser ignorado.
+    controller.start()
+
+    assert second_worker.run_calls == 0
+    assert second_thread.start_calls == 0
+
+    # Ahora finaliza completamente el thread anterior.
+    first_thread.finish()
+
+    assert first_thread.delete_later_calls == 1
+
+    # Una vez liberadas las referencias, el reinicio queda disponible.
+    controller.start()
+
+    assert second_worker.run_calls == 1
+    assert second_thread.start_calls == 1
+    assert second_worker.moved_thread is second_thread
 
 
 def test_controller_run_once_displays_error_when_runtime_fails() -> None:
