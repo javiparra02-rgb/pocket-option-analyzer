@@ -3,6 +3,9 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
+from pocket_option_analyzer.infrastructure.capture import (
+    CaptureUnavailableError,
+)
 from pocket_option_analyzer.infrastructure.capture.adapters import (
     MSSCaptureAdapter,
     mss_capture_adapter,
@@ -166,3 +169,70 @@ def test_adapter_closes_mss_when_capture_fails(
 
     assert fake_mss.entered is True
     assert fake_mss.closed is True
+
+
+def test_adapter_translates_screenshot_error_to_capture_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+
+    screenshot_error = mss_capture_adapter.mss.ScreenShotError(
+        "screen pixels unavailable",
+    )
+
+    fake_mss = FakeMSS(
+        screenshot=np.zeros(
+            (3, 4, 4),
+            dtype=np.uint8,
+        ),
+        error=screenshot_error,
+    )
+
+    monkeypatch.setattr(
+        mss_capture_adapter.mss,
+        "MSS",
+        lambda: fake_mss,
+    )
+
+    adapter = MSSCaptureAdapter()
+
+    with pytest.raises(
+        CaptureUnavailableError,
+        match="MSS could not capture",
+    ) as captured_error:
+        adapter.capture(
+            window=_window(),
+        )
+
+    assert fake_mss.entered is True
+    assert fake_mss.closed is True
+    assert captured_error.value.__cause__ is (screenshot_error)
+
+
+def test_adapter_translates_screenshot_error_during_mss_creation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+
+    screenshot_error = mss_capture_adapter.mss.ScreenShotError(
+        "capture backend unavailable",
+    )
+
+    def fail_mss_creation():
+        raise screenshot_error
+
+    monkeypatch.setattr(
+        mss_capture_adapter.mss,
+        "MSS",
+        fail_mss_creation,
+    )
+
+    adapter = MSSCaptureAdapter()
+
+    with pytest.raises(
+        CaptureUnavailableError,
+        match="MSS could not capture",
+    ) as captured_error:
+        adapter.capture(
+            window=_window(),
+        )
+
+    assert captured_error.value.__cause__ is (screenshot_error)

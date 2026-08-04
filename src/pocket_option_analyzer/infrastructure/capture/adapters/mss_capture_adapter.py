@@ -3,6 +3,9 @@ from __future__ import annotations
 import mss
 import numpy as np
 
+from pocket_option_analyzer.infrastructure.capture.errors import (
+    CaptureUnavailableError,
+)
 from pocket_option_analyzer.infrastructure.capture.models import (
     WindowInfo,
 )
@@ -32,6 +35,11 @@ class MSSCaptureAdapter:
         -------
         numpy.ndarray
             Copia independiente de la captura en formato BGRA.
+
+        Raises
+        ------
+        CaptureUnavailableError
+            Cuando MSS no puede acceder temporalmente a la región.
         """
 
         monitor = {
@@ -41,10 +49,20 @@ class MSSCaptureAdapter:
             "height": window.height,
         }
 
-        with mss.MSS() as screen_capture:
-            screenshot = screen_capture.grab(
-                monitor,
-            )
+        try:
+            with mss.MSS() as screen_capture:
+                screenshot = screen_capture.grab(
+                    monitor,
+                )
+        except mss.ScreenShotError as error:
+            raise CaptureUnavailableError(
+                "MSS could not capture the requested window region: "
+                f"title={window.title!r}, "
+                f"left={window.left}, "
+                f"top={window.top}, "
+                f"width={window.width}, "
+                f"height={window.height}."
+            ) from error
 
         return np.array(
             screenshot,

@@ -10,7 +10,8 @@ class CaptureUnavailableError(RuntimeError):
     - la ventana desapareció entre localización y lectura;
     - la ventana fue minimizada;
     - la ventana dejó de ser visible;
-    - su geometría dejó de ser capturable.
+    - su geometría dejó de ser capturable;
+    - el backend de captura no pudo leer temporalmente sus píxeles.
 
     No representa un error interno de programación.
     """
