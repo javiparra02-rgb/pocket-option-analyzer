@@ -87,7 +87,10 @@ class RuntimeWindowHandle:
 @dataclass(frozen=True, slots=True)
 class RuntimeWindowInfo:
     """
-    Información completa de ventana para captura con MSS.
+    Información completa de una ventana para captura con MSS.
+
+    Las coordenadas pueden ser negativas cuando la ventana está
+    situada en un monitor secundario.
     """
 
     hwnd: int
@@ -107,12 +110,37 @@ class RuntimeWindowInfo:
     minimized: bool = False
 
     @property
-    def right(self) -> int:
+    def right(
+        self,
+    ) -> int:
         return self.left + self.width
 
     @property
-    def bottom(self) -> int:
+    def bottom(
+        self,
+    ) -> int:
         return self.top + self.height
+
+    @property
+    def area(
+        self,
+    ) -> int:
+        return self.width * self.height
+
+    @property
+    def is_capture_candidate(
+        self,
+    ) -> bool:
+        return (
+            self.hwnd > 0
+            and bool(
+                self.title.strip(),
+            )
+            and self.visible
+            and not self.minimized
+            and self.width > 0
+            and self.height > 0
+        )
 
 
 WindowProvider = Callable[[], Iterable[RuntimeWindowHandle]]
@@ -264,64 +292,120 @@ class RuntimeWindowFinder:
 
 class RuntimeWindowReader:
     """
-    Reader simple para el runtime real.
+    Lee y valida la ventana localizada inmediatamente antes de capturarla.
+
+    La validación permite detectar cuando la ventana desaparece, se
+    minimiza o deja de ser capturable entre find() y read().
     """
 
     def __init__(
         self,
         info_provider: WindowInfoProvider | None = None,
     ) -> None:
-        self._info_provider = info_provider or self._read_window_info
+        self._info_provider = (
+            info_provider if info_provider is not None else self._read_window_info
+        )
 
     def read(
         self,
         hwnd: int,
     ) -> RuntimeWindowInfo:
-        return self._info_provider(
+        if hwnd <= 0:
+            raise ValueError("Window handle must be greater than zero.")
+
+        window = self._info_provider(
             hwnd,
         )
+
+        if window.hwnd != hwnd:
+            raise RuntimeError(
+                "Window reader returned an unexpected handle: "
+                f"requested={hwnd}, returned={window.hwnd}."
+            )
+
+        if not window.is_capture_candidate:
+            raise RuntimeError(f"Window is not available for capture: hwnd={hwnd}.")
+
+        return window
 
     def _read_window_info(
         self,
         hwnd: int,
     ) -> RuntimeWindowInfo:
+        user32 = ctypes.windll.user32
+
+        if not user32.IsWindow(
+            hwnd,
+        ):
+            raise RuntimeError(f"Window no longer exists: hwnd={hwnd}.")
+
+        visible = bool(
+            user32.IsWindowVisible(
+                hwnd,
+            )
+        )
+
+        minimized = bool(
+            user32.IsIconic(
+                hwnd,
+            )
+        )
+
+        if not visible or minimized:
+            raise RuntimeError(f"Window is not available for capture: hwnd={hwnd}.")
+
         rect = wintypes.RECT()
 
-        success = ctypes.windll.user32.GetWindowRect(
+        rectangle_succeeded = user32.GetWindowRect(
             hwnd,
-            ctypes.byref(rect),
+            ctypes.byref(
+                rect,
+            ),
         )
 
-        if not success:
-            raise RuntimeError(f"Could not read window rectangle for hwnd: {hwnd}")
+        if not rectangle_succeeded:
+            raise RuntimeError(f"Could not read window rectangle for hwnd: {hwnd}.")
+
+        width = rect.right - rect.left
+        height = rect.bottom - rect.top
+
+        if width <= 0 or height <= 0:
+            raise RuntimeError(f"Window has invalid capture geometry: hwnd={hwnd}.")
+
+        title_length = user32.GetWindowTextLengthW(
+            hwnd,
+        )
+
+        if title_length <= 0:
+            raise RuntimeError(f"Could not read window title for hwnd: {hwnd}.")
 
         title_buffer = ctypes.create_unicode_buffer(
-            512,
+            title_length + 1,
         )
 
-        ctypes.windll.user32.GetWindowTextW(
+        copied_length = user32.GetWindowTextW(
             hwnd,
             title_buffer,
-            512,
+            title_length + 1,
         )
+
+        if copied_length <= 0:
+            raise RuntimeError(f"Could not read window title for hwnd: {hwnd}.")
+
+        title = title_buffer.value.strip()
+
+        if not title:
+            raise RuntimeError(f"Window title is empty for hwnd: {hwnd}.")
 
         return RuntimeWindowInfo(
             hwnd=hwnd,
-            title=title_buffer.value,
+            title=title,
             left=rect.left,
             top=rect.top,
-            width=rect.right - rect.left,
-            height=rect.bottom - rect.top,
-            visible=bool(
-                ctypes.windll.user32.IsWindowVisible(
-                    hwnd,
-                )
-            ),
-            minimized=bool(
-                ctypes.windll.user32.IsIconic(
-                    hwnd,
-                )
-            ),
+            width=width,
+            height=height,
+            visible=visible,
+            minimized=minimized,
         )
 
 

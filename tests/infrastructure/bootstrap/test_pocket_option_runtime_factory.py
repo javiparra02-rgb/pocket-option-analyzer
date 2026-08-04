@@ -286,16 +286,33 @@ def test_runtime_window_finder_rejects_empty_search_without_enumerating() -> Non
     assert provider_called is False
 
 
+def _runtime_window_info(
+    **overrides,
+) -> RuntimeWindowInfo:
+
+    values = {
+        "hwnd": 123,
+        "title": "Pocket Option",
+        "left": 10,
+        "top": 20,
+        "width": 300,
+        "height": 200,
+        "visible": True,
+        "minimized": False,
+    }
+
+    values.update(
+        overrides,
+    )
+
+    return RuntimeWindowInfo(
+        **values,
+    )
+
+
 def test_runtime_window_reader_returns_window_info_from_provider() -> None:
 
-    expected = RuntimeWindowInfo(
-        hwnd=123,
-        title="Pocket Option",
-        left=10,
-        top=20,
-        width=300,
-        height=200,
-    )
+    expected = _runtime_window_info()
 
     reader = RuntimeWindowReader(
         info_provider=lambda hwnd: expected,
@@ -310,6 +327,129 @@ def test_runtime_window_reader_returns_window_info_from_provider() -> None:
     assert result.top == 20
     assert result.width == 300
     assert result.height == 200
+    assert result.is_capture_candidate is True
+
+
+@pytest.mark.parametrize(
+    "hwnd",
+    [
+        0,
+        -1,
+    ],
+)
+def test_runtime_window_reader_rejects_invalid_requested_handle(
+    hwnd: int,
+) -> None:
+
+    provider_called = False
+
+    def info_provider(
+        requested_hwnd: int,
+    ) -> RuntimeWindowInfo:
+        nonlocal provider_called
+
+        provider_called = True
+
+        return _runtime_window_info(
+            hwnd=requested_hwnd,
+        )
+
+    reader = RuntimeWindowReader(
+        info_provider=info_provider,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="must be greater than zero",
+    ):
+        reader.read(
+            hwnd=hwnd,
+        )
+
+    assert provider_called is False
+
+
+def test_runtime_window_reader_rejects_unexpected_returned_handle() -> None:
+
+    reader = RuntimeWindowReader(
+        info_provider=lambda hwnd: _runtime_window_info(
+            hwnd=999,
+        ),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="unexpected handle",
+    ):
+        reader.read(
+            hwnd=123,
+        )
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {
+            "title": "   ",
+        },
+        {
+            "width": 0,
+        },
+        {
+            "height": -1,
+        },
+        {
+            "visible": False,
+        },
+        {
+            "minimized": True,
+        },
+    ],
+)
+def test_runtime_window_reader_rejects_non_capturable_information(
+    overrides: dict[str, object],
+) -> None:
+
+    reader = RuntimeWindowReader(
+        info_provider=lambda hwnd: _runtime_window_info(
+            hwnd=hwnd,
+            **overrides,
+        ),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="not available for capture",
+    ):
+        reader.read(
+            hwnd=123,
+        )
+
+
+def test_runtime_window_reader_accepts_negative_screen_coordinates() -> None:
+
+    expected = _runtime_window_info(
+        left=-1920,
+        top=-120,
+        width=1600,
+        height=900,
+    )
+
+    reader = RuntimeWindowReader(
+        info_provider=lambda hwnd: expected,
+    )
+
+    result = reader.read(
+        hwnd=123,
+    )
+
+    assert result is expected
+    assert result.left == -1920
+    assert result.top == -120
+    assert result.right == -320
+    assert result.bottom == 780
+    assert result.area == 1_440_000
+    assert result.is_capture_candidate is True
 
 
 def test_fixed_chart_region_extractor_returns_clamped_region() -> None:
