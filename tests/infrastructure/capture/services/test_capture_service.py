@@ -88,13 +88,32 @@ class FakeCapture:
 
 
 class FakeRegionExtractor:
-    def extract(self, image):
-        return ChartRegion(
-            x=20,
-            y=20,
-            width=100,
-            height=100,
+    def __init__(
+        self,
+        region: ChartRegion | None = None,
+    ) -> None:
+        self._region = (
+            region
+            if region is not None
+            else ChartRegion(
+                x=20,
+                y=20,
+                width=100,
+                height=100,
+            )
         )
+
+        self.extract_calls = 0
+
+    def extract(
+        self,
+        image,
+    ) -> ChartRegion:
+        del image
+
+        self.extract_calls += 1
+
+        return self._region
 
 
 def test_capture_once_returns_frame():
@@ -230,3 +249,139 @@ def test_capture_once_propagates_unexpected_reader_error() -> None:
         service.capture_once()
 
     assert capture.capture_calls == 0
+
+
+def test_capture_once_returns_none_for_empty_capture() -> None:
+
+    extractor = FakeRegionExtractor()
+    frame_buffer = FrameBuffer()
+
+    existing_frame = FrameFactory().create(
+        np.zeros(
+            (10, 10, 3),
+            dtype=np.uint8,
+        )
+    )
+
+    frame_buffer.append(
+        existing_frame,
+    )
+
+    service = CaptureService(
+        finder=FakeFinder(),
+        reader=FakeReader(),
+        capture=FakeCapture(
+            image=np.empty(
+                (0, 0, 4),
+                dtype=np.uint8,
+            )
+        ),
+        region_extractor=extractor,
+        frame_factory=FrameFactory(),
+        frame_buffer=frame_buffer,
+    )
+
+    result = service.capture_once()
+
+    assert result is None
+    assert extractor.extract_calls == 0
+    assert frame_buffer.latest() is existing_frame
+
+
+def test_capture_once_returns_none_for_empty_chart_region() -> None:
+
+    extractor = FakeRegionExtractor(
+        region=ChartRegion(
+            x=20,
+            y=20,
+            width=0,
+            height=100,
+        )
+    )
+
+    frame_buffer = FrameBuffer()
+
+    service = CaptureService(
+        finder=FakeFinder(),
+        reader=FakeReader(),
+        capture=FakeCapture(),
+        region_extractor=extractor,
+        frame_factory=FrameFactory(),
+        frame_buffer=frame_buffer,
+    )
+
+    result = service.capture_once()
+
+    assert result is None
+    assert extractor.extract_calls == 1
+    assert frame_buffer.latest() is None
+
+
+def test_capture_once_rejects_regions_outside_capture_bounds() -> None:
+
+    invalid_regions = (
+        ChartRegion(
+            x=-1,
+            y=20,
+            width=100,
+            height=100,
+        ),
+        ChartRegion(
+            x=150,
+            y=20,
+            width=100,
+            height=100,
+        ),
+        ChartRegion(
+            x=20,
+            y=150,
+            width=100,
+            height=100,
+        ),
+    )
+
+    for invalid_region in invalid_regions:
+        frame_buffer = FrameBuffer()
+
+        service = CaptureService(
+            finder=FakeFinder(),
+            reader=FakeReader(),
+            capture=FakeCapture(),
+            region_extractor=FakeRegionExtractor(
+                region=invalid_region,
+            ),
+            frame_factory=FrameFactory(),
+            frame_buffer=frame_buffer,
+        )
+
+        result = service.capture_once()
+
+        assert result is None
+        assert frame_buffer.latest() is None
+
+
+def test_capture_once_rejects_unsupported_capture_shape() -> None:
+
+    extractor = FakeRegionExtractor()
+
+    service = CaptureService(
+        finder=FakeFinder(),
+        reader=FakeReader(),
+        capture=FakeCapture(
+            image=np.zeros(
+                (200, 200),
+                dtype=np.uint8,
+            )
+        ),
+        region_extractor=extractor,
+        frame_factory=FrameFactory(),
+        frame_buffer=FrameBuffer(),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="unsupported image shape",
+    ):
+        service.capture_once()
+
+    assert extractor.extract_calls == 0

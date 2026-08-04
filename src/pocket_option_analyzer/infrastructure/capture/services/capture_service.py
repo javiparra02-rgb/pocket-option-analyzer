@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import numpy as np
+
 from pocket_option_analyzer.infrastructure.capture.contracts import (
     ScreenCapture,
 )
@@ -17,6 +19,8 @@ from pocket_option_analyzer.infrastructure.windows.services import (
     WindowFinder,
     WindowReader,
 )
+from pocket_option_analyzer.vision.models import ChartRegion
+from pocket_option_analyzer.vision.preprocessing import FrameValidator
 from pocket_option_analyzer.vision.services import (
     ChartRegionExtractor,
     DatasetCaptureService,
@@ -76,9 +80,20 @@ class CaptureService:
         except CaptureUnavailableError:
             return None
 
+        if not self._is_capture_image_available(
+            image,
+        ):
+            return None
+
         region = self._region_extractor.extract(
             image,
         )
+
+        if not self._region_fits_image(
+            region=region,
+            image=image,
+        ):
+            return None
 
         roi = image[
             region.y : region.y + region.height,
@@ -86,6 +101,11 @@ class CaptureService:
         ].copy(
             order="C",
         )
+
+        if not FrameValidator.validate(
+            roi,
+        ):
+            return None
 
         if self._dataset_capture is not None:
             self._dataset_capture.save(
@@ -101,6 +121,59 @@ class CaptureService:
         )
 
         return frame
+
+    @staticmethod
+    def _is_capture_image_available(
+        image: object,
+    ) -> bool:
+        """
+        Valida el resultado entregado por el adaptador de captura.
+
+        Una matriz vacía puede representar una indisponibilidad temporal.
+        Un tipo o formato incompatible representa un error del contrato.
+        """
+
+        if not isinstance(
+            image,
+            np.ndarray,
+        ):
+            raise TypeError("Screen capture must return a NumPy array.")
+
+        if image.size == 0:
+            return False
+
+        if not FrameValidator.validate(
+            image,
+        ):
+            raise ValueError("Screen capture returned an unsupported image shape.")
+
+        return True
+
+    @staticmethod
+    def _region_fits_image(
+        region: ChartRegion,
+        image: np.ndarray,
+    ) -> bool:
+        """
+        Comprueba que el ROI sea positivo y esté completamente contenido.
+
+        No se permite que NumPy recorte silenciosamente una región parcial.
+        """
+
+        if region.x < 0 or region.y < 0 or region.width <= 0 or region.height <= 0:
+            return False
+
+        image_height = int(
+            image.shape[0],
+        )
+        image_width = int(
+            image.shape[1],
+        )
+
+        region_right = region.x + region.width
+        region_bottom = region.y + region.height
+
+        return region_right <= image_width and region_bottom <= image_height
 
     def latest_frame(self) -> Frame | None:
         return self._frame_buffer.latest()
