@@ -9,7 +9,11 @@ from pocket_option_analyzer.infrastructure.capture.models import Frame
 
 class FrameFactory:
     """
-    Fábrica responsable de crear objetos Frame.
+    Crea frames con identificadores incrementales locales al proceso.
+
+    La fábrica conserva únicamente el siguiente identificador. No
+    mantiene referencias a los frames creados ni reinicia la secuencia
+    durante la ejecución.
     """
 
     def __init__(self) -> None:

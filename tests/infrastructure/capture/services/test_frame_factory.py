@@ -15,3 +15,23 @@ def test_frame_factory_generates_incremental_ids() -> None:
     assert frame2.frame_id == 2
 
     assert frame2.frame_id > frame1.frame_id
+
+
+def test_frame_factory_keeps_ids_monotonic_during_long_session() -> None:
+
+    factory = FrameFactory()
+
+    image = np.zeros(
+        (1, 1, 4),
+        dtype=np.uint8,
+    )
+
+    for expected_frame_id in range(
+        1,
+        10_001,
+    ):
+        frame = factory.create(
+            image,
+        )
+
+        assert frame.frame_id == expected_frame_id
