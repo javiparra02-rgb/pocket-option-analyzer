@@ -3,6 +3,9 @@ from __future__ import annotations
 from pocket_option_analyzer.infrastructure.capture.contracts import (
     ScreenCapture,
 )
+from pocket_option_analyzer.infrastructure.capture.errors import (
+    CaptureUnavailableError,
+)
 from pocket_option_analyzer.infrastructure.capture.models import Frame
 from pocket_option_analyzer.infrastructure.capture.services.frame_buffer import (
     FrameBuffer,
@@ -45,21 +48,33 @@ class CaptureService:
         self._dataset_capture = dataset_capture
         self._window_title = window_title
 
-    def capture_once(self) -> Frame | None:
+    def capture_once(
+        self,
+    ) -> Frame | None:
         """
         Captura un único fotograma del gráfico.
+
+        Devuelve None cuando la ventana no está disponible temporalmente.
+        Los errores internos o inesperados continúan propagándose.
         """
 
-        window = self._finder.find(self._window_title)
+        window = self._finder.find(
+            self._window_title,
+        )
 
         if window is None:
             return None
 
-        window = self._reader.read(window.hwnd)
+        try:
+            window = self._reader.read(
+                window.hwnd,
+            )
 
-        image = self._capture.capture(
-            window,
-        )
+            image = self._capture.capture(
+                window,
+            )
+        except CaptureUnavailableError:
+            return None
 
         region = self._region_extractor.extract(
             image,

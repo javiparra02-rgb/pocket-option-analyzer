@@ -1,5 +1,9 @@
 import numpy as np
+import pytest
 
+from pocket_option_analyzer.infrastructure.capture import (
+    CaptureUnavailableError,
+)
 from pocket_option_analyzer.infrastructure.capture.services.capture_service import (
     CaptureService,
 )
@@ -43,6 +47,22 @@ class FakeReader:
         )
 
 
+class FailingReader:
+    def __init__(
+        self,
+        error: Exception,
+    ) -> None:
+        self._error = error
+
+    def read(
+        self,
+        hwnd: int,
+    ):
+        del hwnd
+
+        raise self._error
+
+
 class FakeCapture:
     def __init__(
         self,
@@ -56,11 +76,14 @@ class FakeCapture:
                 dtype=np.uint8,
             )
         )
+        self.capture_calls = 0
 
     def capture(
         self,
         window,
     ) -> np.ndarray:
+        self.capture_calls += 1
+
         return self.image
 
 
@@ -153,3 +176,57 @@ def test_capture_once_detaches_roi_from_full_capture() -> None:
     )
 
     assert frame_buffer.latest() is frame
+
+
+def test_capture_once_returns_none_when_window_is_temporarily_unavailable() -> None:
+
+    capture = FakeCapture()
+    frame_buffer = FrameBuffer()
+
+    existing_frame = FrameFactory().create(
+        np.zeros(
+            (10, 10, 3),
+            dtype=np.uint8,
+        )
+    )
+
+    frame_buffer.append(
+        existing_frame,
+    )
+
+    service = CaptureService(
+        finder=FakeFinder(),
+        reader=FailingReader(CaptureUnavailableError("Window was minimized.")),
+        capture=capture,
+        region_extractor=FakeRegionExtractor(),
+        frame_factory=FrameFactory(),
+        frame_buffer=frame_buffer,
+    )
+
+    result = service.capture_once()
+
+    assert result is None
+    assert capture.capture_calls == 0
+    assert frame_buffer.latest() is existing_frame
+
+
+def test_capture_once_propagates_unexpected_reader_error() -> None:
+
+    capture = FakeCapture()
+
+    service = CaptureService(
+        finder=FakeFinder(),
+        reader=FailingReader(RuntimeError("Unexpected reader failure.")),
+        capture=capture,
+        region_extractor=FakeRegionExtractor(),
+        frame_factory=FrameFactory(),
+        frame_buffer=FrameBuffer(),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Unexpected reader failure",
+    ):
+        service.capture_once()
+
+    assert capture.capture_calls == 0

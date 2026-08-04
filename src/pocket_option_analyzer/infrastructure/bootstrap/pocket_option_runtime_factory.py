@@ -26,6 +26,9 @@ from pocket_option_analyzer.infrastructure.bootstrap.signal_pipeline_factory imp
 from pocket_option_analyzer.infrastructure.capture.adapters import (
     MSSCaptureAdapter,
 )
+from pocket_option_analyzer.infrastructure.capture.errors import (
+    CaptureUnavailableError,
+)
 from pocket_option_analyzer.infrastructure.capture.services import (
     CaptureService,
     FrameBuffer,
@@ -324,7 +327,9 @@ class RuntimeWindowReader:
             )
 
         if not window.is_capture_candidate:
-            raise RuntimeError(f"Window is not available for capture: hwnd={hwnd}.")
+            raise CaptureUnavailableError(
+                f"Window is not available for capture: hwnd={hwnd}."
+            )
 
         return window
 
@@ -337,7 +342,7 @@ class RuntimeWindowReader:
         if not user32.IsWindow(
             hwnd,
         ):
-            raise RuntimeError(f"Window no longer exists: hwnd={hwnd}.")
+            raise CaptureUnavailableError(f"Window no longer exists: hwnd={hwnd}.")
 
         visible = bool(
             user32.IsWindowVisible(
@@ -352,7 +357,9 @@ class RuntimeWindowReader:
         )
 
         if not visible or minimized:
-            raise RuntimeError(f"Window is not available for capture: hwnd={hwnd}.")
+            raise CaptureUnavailableError(
+                f"Window is not available for capture: hwnd={hwnd}."
+            )
 
         rect = wintypes.RECT()
 
@@ -364,20 +371,26 @@ class RuntimeWindowReader:
         )
 
         if not rectangle_succeeded:
-            raise RuntimeError(f"Could not read window rectangle for hwnd: {hwnd}.")
+            raise CaptureUnavailableError(
+                f"Could not read window rectangle for hwnd: {hwnd}."
+            )
 
         width = rect.right - rect.left
         height = rect.bottom - rect.top
 
         if width <= 0 or height <= 0:
-            raise RuntimeError(f"Window has invalid capture geometry: hwnd={hwnd}.")
+            raise CaptureUnavailableError(
+                f"Window has invalid capture geometry: hwnd={hwnd}."
+            )
 
         title_length = user32.GetWindowTextLengthW(
             hwnd,
         )
 
         if title_length <= 0:
-            raise RuntimeError(f"Could not read window title for hwnd: {hwnd}.")
+            raise CaptureUnavailableError(
+                f"Could not read window title for hwnd: {hwnd}."
+            )
 
         title_buffer = ctypes.create_unicode_buffer(
             title_length + 1,
@@ -390,12 +403,14 @@ class RuntimeWindowReader:
         )
 
         if copied_length <= 0:
-            raise RuntimeError(f"Could not read window title for hwnd: {hwnd}.")
+            raise CaptureUnavailableError(
+                f"Could not read window title for hwnd: {hwnd}."
+            )
 
         title = title_buffer.value.strip()
 
         if not title:
-            raise RuntimeError(f"Window title is empty for hwnd: {hwnd}.")
+            raise CaptureUnavailableError(f"Window title is empty for hwnd: {hwnd}.")
 
         return RuntimeWindowInfo(
             hwnd=hwnd,

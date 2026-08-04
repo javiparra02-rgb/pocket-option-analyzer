@@ -22,6 +22,9 @@ from pocket_option_analyzer.infrastructure.bootstrap import (
     RuntimeWindowInfo,
     RuntimeWindowReader,
 )
+from pocket_option_analyzer.infrastructure.capture import (
+    CaptureUnavailableError,
+)
 from pocket_option_analyzer.vision.models import ChartRegion
 
 
@@ -418,7 +421,7 @@ def test_runtime_window_reader_rejects_non_capturable_information(
     )
 
     with pytest.raises(
-        RuntimeError,
+        CaptureUnavailableError,
         match="not available for capture",
     ):
         reader.read(
