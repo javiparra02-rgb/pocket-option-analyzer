@@ -180,6 +180,112 @@ def test_runtime_window_finder_returns_none_when_no_match_exists() -> None:
     assert result is None
 
 
+def test_runtime_window_finder_ignores_invalid_capture_candidates() -> None:
+
+    finder = RuntimeWindowFinder(
+        window_provider=lambda: [
+            RuntimeWindowHandle(
+                hwnd=1,
+                title="Pocket Option - Invisible",
+                width=2000,
+                height=1000,
+                visible=False,
+            ),
+            RuntimeWindowHandle(
+                hwnd=2,
+                title="Pocket Option - Minimized",
+                width=1900,
+                height=900,
+                minimized=True,
+            ),
+            RuntimeWindowHandle(
+                hwnd=3,
+                title="Pocket Option - Empty Width",
+                width=0,
+                height=800,
+            ),
+            RuntimeWindowHandle(
+                hwnd=0,
+                title="Pocket Option - Invalid HWND",
+                width=1600,
+                height=900,
+            ),
+            RuntimeWindowHandle(
+                hwnd=5,
+                title="Pocket Option - Valid",
+                width=1200,
+                height=700,
+            ),
+        ],
+    )
+
+    result = finder.find(
+        "Pocket Option",
+    )
+
+    assert result is not None
+    assert result.hwnd == 5
+    assert result.is_capture_candidate is True
+    assert result.area == 840_000
+
+
+def test_runtime_window_finder_returns_none_when_matches_are_not_capturable() -> None:
+
+    finder = RuntimeWindowFinder(
+        window_provider=lambda: [
+            RuntimeWindowHandle(
+                hwnd=1,
+                title="Pocket Option - Minimized",
+                width=1200,
+                height=800,
+                minimized=True,
+            ),
+            RuntimeWindowHandle(
+                hwnd=2,
+                title="Pocket Option - Invalid Size",
+                width=-1,
+                height=800,
+            ),
+        ],
+    )
+
+    result = finder.find(
+        "Pocket Option",
+    )
+
+    assert result is None
+
+
+def test_runtime_window_finder_rejects_empty_search_without_enumerating() -> None:
+
+    provider_called = False
+
+    def window_provider():
+        nonlocal provider_called
+
+        provider_called = True
+
+        return [
+            RuntimeWindowHandle(
+                hwnd=1,
+                title="Pocket Option",
+                width=1200,
+                height=800,
+            )
+        ]
+
+    finder = RuntimeWindowFinder(
+        window_provider=window_provider,
+    )
+
+    result = finder.find(
+        "   ",
+    )
+
+    assert result is None
+    assert provider_called is False
+
+
 def test_runtime_window_reader_returns_window_info_from_provider() -> None:
 
     expected = RuntimeWindowInfo(

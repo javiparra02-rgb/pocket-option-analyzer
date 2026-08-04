@@ -41,6 +41,9 @@ from pocket_option_analyzer.vision.models import (
 class RuntimeWindowHandle:
     """
     Ventana localizada por el runtime.
+
+    Solo las ventanas visibles, no minimizadas y con geometría positiva
+    son candidatas válidas para captura.
     """
 
     hwnd: int
@@ -54,6 +57,31 @@ class RuntimeWindowHandle:
     width: int = 0
 
     height: int = 0
+
+    visible: bool = True
+
+    minimized: bool = False
+
+    @property
+    def area(
+        self,
+    ) -> int:
+        return self.width * self.height
+
+    @property
+    def is_capture_candidate(
+        self,
+    ) -> bool:
+        return (
+            self.hwnd > 0
+            and bool(
+                self.title.strip(),
+            )
+            and self.visible
+            and not self.minimized
+            and self.width > 0
+            and self.height > 0
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,35 +135,37 @@ class RuntimeWindowFinder:
         title: str,
     ) -> RuntimeWindowHandle | None:
         """
-        Busca la mejor ventana cuyo título contenga el texto indicado.
+        Devuelve la ventana capturable más grande cuyo título coincida.
+
+        La selección se realiza en una sola pasada y no mantiene una
+        colección adicional de coincidencias.
         """
 
-        search = title.lower()
+        search = title.strip().casefold()
 
-        matches = [
-            window
-            for window in self._window_provider()
-            if search in window.title.lower()
-        ]
-
-        if not matches:
+        if not search:
             return None
 
-        matches.sort(
-            key=lambda window: window.width * window.height,
-            reverse=True,
+        return max(
+            (
+                window
+                for window in self._window_provider()
+                if (window.is_capture_candidate and search in window.title.casefold())
+            ),
+            key=lambda window: window.area,
+            default=None,
         )
-
-        return matches[0]
 
     def _enumerate_windows(
         self,
     ) -> Iterable[RuntimeWindowHandle]:
         """
-        Enumera ventanas visibles usando Win32 directamente.
+        Enumera ventanas Win32 aptas para evaluación de captura.
         """
 
         windows: list[RuntimeWindowHandle] = []
+
+        user32 = ctypes.windll.user32
 
         enum_windows_proc = ctypes.WINFUNCTYPE(
             wintypes.BOOL,
@@ -147,10 +177,21 @@ class RuntimeWindowFinder:
             hwnd,
             lparam,
         ) -> bool:
-            if not ctypes.windll.user32.IsWindowVisible(hwnd):
+            del lparam
+
+            if not user32.IsWindowVisible(
+                hwnd,
+            ):
                 return True
 
-            title_length = ctypes.windll.user32.GetWindowTextLengthW(hwnd)
+            if user32.IsIconic(
+                hwnd,
+            ):
+                return True
+
+            title_length = user32.GetWindowTextLengthW(
+                hwnd,
+            )
 
             if title_length <= 0:
                 return True
@@ -159,39 +200,64 @@ class RuntimeWindowFinder:
                 title_length + 1,
             )
 
-            ctypes.windll.user32.GetWindowTextW(
+            copied_length = user32.GetWindowTextW(
                 hwnd,
                 title_buffer,
                 title_length + 1,
             )
 
-            title = title_buffer.value
+            if copied_length <= 0:
+                return True
+
+            title = title_buffer.value.strip()
+
+            if not title:
+                return True
 
             rect = wintypes.RECT()
 
-            if not ctypes.windll.user32.GetWindowRect(
+            if not user32.GetWindowRect(
                 hwnd,
-                ctypes.byref(rect),
+                ctypes.byref(
+                    rect,
+                ),
             ):
+                return True
+
+            width = rect.right - rect.left
+            height = rect.bottom - rect.top
+
+            if width <= 0 or height <= 0:
                 return True
 
             windows.append(
                 RuntimeWindowHandle(
-                    hwnd=int(hwnd),
+                    hwnd=int(
+                        hwnd,
+                    ),
                     title=title,
                     left=rect.left,
                     top=rect.top,
-                    width=rect.right - rect.left,
-                    height=rect.bottom - rect.top,
+                    width=width,
+                    height=height,
+                    visible=True,
+                    minimized=False,
                 )
             )
 
             return True
 
-        ctypes.windll.user32.EnumWindows(
-            enum_windows_proc(callback),
+        callback_reference = enum_windows_proc(
+            callback,
+        )
+
+        enumeration_succeeded = user32.EnumWindows(
+            callback_reference,
             0,
         )
+
+        if not enumeration_succeeded:
+            raise RuntimeError("Could not enumerate Win32 windows.")
 
         return windows
 
