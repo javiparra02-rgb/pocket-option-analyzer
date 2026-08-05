@@ -1,42 +1,27 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
 
-from pocket_option_analyzer.infrastructure.windows.models import Win32WindowInfo
+import numpy as np
 
-
-@dataclass(frozen=True, slots=True)
-class ChartRegion:
-    left: int
-    top: int
-    width: int
-    height: int
+from pocket_option_analyzer.vision.models import ChartRegion
 
 
-class ChartRegionExtractor:
+@runtime_checkable
+class ChartRegionExtractor(Protocol):
     """
-    Calcula el área del gráfico dentro de una ventana.
+    Contrato para localizar el gráfico dentro de una imagen capturada.
+
+    Las implementaciones deben devolver coordenadas relativas a la
+    imagen recibida, utilizando el modelo canónico ChartRegion.
     """
 
-    def extract(self, window: Win32WindowInfo) -> ChartRegion:
+    def extract(
+        self,
+        image: np.ndarray,
+    ) -> ChartRegion:
         """
-        Heurística inicial (simple pero funcional).
+        Calcula la región visual que debe analizarse.
         """
 
-        # margen típico de UI (tabs, toolbar, etc.)
-        margin_top = 80
-        margin_bottom = 40
-        margin_left = 10
-        margin_right = 10
-
-        left = window.left + margin_left
-        top = window.top + margin_top
-        width = window.width - (margin_left + margin_right)
-        height = window.height - (margin_top + margin_bottom)
-
-        return ChartRegion(
-            left=left,
-            top=top,
-            width=width,
-            height=height,
-        )
+        ...

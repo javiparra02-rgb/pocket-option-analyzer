@@ -4,9 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from pocket_option_analyzer.vision.services.chart_region_extractor import (
-    ChartRegion,
-)
+from pocket_option_analyzer.vision.models import ChartRegion
 from pocket_option_analyzer.vision.services.debug_image_saver import (
     DebugImageSaver,
 )
@@ -20,8 +18,13 @@ class DebugCaptureService:
     Genera todas las imágenes de depuración del proceso de captura.
     """
 
-    def __init__(self, output_dir: Path) -> None:
-        self._saver = DebugImageSaver(output_dir)
+    def __init__(
+        self,
+        output_dir: Path,
+    ) -> None:
+        self._saver = DebugImageSaver(
+            output_dir,
+        )
         self._renderer = RoiDebugRenderer()
 
     def save(
@@ -29,14 +32,15 @@ class DebugCaptureService:
         image: np.ndarray,
         region: ChartRegion,
     ) -> None:
+        """
+        Guarda la captura completa, el overlay y el ROI independiente.
+        """
 
-        # Imagen original
         self._saver.save(
             image,
             "001_window.png",
         )
 
-        # Overlay
         overlay = self._renderer.render(
             image,
             region,
@@ -47,12 +51,12 @@ class DebugCaptureService:
             "002_roi_overlay.png",
         )
 
-        # Recorte ROI
-
         roi = image[
-            region.top : region.top + region.height,
-            region.left : region.left + region.width,
-        ]
+            region.y : region.bottom,
+            region.x : region.right,
+        ].copy(
+            order="C",
+        )
 
         self._saver.save(
             roi,

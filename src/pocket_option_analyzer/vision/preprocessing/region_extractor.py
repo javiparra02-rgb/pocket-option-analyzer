@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
+from pocket_option_analyzer.vision.models import ChartRegion
+
 
 class RegionExtractor:
     """
@@ -22,24 +24,6 @@ class RegionExtractor:
         """
         Extrae una región de interés válida.
 
-        Parameters
-        ----------
-        image:
-            Imagen de entrada.
-        x:
-            Coordenada horizontal inicial.
-        y:
-            Coordenada vertical inicial.
-        width:
-            Ancho de la región.
-        height:
-            Alto de la región.
-
-        Returns
-        -------
-        numpy.ndarray
-            Copia independiente y C-contiguous de la región.
-
         Raises
         ------
         ValueError
@@ -50,28 +34,32 @@ class RegionExtractor:
         if image.ndim < 2:
             raise ValueError("Image must have at least two dimensions.")
 
-        if x < 0 or y < 0:
+        region = ChartRegion(
+            x=x,
+            y=y,
+            width=width,
+            height=height,
+        )
+
+        if region.x < 0 or region.y < 0:
             raise ValueError("ROI coordinates cannot be negative.")
 
-        if width <= 0 or height <= 0:
+        if not region.has_positive_area:
             raise ValueError("ROI dimensions must be greater than zero.")
 
-        image_height = int(
-            image.shape[0],
-        )
-        image_width = int(
-            image.shape[1],
-        )
-
-        region_right = x + width
-        region_bottom = y + height
-
-        if region_right > image_width or region_bottom > image_height:
+        if not region.fits_within(
+            image_width=int(
+                image.shape[1],
+            ),
+            image_height=int(
+                image.shape[0],
+            ),
+        ):
             raise ValueError("ROI must fit entirely within image bounds.")
 
         return image[
-            y:region_bottom,
-            x:region_right,
+            region.y : region.bottom,
+            region.x : region.right,
         ].copy(
             order="C",
         )

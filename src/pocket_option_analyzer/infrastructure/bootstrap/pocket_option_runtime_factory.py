@@ -437,7 +437,7 @@ class FixedChartRegionExtractor:
 
     def extract(
         self,
-        image,
+        image: np.ndarray,
     ) -> ChartRegion:
         return self._clamp_region(
             image=image,
@@ -446,7 +446,7 @@ class FixedChartRegionExtractor:
 
     def _clamp_region(
         self,
-        image,
+        image: np.ndarray,
         region: ChartRegion,
     ) -> ChartRegion:
         image_height = image.shape[0]
@@ -515,7 +515,7 @@ class PocketOptionChartRegionExtractor:
 
     def extract(
         self,
-        image,
+        image: np.ndarray,
     ) -> ChartRegion:
         image_height = image.shape[0]
         image_width = image.shape[1]

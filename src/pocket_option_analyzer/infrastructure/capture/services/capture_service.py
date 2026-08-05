@@ -157,23 +157,17 @@ class CaptureService:
         """
         Comprueba que el ROI sea positivo y esté completamente contenido.
 
-        No se permite que NumPy recorte silenciosamente una región parcial.
+        La regla geométrica se mantiene en el modelo canónico ChartRegion.
         """
 
-        if region.x < 0 or region.y < 0 or region.width <= 0 or region.height <= 0:
-            return False
-
-        image_height = int(
-            image.shape[0],
+        return region.fits_within(
+            image_width=int(
+                image.shape[1],
+            ),
+            image_height=int(
+                image.shape[0],
+            ),
         )
-        image_width = int(
-            image.shape[1],
-        )
-
-        region_right = region.x + region.width
-        region_bottom = region.y + region.height
-
-        return region_right <= image_width and region_bottom <= image_height
 
     def latest_frame(self) -> Frame | None:
         return self._frame_buffer.latest()

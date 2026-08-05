@@ -1,30 +1,79 @@
-from pocket_option_analyzer.infrastructure.windows.models import Win32WindowInfo
-from pocket_option_analyzer.vision.services.chart_region_extractor import (
+import numpy as np
+import pytest
+
+from pocket_option_analyzer.infrastructure.bootstrap.pocket_option_runtime_factory import (  # noqa: E501
+    FixedChartRegionExtractor,
+    PocketOptionChartRegionExtractor,
+)
+from pocket_option_analyzer.vision.models import ChartRegion
+from pocket_option_analyzer.vision.services import (
     ChartRegionExtractor,
 )
 
 
-def test_extract_chart_region():
-    extractor = ChartRegionExtractor()
+@pytest.mark.parametrize(
+    (
+        "extractor",
+        "expected",
+    ),
+    [
+        (
+            FixedChartRegionExtractor(
+                region=ChartRegion(
+                    x=10,
+                    y=20,
+                    width=50,
+                    height=40,
+                )
+            ),
+            ChartRegion(
+                x=10,
+                y=20,
+                width=50,
+                height=40,
+            ),
+        ),
+        (
+            PocketOptionChartRegionExtractor(),
+            ChartRegion(
+                x=0,
+                y=10,
+                width=172,
+                height=75,
+            ),
+        ),
+    ],
+    ids=[
+        "fixed_region",
+        "pocket_option_region",
+    ],
+)
+def test_runtime_extractors_implement_chart_region_contract(
+    extractor: ChartRegionExtractor,
+    expected: ChartRegion,
+) -> None:
 
-    window = Win32WindowInfo(
-        hwnd=1,
-        title="Pocket Option",
-        left=0,
-        top=0,
-        width=1000,
-        height=600,
-        client_left=0,
-        client_top=0,
-        client_width=1000,
-        client_height=600,
-        visible=True,
-        minimized=False,
+    image = np.zeros(
+        (
+            100,
+            200,
+            3,
+        ),
+        dtype=np.uint8,
     )
 
-    region = extractor.extract(window)
+    assert isinstance(
+        extractor,
+        ChartRegionExtractor,
+    )
 
-    assert region.left == 10
-    assert region.top == 80
-    assert region.width == 980
-    assert region.height == 480
+    result = extractor.extract(
+        image,
+    )
+
+    assert isinstance(
+        result,
+        ChartRegion,
+    )
+
+    assert result == expected
