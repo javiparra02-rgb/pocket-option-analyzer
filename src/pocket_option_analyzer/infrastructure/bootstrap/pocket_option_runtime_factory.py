@@ -5,6 +5,8 @@ from collections.abc import Callable, Iterable
 from ctypes import wintypes
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from math import isfinite
+from numbers import Real
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
@@ -426,68 +428,36 @@ class RuntimeWindowReader:
 
 class FixedChartRegionExtractor:
     """
-    Extractor de región fija para el gráfico.
+    Devuelve una región fija configurada para el gráfico.
+
+    La región no se recorta ni modifica según el tamaño de la imagen.
+    CaptureService decide posteriormente si cabe completamente dentro
+    del frame actual.
     """
 
     def __init__(
         self,
         region: ChartRegion,
     ) -> None:
+        if region.x < 0 or region.y < 0:
+            raise ValueError("Fixed chart region coordinates cannot be negative.")
+
+        if not region.has_positive_area:
+            raise ValueError("Fixed chart region dimensions must be greater than zero.")
+
         self._region = region
 
     def extract(
         self,
         image: np.ndarray,
     ) -> ChartRegion:
-        return self._clamp_region(
-            image=image,
-            region=self._region,
-        )
+        """
+        Devuelve exactamente la región configurada.
+        """
 
-    def _clamp_region(
-        self,
-        image: np.ndarray,
-        region: ChartRegion,
-    ) -> ChartRegion:
-        image_height = image.shape[0]
-        image_width = image.shape[1]
+        del image
 
-        x = max(
-            0,
-            min(
-                region.x,
-                image_width,
-            ),
-        )
-        y = max(
-            0,
-            min(
-                region.y,
-                image_height,
-            ),
-        )
-
-        width = max(
-            0,
-            min(
-                region.width,
-                image_width - x,
-            ),
-        )
-        height = max(
-            0,
-            min(
-                region.height,
-                image_height - y,
-            ),
-        )
-
-        return ChartRegion(
-            x=x,
-            y=y,
-            width=width,
-            height=height,
-        )
+        return self._region
 
 
 class PocketOptionChartRegionExtractor:
@@ -509,16 +479,32 @@ class PocketOptionChartRegionExtractor:
         right_ratio: float = 0.14,
         bottom_ratio: float = 0.15,
     ) -> None:
-        self._top_ratio = top_ratio
-        self._right_ratio = right_ratio
-        self._bottom_ratio = bottom_ratio
+        self._top_ratio = self._resolve_ratio(
+            name="top_ratio",
+            value=top_ratio,
+        )
+        self._right_ratio = self._resolve_ratio(
+            name="right_ratio",
+            value=right_ratio,
+        )
+        self._bottom_ratio = self._resolve_ratio(
+            name="bottom_ratio",
+            value=bottom_ratio,
+        )
+
+        if self._top_ratio + self._bottom_ratio >= 1.0:
+            raise ValueError("Top and bottom chart ratios must sum to less than one.")
 
     def extract(
         self,
         image: np.ndarray,
     ) -> ChartRegion:
-        image_height = image.shape[0]
-        image_width = image.shape[1]
+        image_height = int(
+            image.shape[0],
+        )
+        image_width = int(
+            image.shape[1],
+        )
 
         x = 0
         y = int(
@@ -532,21 +518,45 @@ class PocketOptionChartRegionExtractor:
             image_height * self._bottom_ratio,
         )
 
-        width = image_width - right_margin
-        height = image_height - y - bottom_margin
-
         return ChartRegion(
             x=x,
             y=y,
-            width=max(
-                0,
-                width,
-            ),
-            height=max(
-                0,
-                height,
-            ),
+            width=image_width - right_margin,
+            height=image_height - y - bottom_margin,
         )
+
+    @staticmethod
+    def _resolve_ratio(
+        *,
+        name: str,
+        value: float,
+    ) -> float:
+        """
+        Normaliza y valida una proporción del extractor.
+        """
+
+        if isinstance(
+            value,
+            bool,
+        ) or not isinstance(
+            value,
+            Real,
+        ):
+            raise TypeError(f"{name} must be a real number.")
+
+        resolved_value = float(
+            value,
+        )
+
+        if not isfinite(
+            resolved_value,
+        ):
+            raise ValueError(f"{name} must be finite.")
+
+        if not 0.0 <= resolved_value < 1.0:
+            raise ValueError(f"{name} must be in range [0, 1).")
+
+        return resolved_value
 
 
 RuntimeRoiClock = Callable[[], datetime]

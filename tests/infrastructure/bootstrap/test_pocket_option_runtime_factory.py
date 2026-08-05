@@ -455,30 +455,42 @@ def test_runtime_window_reader_accepts_negative_screen_coordinates() -> None:
     assert result.is_capture_candidate is True
 
 
-def test_fixed_chart_region_extractor_returns_clamped_region() -> None:
+def test_fixed_chart_region_extractor_preserves_configured_region() -> None:
+
+    configured_region = ChartRegion(
+        x=10,
+        y=20,
+        width=500,
+        height=400,
+    )
 
     extractor = FixedChartRegionExtractor(
-        region=ChartRegion(
-            x=10,
-            y=20,
-            width=500,
-            height=400,
-        ),
+        region=configured_region,
     )
 
     image = np.zeros(
-        (100, 200, 3),
+        (
+            100,
+            200,
+            3,
+        ),
         dtype=np.uint8,
     )
 
-    region = extractor.extract(
+    result = extractor.extract(
         image=image,
     )
 
-    assert region.x == 10
-    assert region.y == 20
-    assert region.width == 190
-    assert region.height == 80
+    assert result is configured_region
+    assert result.x == 10
+    assert result.y == 20
+    assert result.width == 500
+    assert result.height == 400
+
+    assert not result.fits_within(
+        image_width=200,
+        image_height=100,
+    )
 
 
 def test_pocket_option_chart_region_extractor_returns_candle_chart_area() -> None:
@@ -502,7 +514,12 @@ def test_pocket_option_chart_region_extractor_returns_candle_chart_area() -> Non
     assert region.y == 90
     assert region.width == 1376
     assert region.height == 675
-    assert region.y + region.height == 765
+    assert region.bottom == 765
+
+    assert region.fits_within(
+        image_width=1600,
+        image_height=900,
+    )
 
 
 def test_runtime_roi_debug_capture_saves_image(
@@ -784,4 +801,207 @@ def test_runtime_roi_debug_capture_removes_temporary_file_when_write_fails(
             tmp_path.iterdir(),
         )
         == []
+    )
+
+
+@pytest.mark.parametrize(
+    "region",
+    [
+        ChartRegion(
+            x=-1,
+            y=0,
+            width=100,
+            height=100,
+        ),
+        ChartRegion(
+            x=0,
+            y=-1,
+            width=100,
+            height=100,
+        ),
+        ChartRegion(
+            x=0,
+            y=0,
+            width=0,
+            height=100,
+        ),
+        ChartRegion(
+            x=0,
+            y=0,
+            width=100,
+            height=0,
+        ),
+    ],
+    ids=[
+        "negative_x",
+        "negative_y",
+        "zero_width",
+        "zero_height",
+    ],
+)
+def test_fixed_chart_region_extractor_rejects_invalid_configuration(
+    region: ChartRegion,
+) -> None:
+
+    with pytest.raises(
+        ValueError,
+        match="Fixed chart region",
+    ):
+        FixedChartRegionExtractor(
+            region=region,
+        )
+
+
+@pytest.mark.parametrize(
+    (
+        "top_ratio",
+        "right_ratio",
+        "bottom_ratio",
+        "expected_message",
+    ),
+    [
+        (
+            -0.01,
+            0.14,
+            0.15,
+            "top_ratio",
+        ),
+        (
+            1.0,
+            0.14,
+            0.15,
+            "top_ratio",
+        ),
+        (
+            0.10,
+            -0.01,
+            0.15,
+            "right_ratio",
+        ),
+        (
+            0.10,
+            1.0,
+            0.15,
+            "right_ratio",
+        ),
+        (
+            0.10,
+            0.14,
+            -0.01,
+            "bottom_ratio",
+        ),
+        (
+            0.10,
+            0.14,
+            1.0,
+            "bottom_ratio",
+        ),
+        (
+            float("nan"),
+            0.14,
+            0.15,
+            "top_ratio",
+        ),
+        (
+            0.10,
+            float("inf"),
+            0.15,
+            "right_ratio",
+        ),
+    ],
+    ids=[
+        "negative_top",
+        "full_top",
+        "negative_right",
+        "full_right",
+        "negative_bottom",
+        "full_bottom",
+        "nan_top",
+        "infinite_right",
+    ],
+)
+def test_pocket_option_chart_region_extractor_rejects_invalid_ratio(
+    top_ratio: float,
+    right_ratio: float,
+    bottom_ratio: float,
+    expected_message: str,
+) -> None:
+
+    with pytest.raises(
+        ValueError,
+        match=expected_message,
+    ):
+        PocketOptionChartRegionExtractor(
+            top_ratio=top_ratio,
+            right_ratio=right_ratio,
+            bottom_ratio=bottom_ratio,
+        )
+
+
+@pytest.mark.parametrize(
+    (
+        "top_ratio",
+        "bottom_ratio",
+    ),
+    [
+        (
+            0.50,
+            0.50,
+        ),
+        (
+            0.75,
+            0.30,
+        ),
+    ],
+    ids=[
+        "exact_full_height",
+        "exceeds_full_height",
+    ],
+)
+def test_pocket_option_chart_region_extractor_rejects_vertical_ratio_sum(
+    top_ratio: float,
+    bottom_ratio: float,
+) -> None:
+
+    with pytest.raises(
+        ValueError,
+        match="sum to less than one",
+    ):
+        PocketOptionChartRegionExtractor(
+            top_ratio=top_ratio,
+            bottom_ratio=bottom_ratio,
+        )
+
+
+def test_pocket_option_chart_region_extractor_accepts_zero_ratios() -> None:
+
+    extractor = PocketOptionChartRegionExtractor(
+        top_ratio=0.0,
+        right_ratio=0.0,
+        bottom_ratio=0.0,
+    )
+
+    image = np.zeros(
+        (
+            100,
+            200,
+            3,
+        ),
+        dtype=np.uint8,
+    )
+
+    result = extractor.extract(
+        image=image,
+    )
+
+    assert result == ChartRegion(
+        x=0,
+        y=0,
+        width=200,
+        height=100,
+    )
+
+    assert result.fits_within(
+        image_width=200,
+        image_height=100,
     )
