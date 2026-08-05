@@ -21,13 +21,16 @@ class VisionPipeline:
     ) -> np.ndarray:
         """
         Procesa una imagen para dejarla lista para análisis.
+
+        Cuando se proporciona un ROI, primero se valida y extrae la región.
+        De esta manera, una imagen BGRA solo convierte los píxeles que serán
+        utilizados posteriormente.
         """
 
-        if not FrameValidator.validate(image):
+        if not FrameValidator.validate(
+            image,
+        ):
             raise ValueError("Invalid image.")
-
-        if image.shape[2] == 4:
-            image = ImageConverter.bgra_to_bgr(image)
 
         if roi is not None:
             x, y, width, height = roi
@@ -38,6 +41,11 @@ class VisionPipeline:
                 y=y,
                 width=width,
                 height=height,
+            )
+
+        if image.shape[2] == 4:
+            image = ImageConverter.bgra_to_bgr(
+                image,
             )
 
         return image
