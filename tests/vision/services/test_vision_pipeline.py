@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from pocket_option_analyzer.vision import VisionPipeline
 
@@ -24,3 +25,25 @@ def test_pipeline_extracts_roi() -> None:
     )
 
     assert result.shape == (40, 80, 3)
+
+
+def test_pipeline_rejects_unsupported_pixel_dtype() -> None:
+
+    image = np.zeros(
+        (
+            100,
+            100,
+            3,
+        ),
+        dtype=np.float32,
+    )
+
+    pipeline = VisionPipeline()
+
+    with pytest.raises(
+        ValueError,
+        match="Invalid image",
+    ):
+        pipeline.process(
+            image,
+        )

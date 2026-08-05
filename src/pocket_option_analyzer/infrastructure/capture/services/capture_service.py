@@ -145,7 +145,7 @@ class CaptureService:
         if not FrameValidator.validate(
             image,
         ):
-            raise ValueError("Screen capture returned an unsupported image shape.")
+            raise ValueError("Screen capture returned an unsupported image format.")
 
         return True
 

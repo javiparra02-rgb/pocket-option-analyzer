@@ -6,34 +6,52 @@ import numpy as np
 class FrameValidator:
     """
     Valida imágenes antes de iniciar el procesamiento.
+
+    El contrato visual del proyecto utiliza imágenes uint8 con tres
+    canales BGR o cuatro canales BGRA.
     """
 
     @staticmethod
-    def validate(image: np.ndarray) -> bool:
+    def validate(
+        image: object,
+    ) -> bool:
         """
-        Comprueba si la imagen es válida para el pipeline.
+        Comprueba si una imagen cumple el contrato del pipeline.
+
+        La validación inspecciona únicamente metadatos de la matriz.
+        No recorre ni copia sus píxeles.
 
         Parameters
         ----------
         image:
-            Imagen a validar.
+            Objeto que debe representar una imagen NumPy.
 
         Returns
         -------
         bool
+            True cuando la imagen es válida.
         """
-        if image is None:
-            return False
 
-        if not isinstance(image, np.ndarray):
-            return False
-
-        if image.size == 0:
+        if not isinstance(
+            image,
+            np.ndarray,
+        ):
             return False
 
         if image.ndim != 3:
             return False
 
-        channels = image.shape[2]
+        height, width, channels = image.shape
 
-        return channels in (3, 4)
+        if height <= 0 or width <= 0:
+            return False
+
+        if channels not in (
+            3,
+            4,
+        ):
+            return False
+
+        return image.dtype == np.dtype(
+            np.uint8,
+        )

@@ -360,7 +360,33 @@ def test_capture_once_rejects_regions_outside_capture_bounds() -> None:
         assert frame_buffer.latest() is None
 
 
-def test_capture_once_rejects_unsupported_capture_shape() -> None:
+@pytest.mark.parametrize(
+    "image",
+    [
+        np.zeros(
+            (
+                200,
+                200,
+            ),
+            dtype=np.uint8,
+        ),
+        np.zeros(
+            (
+                200,
+                200,
+                3,
+            ),
+            dtype=np.float32,
+        ),
+    ],
+    ids=[
+        "invalid_dimensions",
+        "unsupported_dtype",
+    ],
+)
+def test_capture_once_rejects_unsupported_capture_format(
+    image: np.ndarray,
+) -> None:
 
     extractor = FakeRegionExtractor()
 
@@ -368,10 +394,7 @@ def test_capture_once_rejects_unsupported_capture_shape() -> None:
         finder=FakeFinder(),
         reader=FakeReader(),
         capture=FakeCapture(
-            image=np.zeros(
-                (200, 200),
-                dtype=np.uint8,
-            )
+            image=image,
         ),
         region_extractor=extractor,
         frame_factory=FrameFactory(),
@@ -380,7 +403,7 @@ def test_capture_once_rejects_unsupported_capture_shape() -> None:
 
     with pytest.raises(
         ValueError,
-        match="unsupported image shape",
+        match="unsupported image format",
     ):
         service.capture_once()
 
