@@ -40,6 +40,7 @@ from pocket_option_analyzer.vision.models import (
     CandleColorProfile,
     ChartRegion,
 )
+from pocket_option_analyzer.vision.preprocessing import FrameValidator
 
 
 @dataclass(frozen=True, slots=True)
@@ -426,6 +427,26 @@ class RuntimeWindowReader:
         )
 
 
+def _require_valid_chart_region_image(
+    image: np.ndarray,
+) -> np.ndarray:
+    """
+    Verifica el contrato visual común de los extractores de región.
+
+    Los extractores aceptan únicamente imágenes uint8 BGR o BGRA con
+    dimensiones espaciales positivas.
+    """
+
+    if not FrameValidator.validate(
+        image,
+    ):
+        raise ValueError(
+            "Chart region extractor requires a valid uint8 BGR or BGRA image."
+        )
+
+    return image
+
+
 class FixedChartRegionExtractor:
     """
     Devuelve una región fija configurada para el gráfico.
@@ -453,9 +474,14 @@ class FixedChartRegionExtractor:
     ) -> ChartRegion:
         """
         Devuelve exactamente la región configurada.
+
+        La imagen se valida para mantener el mismo contrato estructural
+        que los demás extractores.
         """
 
-        del image
+        _require_valid_chart_region_image(
+            image,
+        )
 
         return self._region
 
@@ -499,11 +525,19 @@ class PocketOptionChartRegionExtractor:
         self,
         image: np.ndarray,
     ) -> ChartRegion:
+        """
+        Calcula proporcionalmente el área visual destinada a las velas.
+        """
+
+        validated_image = _require_valid_chart_region_image(
+            image,
+        )
+
         image_height = int(
-            image.shape[0],
+            validated_image.shape[0],
         )
         image_width = int(
-            image.shape[1],
+            validated_image.shape[1],
         )
 
         x = 0

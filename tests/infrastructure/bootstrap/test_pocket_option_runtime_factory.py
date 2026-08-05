@@ -26,6 +26,7 @@ from pocket_option_analyzer.infrastructure.capture import (
     CaptureUnavailableError,
 )
 from pocket_option_analyzer.vision.models import ChartRegion
+from pocket_option_analyzer.vision.services import ChartRegionExtractor
 
 
 @dataclass(frozen=True, slots=True)
@@ -1005,3 +1006,86 @@ def test_pocket_option_chart_region_extractor_accepts_zero_ratios() -> None:
         image_width=200,
         image_height=100,
     )
+
+
+@pytest.mark.parametrize(
+    "extractor",
+    [
+        FixedChartRegionExtractor(
+            region=ChartRegion(
+                x=0,
+                y=0,
+                width=100,
+                height=100,
+            )
+        ),
+        PocketOptionChartRegionExtractor(),
+    ],
+    ids=[
+        "fixed_region",
+        "pocket_option_region",
+    ],
+)
+@pytest.mark.parametrize(
+    "image",
+    [
+        np.empty(
+            (
+                0,
+                100,
+                3,
+            ),
+            dtype=np.uint8,
+        ),
+        np.empty(
+            (
+                100,
+                0,
+                4,
+            ),
+            dtype=np.uint8,
+        ),
+        np.zeros(
+            (
+                100,
+                100,
+            ),
+            dtype=np.uint8,
+        ),
+        np.zeros(
+            (
+                100,
+                100,
+                2,
+            ),
+            dtype=np.uint8,
+        ),
+        np.zeros(
+            (
+                100,
+                100,
+                3,
+            ),
+            dtype=np.float32,
+        ),
+    ],
+    ids=[
+        "zero_height",
+        "zero_width",
+        "two_dimensions",
+        "unsupported_channels",
+        "unsupported_dtype",
+    ],
+)
+def test_chart_region_extractors_reject_invalid_images(
+    extractor: ChartRegionExtractor,
+    image: np.ndarray,
+) -> None:
+
+    with pytest.raises(
+        ValueError,
+        match="valid uint8 BGR or BGRA image",
+    ):
+        extractor.extract(
+            image=image,
+        )
