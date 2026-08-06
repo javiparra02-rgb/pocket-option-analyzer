@@ -9,32 +9,93 @@ from .structures import POINT, RECT
 class User32:
     """
     Wrapper de user32.dll.
-    Centraliza llamadas Win32 utilizadas por el proyecto.
+
+    Centraliza las llamadas Win32 utilizadas por el proyecto y valida
+    los códigos de retorno de las operaciones que pueden fallar.
     """
 
-    def __init__(self) -> None:
-        self._dll = ctypes.windll.user32
+    def __init__(
+        self,
+        dll: Any | None = None,
+    ) -> None:
+        self._dll = dll if dll is not None else ctypes.windll.user32
 
     # =========================================================
     # ENUM WINDOWS
     # =========================================================
 
-    def enum_windows(self, callback: Any) -> None:
-        self._dll.EnumWindows(callback, 0)
+    def enum_windows(
+        self,
+        callback: Any,
+    ) -> None:
+        self._dll.EnumWindows(
+            callback,
+            0,
+        )
+
+    # =========================================================
+    # WINDOW VALIDATION
+    # =========================================================
+
+    def is_window(
+        self,
+        hwnd: int,
+    ) -> bool:
+        """
+        Indica si el HWND todavía identifica una ventana válida.
+        """
+
+        return bool(
+            self._dll.IsWindow(
+                hwnd,
+            )
+        )
 
     # =========================================================
     # WINDOW TEXT
     # =========================================================
 
-    def get_window_text_length(self, hwnd: int) -> int:
-        return int(self._dll.GetWindowTextLengthW(hwnd))
+    def get_window_text_length(
+        self,
+        hwnd: int,
+    ) -> int:
+        return int(
+            self._dll.GetWindowTextLengthW(
+                hwnd,
+            )
+        )
 
-    def get_window_text(self, hwnd: int) -> str:
-        length = self.get_window_text_length(hwnd)
+    def get_window_text(
+        self,
+        hwnd: int,
+    ) -> str:
+        """
+        Lee el título actual de una ventana.
 
-        buffer = ctypes.create_unicode_buffer(length + 1)
+        Un título legítimamente vacío devuelve una cadena vacía. Cuando
+        Win32 reporta previamente una longitud positiva pero la copia
+        falla, se considera una falla de la API.
+        """
 
-        self._dll.GetWindowTextW(hwnd, buffer, len(buffer))
+        length = self.get_window_text_length(
+            hwnd,
+        )
+
+        if length <= 0:
+            return ""
+
+        buffer = ctypes.create_unicode_buffer(
+            length + 1,
+        )
+
+        copied_length = self._dll.GetWindowTextW(
+            hwnd,
+            buffer,
+            len(buffer),
+        )
+
+        if copied_length <= 0:
+            raise OSError(f"GetWindowTextW failed for hwnd={hwnd}.")
 
         return buffer.value
 
@@ -42,30 +103,87 @@ class User32:
     # WINDOW RECTANGLE
     # =========================================================
 
-    def get_window_rect(self, hwnd: int) -> RECT:
+    def get_window_rect(
+        self,
+        hwnd: int,
+    ) -> RECT:
         rect = RECT()
-        self._dll.GetWindowRect(hwnd, ctypes.byref(rect))
+
+        succeeded = self._dll.GetWindowRect(
+            hwnd,
+            ctypes.byref(
+                rect,
+            ),
+        )
+
+        if not succeeded:
+            raise OSError(f"GetWindowRect failed for hwnd={hwnd}.")
+
         return rect
 
-    def get_client_rect(self, hwnd: int) -> RECT:
+    def get_client_rect(
+        self,
+        hwnd: int,
+    ) -> RECT:
         rect = RECT()
-        self._dll.GetClientRect(hwnd, ctypes.byref(rect))
+
+        succeeded = self._dll.GetClientRect(
+            hwnd,
+            ctypes.byref(
+                rect,
+            ),
+        )
+
+        if not succeeded:
+            raise OSError(f"GetClientRect failed for hwnd={hwnd}.")
+
         return rect
 
     # =========================================================
     # COORDINATES
     # =========================================================
 
-    def client_to_screen(self, hwnd: int, point: POINT) -> POINT:
-        self._dll.ClientToScreen(hwnd, ctypes.byref(point))
+    def client_to_screen(
+        self,
+        hwnd: int,
+        point: POINT,
+    ) -> POINT:
+        """
+        Convierte un punto de coordenadas cliente a coordenadas pantalla.
+        """
+
+        succeeded = self._dll.ClientToScreen(
+            hwnd,
+            ctypes.byref(
+                point,
+            ),
+        )
+
+        if not succeeded:
+            raise OSError(f"ClientToScreen failed for hwnd={hwnd}.")
+
         return point
 
     # =========================================================
     # STATE
     # =========================================================
 
-    def is_window_visible(self, hwnd: int) -> bool:
-        return bool(self._dll.IsWindowVisible(hwnd))
+    def is_window_visible(
+        self,
+        hwnd: int,
+    ) -> bool:
+        return bool(
+            self._dll.IsWindowVisible(
+                hwnd,
+            )
+        )
 
-    def is_iconic(self, hwnd: int) -> bool:
-        return bool(self._dll.IsIconic(hwnd))
+    def is_iconic(
+        self,
+        hwnd: int,
+    ) -> bool:
+        return bool(
+            self._dll.IsIconic(
+                hwnd,
+            )
+        )
