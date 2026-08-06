@@ -23,6 +23,7 @@ class FakeUser32Dll:
         self.window_rect_succeeds = True
         self.client_rect_succeeds = True
         self.client_to_screen_succeeds = True
+        self.enum_windows_succeeds = True
 
     def IsWindow(
         self,
@@ -145,6 +146,26 @@ class FakeUser32Dll:
 
         return 1
 
+    def EnumWindows(
+        self,
+        callback,
+        lparam: int,
+    ) -> int:
+        if not self.enum_windows_succeeds:
+            return 0
+
+        callback(
+            101,
+            lparam,
+        )
+
+        callback(
+            202,
+            lparam,
+        )
+
+        return 1
+
 
 def test_user32_reads_window_information() -> None:
 
@@ -258,3 +279,21 @@ def test_user32_raises_when_native_operation_fails(
                     0,
                 ),
             )
+
+
+def test_user32_raises_when_window_enumeration_fails() -> None:
+
+    dll = FakeUser32Dll()
+    dll.enum_windows_succeeds = False
+
+    api = User32(
+        dll=dll,
+    )
+
+    with pytest.raises(
+        OSError,
+        match="EnumWindows failed",
+    ):
+        api.enum_windows(
+            lambda _hwnd, _lparam: True,
+        )

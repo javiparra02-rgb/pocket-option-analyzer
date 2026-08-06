@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from pocket_option_analyzer.infrastructure.capture.errors import (
+from pocket_option_analyzer.infrastructure.errors import (
     CaptureUnavailableError,
 )
 from pocket_option_analyzer.infrastructure.windows.models import (

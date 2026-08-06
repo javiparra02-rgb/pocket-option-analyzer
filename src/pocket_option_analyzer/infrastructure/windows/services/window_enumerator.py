@@ -2,17 +2,15 @@ from __future__ import annotations
 
 import ctypes
 
-from pocket_option_analyzer.infrastructure.windows.native.callbacks import (
+from pocket_option_analyzer.infrastructure.windows.native import (
     EnumWindowsProc,
-)
-from pocket_option_analyzer.infrastructure.windows.native.user32 import (
     User32,
 )
 
 
 class WindowEnumerator:
     """
-    Enumera los HWND existentes en el sistema.
+    Enumera los HWND de las ventanas de nivel superior del sistema.
     """
 
     def __init__(
@@ -21,21 +19,40 @@ class WindowEnumerator:
     ) -> None:
         self._user32 = user32
 
-    def enumerate_hwnds(self) -> list[int]:
+    def enumerate_hwnds(
+        self,
+    ) -> list[int]:
         """
-        Devuelve una lista de HWND.
+        Devuelve los HWND válidos encontrados durante la enumeración.
+
+        La colección conserva el orden entregado por Win32.
         """
 
         hwnds: list[int] = []
 
         @EnumWindowsProc
-        def callback(hwnd, lparam):
+        def callback(
+            hwnd,
+            lparam,
+        ) -> bool:
             del lparam
 
-            hwnds.append(int(ctypes.cast(hwnd, ctypes.c_void_p).value))
+            raw_handle = ctypes.cast(
+                hwnd,
+                ctypes.c_void_p,
+            ).value
+
+            if raw_handle is not None and raw_handle > 0:
+                hwnds.append(
+                    int(
+                        raw_handle,
+                    )
+                )
 
             return True
 
-        self._user32.enum_windows(callback)
+        self._user32.enum_windows(
+            callback,
+        )
 
         return hwnds

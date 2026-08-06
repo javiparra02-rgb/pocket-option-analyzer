@@ -28,10 +28,22 @@ class User32:
         self,
         callback: Any,
     ) -> None:
-        self._dll.EnumWindows(
+        """
+        Enumera las ventanas de nivel superior disponibles.
+
+        Raises
+        ------
+        OSError
+            Cuando Win32 no puede completar la enumeración.
+        """
+
+        succeeded = self._dll.EnumWindows(
             callback,
             0,
         )
+
+        if not succeeded:
+            raise OSError("EnumWindows failed.")
 
     # =========================================================
     # WINDOW VALIDATION
