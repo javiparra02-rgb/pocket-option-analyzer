@@ -13,8 +13,6 @@ from pocket_option_analyzer.domain.signals import (
     SignalHistory,
 )
 from pocket_option_analyzer.infrastructure.bootstrap import (
-    FixedChartRegionExtractor,
-    PocketOptionChartRegionExtractor,
     PocketOptionRuntimeFactory,
     RuntimeRoiDebugCapture,
     RuntimeWindowFinder,
@@ -26,7 +24,11 @@ from pocket_option_analyzer.infrastructure.capture import (
     CaptureUnavailableError,
 )
 from pocket_option_analyzer.vision.models import ChartRegion
-from pocket_option_analyzer.vision.services import ChartRegionExtractor
+from pocket_option_analyzer.vision.services import (
+    ChartRegionExtractor,
+    FixedChartRegionExtractor,
+    PocketOptionChartRegionExtractor,
+)
 
 
 @dataclass(frozen=True, slots=True)

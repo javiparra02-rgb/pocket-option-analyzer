@@ -1,13 +1,11 @@
 import numpy as np
 import pytest
 
-from pocket_option_analyzer.infrastructure.bootstrap.pocket_option_runtime_factory import (  # noqa: E501
-    FixedChartRegionExtractor,
-    PocketOptionChartRegionExtractor,
-)
 from pocket_option_analyzer.vision.models import ChartRegion
 from pocket_option_analyzer.vision.services import (
     ChartRegionExtractor,
+    FixedChartRegionExtractor,
+    PocketOptionChartRegionExtractor,
 )
 
 

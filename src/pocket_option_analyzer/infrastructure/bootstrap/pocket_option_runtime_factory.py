@@ -5,8 +5,6 @@ from collections.abc import Callable, Iterable
 from ctypes import wintypes
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from math import isfinite
-from numbers import Real
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
@@ -40,7 +38,12 @@ from pocket_option_analyzer.vision.models import (
     CandleColorProfile,
     ChartRegion,
 )
-from pocket_option_analyzer.vision.preprocessing import FrameValidator
+from pocket_option_analyzer.vision.services.fixed_chart_region_extractor import (
+    FixedChartRegionExtractor,
+)
+from pocket_option_analyzer.vision.services.pocket_option_chart_region_extractor import (  # noqa: E501
+    PocketOptionChartRegionExtractor,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -425,172 +428,6 @@ class RuntimeWindowReader:
             visible=visible,
             minimized=minimized,
         )
-
-
-def _require_valid_chart_region_image(
-    image: np.ndarray,
-) -> np.ndarray:
-    """
-    Verifica el contrato visual común de los extractores de región.
-
-    Los extractores aceptan únicamente imágenes uint8 BGR o BGRA con
-    dimensiones espaciales positivas.
-    """
-
-    if not FrameValidator.validate(
-        image,
-    ):
-        raise ValueError(
-            "Chart region extractor requires a valid uint8 BGR or BGRA image."
-        )
-
-    return image
-
-
-class FixedChartRegionExtractor:
-    """
-    Devuelve una región fija configurada para el gráfico.
-
-    La región no se recorta ni modifica según el tamaño de la imagen.
-    CaptureService decide posteriormente si cabe completamente dentro
-    del frame actual.
-    """
-
-    def __init__(
-        self,
-        region: ChartRegion,
-    ) -> None:
-        if region.x < 0 or region.y < 0:
-            raise ValueError("Fixed chart region coordinates cannot be negative.")
-
-        if not region.has_positive_area:
-            raise ValueError("Fixed chart region dimensions must be greater than zero.")
-
-        self._region = region
-
-    def extract(
-        self,
-        image: np.ndarray,
-    ) -> ChartRegion:
-        """
-        Devuelve exactamente la región configurada.
-
-        La imagen se valida para mantener el mismo contrato estructural
-        que los demás extractores.
-        """
-
-        _require_valid_chart_region_image(
-            image,
-        )
-
-        return self._region
-
-
-class PocketOptionChartRegionExtractor:
-    """
-    Extrae principalmente el área de velas de Pocket Option.
-
-    Excluye proporcionalmente:
-    - la barra superior del navegador y de Pocket Option;
-    - el panel derecho de compra y venta;
-    - el RSI, la línea temporal y otros paneles inferiores.
-
-    Los indicadores se calculan internamente, por lo que no es
-    necesario incluir los paneles RSI o Stochastic visibles.
-    """
-
-    def __init__(
-        self,
-        top_ratio: float = 0.10,
-        right_ratio: float = 0.14,
-        bottom_ratio: float = 0.15,
-    ) -> None:
-        self._top_ratio = self._resolve_ratio(
-            name="top_ratio",
-            value=top_ratio,
-        )
-        self._right_ratio = self._resolve_ratio(
-            name="right_ratio",
-            value=right_ratio,
-        )
-        self._bottom_ratio = self._resolve_ratio(
-            name="bottom_ratio",
-            value=bottom_ratio,
-        )
-
-        if self._top_ratio + self._bottom_ratio >= 1.0:
-            raise ValueError("Top and bottom chart ratios must sum to less than one.")
-
-    def extract(
-        self,
-        image: np.ndarray,
-    ) -> ChartRegion:
-        """
-        Calcula proporcionalmente el área visual destinada a las velas.
-        """
-
-        validated_image = _require_valid_chart_region_image(
-            image,
-        )
-
-        image_height = int(
-            validated_image.shape[0],
-        )
-        image_width = int(
-            validated_image.shape[1],
-        )
-
-        x = 0
-        y = int(
-            image_height * self._top_ratio,
-        )
-
-        right_margin = int(
-            image_width * self._right_ratio,
-        )
-        bottom_margin = int(
-            image_height * self._bottom_ratio,
-        )
-
-        return ChartRegion(
-            x=x,
-            y=y,
-            width=image_width - right_margin,
-            height=image_height - y - bottom_margin,
-        )
-
-    @staticmethod
-    def _resolve_ratio(
-        *,
-        name: str,
-        value: float,
-    ) -> float:
-        """
-        Normaliza y valida una proporción del extractor.
-        """
-
-        if isinstance(
-            value,
-            bool,
-        ) or not isinstance(
-            value,
-            Real,
-        ):
-            raise TypeError(f"{name} must be a real number.")
-
-        resolved_value = float(
-            value,
-        )
-
-        if not isfinite(
-            resolved_value,
-        ):
-            raise ValueError(f"{name} must be finite.")
-
-        if not 0.0 <= resolved_value < 1.0:
-            raise ValueError(f"{name} must be in range [0, 1).")
-
-        return resolved_value
 
 
 RuntimeRoiClock = Callable[[], datetime]
