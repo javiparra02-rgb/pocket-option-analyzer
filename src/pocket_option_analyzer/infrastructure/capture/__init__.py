@@ -2,9 +2,9 @@
 Infraestructura de captura.
 """
 
-from .contracts import ScreenCapture, WindowLocator
+from .contracts import CaptureRegion, ScreenCapture
 from .errors import CaptureUnavailableError
-from .models import Frame, WindowInfo
+from .models import Frame
 from .services import (
     CaptureService,
     FrameBuffer,
@@ -12,12 +12,11 @@ from .services import (
 )
 
 __all__ = [
+    "CaptureRegion",
     "CaptureService",
     "CaptureUnavailableError",
     "Frame",
     "FrameBuffer",
     "FrameFactory",
     "ScreenCapture",
-    "WindowInfo",
-    "WindowLocator",
 ]
