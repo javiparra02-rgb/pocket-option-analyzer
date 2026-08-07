@@ -3,11 +3,11 @@ from __future__ import annotations
 import mss
 import numpy as np
 
+from pocket_option_analyzer.infrastructure.capture.contracts import (
+    CaptureRegion,
+)
 from pocket_option_analyzer.infrastructure.capture.errors import (
     CaptureUnavailableError,
-)
-from pocket_option_analyzer.infrastructure.capture.models import (
-    WindowInfo,
 )
 
 
@@ -21,7 +21,7 @@ class MSSCaptureAdapter:
 
     def capture(
         self,
-        window: WindowInfo,
+        window: CaptureRegion,
     ) -> np.ndarray:
         """
         Captura la región de pantalla indicada.

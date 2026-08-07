@@ -4,15 +4,20 @@ from typing import Protocol
 
 import numpy as np
 
-from pocket_option_analyzer.infrastructure.capture.models import WindowInfo
+from pocket_option_analyzer.infrastructure.capture.contracts.capture_region import (
+    CaptureRegion,
+)
 
 
 class ScreenCapture(Protocol):
     """
-    Contrato para la captura de una región de pantalla.
+    Contrato para capturar una región rectangular de la pantalla.
     """
 
-    def capture(self, window: WindowInfo) -> np.ndarray:
+    def capture(
+        self,
+        window: CaptureRegion,
+    ) -> np.ndarray:
         """
         Captura la región especificada.
 
@@ -21,4 +26,5 @@ class ScreenCapture(Protocol):
         numpy.ndarray
             Imagen capturada.
         """
+
         ...

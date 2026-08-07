@@ -10,8 +10,8 @@ from pocket_option_analyzer.infrastructure.capture.adapters import (
     MSSCaptureAdapter,
     mss_capture_adapter,
 )
-from pocket_option_analyzer.infrastructure.capture.models import (
-    WindowInfo,
+from pocket_option_analyzer.infrastructure.windows.models import (
+    Win32WindowInfo,
 )
 
 
@@ -55,14 +55,21 @@ class FakeMSS:
         return self._screenshot
 
 
-def _window() -> WindowInfo:
+def _window() -> Win32WindowInfo:
 
-    return WindowInfo(
+    return Win32WindowInfo(
+        hwnd=123,
         title="Pocket Option",
         left=-120,
         top=40,
         width=4,
         height=3,
+        client_left=-120,
+        client_top=40,
+        client_width=4,
+        client_height=3,
+        visible=True,
+        minimized=False,
     )
 
 
