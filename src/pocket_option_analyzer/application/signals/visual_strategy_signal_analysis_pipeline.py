@@ -226,6 +226,10 @@ class VisualStrategySignalAnalysisPipeline:
             recent_directional_closed_candles,
         )
 
+        detection_diagnostics_block = self._detection_diagnostics_block(
+            diagnostics=market_analysis.detection_diagnostics,
+        )
+
         entry_context = self._entry_context_analyzer.analyze_directional(
             trend=market_analysis.trend,
             candles=recent_directional_closed_candles,
@@ -239,9 +243,46 @@ class VisualStrategySignalAnalysisPipeline:
             f"  Últimas: {latest_text}\n"
             f"  Cerradas: {recent_closed_text}\n"
             f"  Direccionales: {directional_closed_text}\n"
+            f"{detection_diagnostics_block}"
             f"  Contexto: {entry_context.context_label}\n"
             f"  Vigilancia: {self._watch_label(entry_context.entry_state_label)}\n"
             f"  Estado: {signal_state_label}"
+        )
+
+    def _detection_diagnostics_block(
+        self,
+        diagnostics,
+    ) -> str:
+        """
+        Formatea las etapas internas de CandleFilter para la GUI.
+
+        Cuando el análisis proviene de un fake o integración que no
+        proporciona diagnóstico, no añade ninguna línea.
+        """
+
+        if diagnostics is None:
+            return ""
+
+        dominant_width_label = (
+            f"{diagnostics.dominant_width:.2f} px"
+            if diagnostics.dominant_width is not None
+            else "no disponible"
+        )
+
+        return (
+            "  Detección: "
+            f"segmentados={diagnostics.input_count} | "
+            f"dimensiones={diagnostics.dimension_valid_count} | "
+            f"ancho={diagnostics.width_valid_count} | "
+            f"fusionados={diagnostics.merged_count} | "
+            f"devueltos={diagnostics.returned_count}\n"
+            "  Reducción detección: "
+            f"dimensiones={diagnostics.rejected_by_dimensions} | "
+            f"ancho={diagnostics.rejected_by_width} | "
+            "fragmentos fusionados="
+            f"{diagnostics.merged_fragments} | "
+            f"límite={diagnostics.truncated_count}\n"
+            f"  Ancho dominante: {dominant_width_label}\n"
         )
 
     def _recent_directional_candles(

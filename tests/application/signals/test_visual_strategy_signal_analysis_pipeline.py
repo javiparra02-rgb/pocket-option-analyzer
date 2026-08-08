@@ -27,6 +27,7 @@ from pocket_option_analyzer.domain.signals import (
 from pocket_option_analyzer.domain.strategy import StrategyProfile
 from pocket_option_analyzer.vision.models import (
     CandleCandidate,
+    CandleFilterDiagnostics,
     CandleGeometry,
     CandleSeries,
     CandleType,
@@ -500,3 +501,62 @@ def test_analyze_blocks_actionable_signal_when_snapshot_is_outdated() -> None:
     assert signal_generator.was_called is False
     assert "estado=DESACTUALIZADO" in result.reason
     assert "Estado: esperando snapshot nuevo" in result.reason
+
+
+def test_visual_diagnostics_include_candle_filter_stages() -> None:
+
+    base_analysis = _market_analysis()
+
+    analysis = MarketAnalysis(
+        series=base_analysis.series,
+        trend=base_analysis.trend,
+        detection_diagnostics=CandleFilterDiagnostics(
+            input_count=23,
+            dimension_valid_count=19,
+            width_valid_count=12,
+            merged_count=12,
+            returned_count=12,
+            dominant_width=34.0,
+        ),
+    )
+
+    pipeline = VisualStrategySignalAnalysisPipeline(
+        market_analysis_pipeline=FakeMarketAnalysisPipeline(
+            result=analysis,
+        ),
+        indicator_snapshot_builder=FakeVisualIndicatorSnapshotBuilder(
+            result=_indicators(),
+        ),
+        signal_generator=FakeStrategySignalGenerator(
+            result=MarketSignal.neutral(
+                reason="Waiting.",
+            ),
+        ),
+        profile=StrategyProfile.otc_precision_10s(),
+    )
+
+    result = pipeline.analyze(
+        image=np.zeros(
+            (100, 100, 3),
+            dtype=np.uint8,
+        ),
+    )
+
+    assert (
+        "Detección: "
+        "segmentados=23 | "
+        "dimensiones=19 | "
+        "ancho=12 | "
+        "fusionados=12 | "
+        "devueltos=12" in result.reason
+    )
+
+    assert (
+        "Reducción detección: "
+        "dimensiones=4 | "
+        "ancho=7 | "
+        "fragmentos fusionados=0 | "
+        "límite=0" in result.reason
+    )
+
+    assert "Ancho dominante: 34.00 px" in result.reason

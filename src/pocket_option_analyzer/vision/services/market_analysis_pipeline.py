@@ -46,4 +46,7 @@ class MarketAnalysisPipeline:
         return MarketAnalysis(
             series=series,
             trend=trend,
+            detection_diagnostics=(
+                self._candle_analysis_pipeline.last_detection_diagnostics
+            ),
         )

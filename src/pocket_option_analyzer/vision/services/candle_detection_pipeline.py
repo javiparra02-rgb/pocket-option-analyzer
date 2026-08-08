@@ -5,6 +5,9 @@ import numpy as np
 from pocket_option_analyzer.vision.models.candle_candidate import (
     CandleCandidate,
 )
+from pocket_option_analyzer.vision.models.candle_filter_diagnostics import (
+    CandleFilterDiagnostics,
+)
 from pocket_option_analyzer.vision.services.binary_mask_builder import (
     BinaryMaskBuilder,
 )
@@ -43,6 +46,16 @@ class CandleDetectionPipeline:
         self._filter = candle_filter
         self._color_detector = color_detector
         self._geometry_extractor = geometry_extractor
+
+    @property
+    def last_filter_diagnostics(
+        self,
+    ) -> CandleFilterDiagnostics | None:
+        """
+        Diagnóstico producido por CandleFilter en la última detección.
+        """
+
+        return self._filter.last_diagnostics
 
     def detect(
         self,

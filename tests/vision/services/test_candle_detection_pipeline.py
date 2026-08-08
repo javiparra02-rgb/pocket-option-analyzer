@@ -4,6 +4,7 @@ import numpy as np
 from pocket_option_analyzer.vision.models import (
     CandleCandidate,
     CandleColor,
+    CandleFilterDiagnostics,
     CandleGeometry,
 )
 from pocket_option_analyzer.vision.services import (
@@ -33,7 +34,22 @@ class FakeSegmenter:
 
 
 class FakeFilter:
-    def filter(self, candles):
+    def __init__(
+        self,
+    ) -> None:
+        self.last_diagnostics = CandleFilterDiagnostics(
+            input_count=1,
+            dimension_valid_count=1,
+            width_valid_count=1,
+            merged_count=1,
+            returned_count=1,
+            dominant_width=5.0,
+        )
+
+    def filter(
+        self,
+        candles,
+    ):
         return candles
 
 
@@ -248,3 +264,23 @@ def test_detect_assigns_candle_geometry_when_extractor_is_configured() -> None:
     assert result[0].geometry is geometry
     assert geometry_extractor.received_mask is image
     assert geometry_extractor.received_candidate.x == 10
+
+
+def test_detection_pipeline_exposes_filter_diagnostics() -> None:
+
+    candle_filter = FakeFilter()
+
+    pipeline = CandleDetectionPipeline(
+        mask_builder=FakeMaskBuilder(),
+        segmenter=FakeSegmenter(),
+        candle_filter=candle_filter,
+    )
+
+    pipeline.detect(
+        np.zeros(
+            (100, 100),
+            dtype=np.uint8,
+        )
+    )
+
+    assert pipeline.last_filter_diagnostics is (candle_filter.last_diagnostics)
