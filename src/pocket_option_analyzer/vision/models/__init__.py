@@ -5,6 +5,7 @@ from pocket_option_analyzer.vision.models.candle_geometry import (
 from .candle_candidate import CandleCandidate
 from .candle_color import CandleColor
 from .candle_color_profile import CandleColorProfile
+from .candle_filter_diagnostics import CandleFilterDiagnostics
 from .candle_metrics import CandleMetrics
 from .candle_series import CandleSeries
 from .candle_type import CandleType
@@ -17,6 +18,7 @@ __all__ = [
     "CandleCandidate",
     "CandleColor",
     "CandleColorProfile",
+    "CandleFilterDiagnostics",
     "CandleMetrics",
     "CandleSeries",
     "CandleType",

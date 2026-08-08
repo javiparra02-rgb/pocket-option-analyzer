@@ -7,6 +7,7 @@ from statistics import median
 from pocket_option_analyzer.vision.models import (
     CandleCandidate,
     CandleColor,
+    CandleFilterDiagnostics,
 )
 
 
@@ -75,6 +76,17 @@ class CandleFilter:
         self._anchor_min_height_ratio = anchor_min_height_ratio
         self._same_column_center_ratio = same_column_center_ratio
         self._max_candidates = max_candidates
+        self._last_diagnostics: CandleFilterDiagnostics | None = None
+
+    @property
+    def last_diagnostics(
+        self,
+    ) -> CandleFilterDiagnostics | None:
+        """
+        Diagnóstico correspondiente a la última ejecución completada.
+        """
+
+        return self._last_diagnostics
 
     def filter(
         self,
@@ -82,17 +94,35 @@ class CandleFilter:
     ) -> list[CandleCandidate]:
         """
         Filtra, fusiona y ordena los candidatos de izquierda a derecha.
+
+        Conserva un diagnóstico de las cantidades observadas en cada etapa
+        para permitir auditar la detección sobre capturas reales.
         """
+
+        source_candidates = list(
+            candidates,
+        )
 
         dimension_candidates = [
             candidate
-            for candidate in candidates
+            for candidate in source_candidates
             if self._has_valid_dimensions(
                 candidate=candidate,
             )
         ]
 
         if not dimension_candidates:
+            self._last_diagnostics = CandleFilterDiagnostics(
+                input_count=len(
+                    source_candidates,
+                ),
+                dimension_valid_count=0,
+                width_valid_count=0,
+                merged_count=0,
+                returned_count=0,
+                dominant_width=None,
+            )
+
             return []
 
         dominant_width = self._estimate_dominant_width(
@@ -117,7 +147,28 @@ class CandleFilter:
             key=lambda candidate: candidate.x,
         )
 
-        return merged_candidates[-self._max_candidates :]
+        returned_candidates = merged_candidates[-self._max_candidates :]
+
+        self._last_diagnostics = CandleFilterDiagnostics(
+            input_count=len(
+                source_candidates,
+            ),
+            dimension_valid_count=len(
+                dimension_candidates,
+            ),
+            width_valid_count=len(
+                width_candidates,
+            ),
+            merged_count=len(
+                merged_candidates,
+            ),
+            returned_count=len(
+                returned_candidates,
+            ),
+            dominant_width=dominant_width,
+        )
+
+        return returned_candidates
 
     def _has_valid_dimensions(
         self,

@@ -364,3 +364,105 @@ def test_candle_filter_does_not_merge_neighboring_candles() -> None:
         first,
         second,
     ]
+
+
+def test_candle_filter_records_stage_diagnostics() -> None:
+
+    upper_fragment = _candidate(
+        x=100,
+        y=20,
+        width=50,
+        height=35,
+        area=1750,
+    )
+
+    lower_fragment = _candidate(
+        x=100,
+        y=60,
+        width=50,
+        height=40,
+        area=2000,
+    )
+
+    second_candle = _candidate(
+        x=160,
+        y=30,
+        width=50,
+        height=70,
+        area=3500,
+    )
+
+    narrow_candidate = _candidate(
+        x=40,
+        y=20,
+        width=10,
+        height=20,
+        area=200,
+    )
+
+    invalid_dimension_candidate = _candidate(
+        x=20,
+        y=20,
+        width=5,
+        height=4,
+        area=20,
+    )
+
+    candle_filter = CandleFilter()
+
+    result = candle_filter.filter(
+        [
+            invalid_dimension_candidate,
+            narrow_candidate,
+            lower_fragment,
+            second_candle,
+            upper_fragment,
+        ]
+    )
+
+    diagnostics = candle_filter.last_diagnostics
+
+    assert len(result) == 2
+
+    assert diagnostics is not None
+
+    assert diagnostics.input_count == 5
+    assert diagnostics.dimension_valid_count == 4
+    assert diagnostics.width_valid_count == 3
+    assert diagnostics.merged_count == 2
+    assert diagnostics.returned_count == 2
+
+    assert diagnostics.dominant_width == 50.0
+
+    assert diagnostics.rejected_by_dimensions == 1
+    assert diagnostics.rejected_by_width == 1
+    assert diagnostics.merged_fragments == 1
+    assert diagnostics.truncated_count == 0
+
+
+def test_candle_filter_records_empty_diagnostics() -> None:
+
+    candle_filter = CandleFilter()
+
+    result = candle_filter.filter(
+        [],
+    )
+
+    diagnostics = candle_filter.last_diagnostics
+
+    assert result == []
+
+    assert diagnostics is not None
+
+    assert diagnostics.input_count == 0
+    assert diagnostics.dimension_valid_count == 0
+    assert diagnostics.width_valid_count == 0
+    assert diagnostics.merged_count == 0
+    assert diagnostics.returned_count == 0
+
+    assert diagnostics.dominant_width is None
+
+    assert diagnostics.rejected_by_dimensions == 0
+    assert diagnostics.rejected_by_width == 0
+    assert diagnostics.merged_fragments == 0
+    assert diagnostics.truncated_count == 0
