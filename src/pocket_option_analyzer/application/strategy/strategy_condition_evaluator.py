@@ -14,6 +14,13 @@ from pocket_option_analyzer.vision.models import (
     TrendDirection,
 )
 
+from .strategy_condition_audit import (
+    DirectionConditionAudit,
+    StrategyCondition,
+    StrategyConditionAudit,
+    StrategyConditionResult,
+)
+
 
 class StrategyConditionEvaluator:
     """
@@ -44,26 +51,20 @@ class StrategyConditionEvaluator:
         analysis: MarketAnalysis,
     ) -> MarketSignal:
 
-        call_failures = self._call_failures(
+        audit = self.audit(
             profile=profile,
             indicators=indicators,
             analysis=analysis,
         )
 
-        if not call_failures:
+        if audit.call.is_confirmed:
             return MarketSignal(
                 direction=SignalDirection.CALL,
                 strength=SignalStrength.HIGH,
                 reason="OTC Precision 10S CALL setup confirmed.",
             )
 
-        put_failures = self._put_failures(
-            profile=profile,
-            indicators=indicators,
-            analysis=analysis,
-        )
-
-        if not put_failures:
+        if audit.put.is_confirmed:
             return MarketSignal(
                 direction=SignalDirection.PUT,
                 strength=SignalStrength.HIGH,
@@ -72,114 +73,123 @@ class StrategyConditionEvaluator:
 
         return MarketSignal.neutral(
             reason=self._neutral_reason(
-                call_failures=call_failures,
-                put_failures=put_failures,
+                call_failures=list(audit.call.failures),
+                put_failures=list(audit.put.failures),
             ),
         )
 
-    def _call_failures(
+    def audit(
         self,
         profile: StrategyProfile,
         indicators: IndicatorSnapshot,
         analysis: MarketAnalysis,
-    ) -> list[str]:
+    ) -> StrategyConditionAudit:
+        """Return all seven outcomes for CALL and PUT without changing STRICT."""
 
-        failures: list[str] = []
+        separation_ok = (
+            indicators.ema.separation_candles >= profile.ema_min_separation_candles
+        )
 
-        if analysis.trend is not TrendDirection.BULLISH:
-            failures.append(
-                "trend is not bullish",
-            )
+        return StrategyConditionAudit(
+            call=DirectionConditionAudit(
+                direction=SignalDirection.CALL,
+                conditions=(
+                    self._result(
+                        StrategyCondition.TREND,
+                        analysis.trend is TrendDirection.BULLISH,
+                        "trend is not bullish",
+                    ),
+                    self._result(
+                        StrategyCondition.EMA_ALIGNMENT,
+                        indicators.ema.is_bullish_alignment,
+                        "EMA alignment is not bullish",
+                    ),
+                    self._result(
+                        StrategyCondition.EMA_SEPARATION,
+                        separation_ok,
+                        "EMA separation is insufficient",
+                    ),
+                    self._result(
+                        StrategyCondition.RSI_RANGE,
+                        indicators.rsi.is_between(
+                            profile.rsi_call_min, profile.rsi_call_max
+                        ),
+                        "RSI is not in CALL range",
+                    ),
+                    self._result(
+                        StrategyCondition.STOCHASTIC_CROSS,
+                        indicators.stochastic.crossed_up,
+                        "stochastic did not cross up",
+                    ),
+                    self._result(
+                        StrategyCondition.STOCHASTIC_TRIGGER_ZONE,
+                        indicators.stochastic.k_previous
+                        <= profile.stoch_call_trigger_max,
+                        "stochastic previous K is above CALL trigger zone",
+                    ),
+                    self._result(
+                        StrategyCondition.RECENT_CANDLE_CONFIRMATION,
+                        self._has_recent_candle_type(analysis, CandleType.BULLISH),
+                        "recent closed candle is not bullish",
+                    ),
+                ),
+            ),
+            put=DirectionConditionAudit(
+                direction=SignalDirection.PUT,
+                conditions=(
+                    self._result(
+                        StrategyCondition.TREND,
+                        analysis.trend is TrendDirection.BEARISH,
+                        "trend is not bearish",
+                    ),
+                    self._result(
+                        StrategyCondition.EMA_ALIGNMENT,
+                        indicators.ema.is_bearish_alignment,
+                        "EMA alignment is not bearish",
+                    ),
+                    self._result(
+                        StrategyCondition.EMA_SEPARATION,
+                        separation_ok,
+                        "EMA separation is insufficient",
+                    ),
+                    self._result(
+                        StrategyCondition.RSI_RANGE,
+                        indicators.rsi.is_between(
+                            profile.rsi_put_min, profile.rsi_put_max
+                        ),
+                        "RSI is not in PUT range",
+                    ),
+                    self._result(
+                        StrategyCondition.STOCHASTIC_CROSS,
+                        indicators.stochastic.crossed_down,
+                        "stochastic did not cross down",
+                    ),
+                    self._result(
+                        StrategyCondition.STOCHASTIC_TRIGGER_ZONE,
+                        indicators.stochastic.k_previous
+                        >= profile.stoch_put_trigger_min,
+                        "stochastic previous K is below PUT trigger zone",
+                    ),
+                    self._result(
+                        StrategyCondition.RECENT_CANDLE_CONFIRMATION,
+                        self._has_recent_candle_type(analysis, CandleType.BEARISH),
+                        "recent closed candle is not bearish",
+                    ),
+                ),
+            ),
+        )
 
-        if not indicators.ema.is_bullish_alignment:
-            failures.append(
-                "EMA alignment is not bullish",
-            )
-
-        if indicators.ema.separation_candles < profile.ema_min_separation_candles:
-            failures.append(
-                "EMA separation is insufficient",
-            )
-
-        if not indicators.rsi.is_between(
-            profile.rsi_call_min,
-            profile.rsi_call_max,
-        ):
-            failures.append(
-                "RSI is not in CALL range",
-            )
-
-        if not indicators.stochastic.crossed_up:
-            failures.append(
-                "stochastic did not cross up",
-            )
-
-        if indicators.stochastic.k_previous > profile.stoch_call_trigger_max:
-            failures.append(
-                "stochastic previous K is above CALL trigger zone",
-            )
-
-        if not self._has_recent_candle_type(
-            analysis=analysis,
-            candle_type=CandleType.BULLISH,
-        ):
-            failures.append(
-                "recent closed candle is not bullish",
-            )
-
-        return failures
-
-    def _put_failures(
-        self,
-        profile: StrategyProfile,
-        indicators: IndicatorSnapshot,
-        analysis: MarketAnalysis,
-    ) -> list[str]:
-
-        failures: list[str] = []
-
-        if analysis.trend is not TrendDirection.BEARISH:
-            failures.append(
-                "trend is not bearish",
-            )
-
-        if not indicators.ema.is_bearish_alignment:
-            failures.append(
-                "EMA alignment is not bearish",
-            )
-
-        if indicators.ema.separation_candles < profile.ema_min_separation_candles:
-            failures.append(
-                "EMA separation is insufficient",
-            )
-
-        if not indicators.rsi.is_between(
-            profile.rsi_put_min,
-            profile.rsi_put_max,
-        ):
-            failures.append(
-                "RSI is not in PUT range",
-            )
-
-        if not indicators.stochastic.crossed_down:
-            failures.append(
-                "stochastic did not cross down",
-            )
-
-        if indicators.stochastic.k_previous < profile.stoch_put_trigger_min:
-            failures.append(
-                "stochastic previous K is below PUT trigger zone",
-            )
-
-        if not self._has_recent_candle_type(
-            analysis=analysis,
-            candle_type=CandleType.BEARISH,
-        ):
-            failures.append(
-                "recent closed candle is not bearish",
-            )
-
-        return failures
+    @staticmethod
+    def _result(
+        condition: StrategyCondition,
+        passed: bool,
+        failure_reason: str,
+    ) -> StrategyConditionResult:
+        return StrategyConditionResult(
+            condition=condition,
+            passed=passed,
+            failure_reason=None if passed else failure_reason,
+        )
 
     def _has_recent_candle_type(
         self,

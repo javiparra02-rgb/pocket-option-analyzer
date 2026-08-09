@@ -1,4 +1,5 @@
 from pocket_option_analyzer.application.strategy import (
+    StrategyCondition,
     StrategyConditionEvaluator,
 )
 from pocket_option_analyzer.domain.indicators import (
@@ -155,6 +156,80 @@ def test_evaluator_returns_neutral_with_diagnostics_when_conditions_do_not_match
     assert "PUT failed:" in signal.reason
     assert "trend is not bullish" in signal.reason
     assert "trend is not bearish" in signal.reason
+
+
+def test_audit_returns_all_typed_call_and_put_condition_outcomes() -> None:
+    evaluator = StrategyConditionEvaluator()
+    profile = StrategyProfile.otc_precision_10s()
+    indicators = IndicatorSnapshot(
+        ema=EmaSnapshot(
+            fast_value=105.0,
+            slow_value=100.0,
+            separation_candles=2,
+        ),
+        rsi=RsiSnapshot(value=57.0),
+        stochastic=StochasticSnapshot(
+            k_previous=18.0,
+            d_previous=20.0,
+            k_value=24.0,
+            d_value=21.0,
+        ),
+    )
+    analysis = _analysis(
+        trend=TrendDirection.BULLISH,
+        candle_type=CandleType.BULLISH,
+    )
+
+    audit = evaluator.audit(
+        profile=profile,
+        indicators=indicators,
+        analysis=analysis,
+    )
+
+    expected_conditions = tuple(StrategyCondition)
+    assert (
+        tuple(result.condition for result in audit.call.conditions)
+        == expected_conditions
+    )
+    assert (
+        tuple(result.condition for result in audit.put.conditions)
+        == expected_conditions
+    )
+    assert audit.call.total_count == 7
+    assert audit.call.passed_count == 6
+    assert audit.call.failures == ("EMA separation is insufficient",)
+    assert audit.put.total_count == 7
+    assert audit.put.passed_count == 0
+
+
+def test_evaluate_uses_structured_audit_as_its_source_of_truth() -> None:
+    evaluator = StrategyConditionEvaluator()
+    profile = StrategyProfile.otc_precision_10s()
+    indicators = IndicatorSnapshot(
+        ema=EmaSnapshot(
+            fast_value=105.0,
+            slow_value=100.0,
+            separation_candles=3,
+        ),
+        rsi=RsiSnapshot(value=57.0),
+        stochastic=StochasticSnapshot(
+            k_previous=18.0,
+            d_previous=20.0,
+            k_value=24.0,
+            d_value=21.0,
+        ),
+    )
+    analysis = _analysis(
+        trend=TrendDirection.BULLISH,
+        candle_type=CandleType.BULLISH,
+    )
+
+    audit = evaluator.audit(profile, indicators, analysis)
+    signal = evaluator.evaluate(profile, indicators, analysis)
+
+    assert audit.call.is_confirmed is True
+    assert audit.put.is_confirmed is False
+    assert signal.direction is SignalDirection.CALL
 
 
 def test_evaluator_accepts_recent_bearish_candle_for_put_confirmation() -> None:

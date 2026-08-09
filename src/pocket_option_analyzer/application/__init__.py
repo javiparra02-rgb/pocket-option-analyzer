@@ -18,7 +18,11 @@ from pocket_option_analyzer.application.signals import (
     VisualStrategySignalAnalysisPipeline,
 )
 from pocket_option_analyzer.application.strategy import (
+    DirectionConditionAudit,
+    StrategyCondition,
+    StrategyConditionAudit,
     StrategyConditionEvaluator,
+    StrategyConditionResult,
 )
 from pocket_option_analyzer.application.use_cases import (
     AnalyzeCapturedFrameUseCase,
@@ -30,6 +34,7 @@ from pocket_option_analyzer.application.use_cases import (
 __all__ = [
     "AnalysisRuntimeService",
     "AnalyzeCapturedFrameUseCase",
+    "DirectionConditionAudit",
     "FrameAnalysisLoop",
     "FrameAnalysisLoopService",
     "FrameCaptureService",
@@ -39,6 +44,9 @@ __all__ = [
     "SignalRecordingPipeline",
     "SignalRecordWriter",
     "StrategyConditionEvaluator",
+    "StrategyCondition",
+    "StrategyConditionAudit",
+    "StrategyConditionResult",
     "StrategySignalAnalysisPipeline",
     "StrategySignalGenerator",
     "TrendSignalGenerator",
