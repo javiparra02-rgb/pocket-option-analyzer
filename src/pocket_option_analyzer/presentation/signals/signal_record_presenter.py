@@ -19,6 +19,7 @@ class SignalRecordPresenter:
 
     VISUAL_DIAGNOSTICS_PREFIX = "[visual_diagnostics]"
     INDICATOR_DIAGNOSTICS_PREFIX = "[indicator_diagnostics]"
+    STRATEGY_DIAGNOSTICS_PREFIX = "[strategy_diagnostics]"
 
     def present(
         self,
@@ -56,6 +57,11 @@ class SignalRecordPresenter:
                 reason=record.signal.reason,
                 prefix=self.INDICATOR_DIAGNOSTICS_PREFIX,
                 default="Diagnóstico de indicadores: -",
+            ),
+            strategy_diagnostics_label=self._diagnostics_label(
+                reason=record.signal.reason,
+                prefix=self.STRATEGY_DIAGNOSTICS_PREFIX,
+                default="Diagnóstico de estrategia STRICT: -",
             ),
             operational_summary_label=self._operational_summary_label(
                 record=record,
@@ -200,11 +206,12 @@ class SignalRecordPresenter:
 
     def _diagnostic_prefixes(
         self,
-    ) -> tuple[str, str]:
+    ) -> tuple[str, str, str]:
 
         return (
             self.VISUAL_DIAGNOSTICS_PREFIX,
             self.INDICATOR_DIAGNOSTICS_PREFIX,
+            self.STRATEGY_DIAGNOSTICS_PREFIX,
         )
 
     def _format_reason(

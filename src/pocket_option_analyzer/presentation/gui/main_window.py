@@ -504,6 +504,13 @@ class MainWindow(QMainWindow):
             True,
         )
         self._indicator_diagnostics_label.setStyleSheet("color: #3c4043;")
+        self._strategy_diagnostics_label = QLabel(
+            "Diagnóstico de estrategia STRICT: -",
+        )
+        self._strategy_diagnostics_label.setWordWrap(
+            True,
+        )
+        self._strategy_diagnostics_label.setStyleSheet("color: #3c4043;")
 
         self._reason_text = QTextEdit()
         self._reason_text.setReadOnly(
@@ -748,6 +755,10 @@ class MainWindow(QMainWindow):
         return self._indicator_diagnostics_label.text()
 
     @property
+    def strategy_diagnostics_text(self) -> str:
+        return self._strategy_diagnostics_label.text()
+
+    @property
     def compact_mode_button_text(self) -> str:
         return self._compact_mode_button.text()
 
@@ -766,6 +777,10 @@ class MainWindow(QMainWindow):
     @property
     def indicator_diagnostics_visible(self) -> bool:
         return not self._indicator_diagnostics_label.isHidden()
+
+    @property
+    def strategy_diagnostics_visible(self) -> bool:
+        return not self._strategy_diagnostics_label.isHidden()
 
     @property
     def signal_history_visible(self) -> bool:
@@ -1113,6 +1128,9 @@ class MainWindow(QMainWindow):
         self._indicator_diagnostics_label.setText(
             view_model.indicator_diagnostics_label,
         )
+        self._strategy_diagnostics_label.setText(
+            view_model.strategy_diagnostics_label,
+        )
         self._reason_text.setPlainText(
             f"Motivo: {view_model.reason}",
         )
@@ -1178,6 +1196,9 @@ class MainWindow(QMainWindow):
         )
         self._indicator_diagnostics_label.setText(
             view_model.indicator_diagnostics_label,
+        )
+        self._strategy_diagnostics_label.setText(
+            view_model.strategy_diagnostics_label,
         )
         self._reason_text.setPlainText(
             f"Motivo: {view_model.reason}",
@@ -1300,6 +1321,9 @@ class MainWindow(QMainWindow):
         )
         layout.addWidget(
             self._indicator_diagnostics_label,
+        )
+        layout.addWidget(
+            self._strategy_diagnostics_label,
         )
         # layout.addWidget(
         #     self._reason_text,
@@ -1964,6 +1988,9 @@ class MainWindow(QMainWindow):
         self._indicator_diagnostics_label.setVisible(
             not enabled,
         )
+        self._strategy_diagnostics_label.setVisible(
+            not enabled,
+        )
         self._source_label.setVisible(
             not enabled,
         )
@@ -2243,7 +2270,7 @@ class MainWindow(QMainWindow):
                 y,
             )
 
-    def closeEvent(
+    def closeEvent(  # noqa: N802
         self,
         event,
     ) -> None:

@@ -27,4 +27,6 @@ class SignalRecordViewModel:
 
     indicator_diagnostics_label: str = "Diagnóstico de indicadores: -"
 
+    strategy_diagnostics_label: str = "Diagnóstico de estrategia STRICT: -"
+
     operational_summary_label: str = "Resumen operativo: ESPERAR"

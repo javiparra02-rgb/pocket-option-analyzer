@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pocket_option_analyzer.application.strategy import (
+    StrategyConditionAudit,
     StrategyConditionEvaluator,
 )
 from pocket_option_analyzer.domain.indicators import IndicatorSnapshot
@@ -24,6 +25,13 @@ class StrategySignalGenerator:
     ) -> None:
         self._profile = profile
         self._evaluator = evaluator
+        self._last_condition_audit: StrategyConditionAudit | None = None
+
+    @property
+    def last_condition_audit(self) -> StrategyConditionAudit | None:
+        """Audit used to produce the most recent signal, when available."""
+
+        return self._last_condition_audit
 
     def generate(
         self,
@@ -34,8 +42,11 @@ class StrategySignalGenerator:
         Genera una señal usando análisis visual + indicadores.
         """
 
-        return self._evaluator.evaluate(
+        audit = self._evaluator.audit(
             profile=self._profile,
             indicators=indicators,
             analysis=analysis,
         )
+        self._last_condition_audit = audit
+
+        return self._evaluator.evaluate_audit(audit)

@@ -11,6 +11,11 @@ from pocket_option_analyzer.application.market import (
 from pocket_option_analyzer.application.signals.strategy_signal_generator import (
     StrategySignalGenerator,
 )
+from pocket_option_analyzer.application.strategy import (
+    DirectionConditionAudit,
+    StrategyCondition,
+    StrategyConditionAudit,
+)
 from pocket_option_analyzer.domain.signals import MarketSignal
 from pocket_option_analyzer.domain.strategy import StrategyProfile
 from pocket_option_analyzer.vision.services import MarketAnalysisPipeline
@@ -147,8 +152,53 @@ class VisualStrategySignalAnalysisPipeline:
                     )
                 }\n"
                 f"{signal.reason}"
+                f"{self._strategy_diagnostics_suffix()}"
             ),
         )
+
+    def _strategy_diagnostics_suffix(self) -> str:
+        """Format the exact audit used by the generator, if it exposes one."""
+
+        audit = getattr(self._signal_generator, "last_condition_audit", None)
+
+        if not isinstance(audit, StrategyConditionAudit):
+            return ""
+
+        return f"\n{self._strategy_diagnostics_block(audit)}"
+
+    def _strategy_diagnostics_block(
+        self,
+        audit: StrategyConditionAudit,
+    ) -> str:
+        return (
+            "[strategy_diagnostics] Diagnóstico de estrategia STRICT:\n"
+            f"{self._direction_audit_lines(audit.call)}\n"
+            f"{self._direction_audit_lines(audit.put)}"
+        )
+
+    def _direction_audit_lines(
+        self,
+        audit: DirectionConditionAudit,
+    ) -> str:
+        condition_labels = {
+            StrategyCondition.TREND: "Tendencia",
+            StrategyCondition.EMA_ALIGNMENT: "Alineación EMA",
+            StrategyCondition.EMA_SEPARATION: "Separación EMA",
+            StrategyCondition.RSI_RANGE: "Rango RSI",
+            StrategyCondition.STOCHASTIC_CROSS: "Cruce Stochastic",
+            StrategyCondition.STOCHASTIC_TRIGGER_ZONE: "Zona prevK",
+            StrategyCondition.RECENT_CANDLE_CONFIRMATION: "Vela reciente",
+        }
+        lines = [
+            f"  {audit.direction.name}: {audit.passed_count}/{audit.total_count}",
+        ]
+
+        for result in audit.conditions:
+            state = "✅" if result.passed else "❌"
+            blocker = " — BLOQUEA" if not result.passed else ""
+            lines.append(f"    {state} {condition_labels[result.condition]}{blocker}")
+
+        return "\n".join(lines)
 
     def _not_enough_candles_reason(
         self,

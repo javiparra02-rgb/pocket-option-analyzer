@@ -176,9 +176,39 @@ def test_presenter_extracts_visual_diagnostics_from_reason() -> None:
     assert "Tendencia: BEARISH" not in view_model.reason
 
 
-def test_presenter_hides_visual_diagnostics_from_reason_when_indicators_are_missing() -> (
-    None
-):
+def test_presenter_exposes_strategy_diagnostics_without_inference() -> None:
+    reason = (
+        "[strategy_diagnostics] Diagnóstico de estrategia STRICT:\n"
+        "  CALL: 6/7\n"
+        "    ✅ Tendencia\n"
+        "    ❌ Separación EMA — BLOQUEA\n"
+        "  PUT: 2/7\n"
+        "    ❌ Tendencia — BLOQUEA\n"
+        "Waiting."
+    )
+
+    view_model = SignalRecordPresenter().present(
+        record=_record(
+            direction=SignalDirection.NONE,
+            strength=SignalStrength.NONE,
+            reason=reason,
+        ),
+    )
+
+    assert view_model.strategy_diagnostics_label == (
+        "Diagnóstico de estrategia STRICT:\n"
+        "  CALL: 6/7\n"
+        "    ✅ Tendencia\n"
+        "    ❌ Separación EMA — BLOQUEA\n"
+        "  PUT: 2/7\n"
+        "    ❌ Tendencia — BLOQUEA"
+    )
+    assert "[strategy_diagnostics]" not in view_model.reason
+    assert view_model.reason == "Waiting."
+
+
+def test_presenter_hides_visual_diagnostics_from_reason_when_indicators_are_missing(
+) -> None:
 
     presenter = SignalRecordPresenter()
 

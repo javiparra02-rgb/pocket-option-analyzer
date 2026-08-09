@@ -57,6 +57,14 @@ class StrategyConditionEvaluator:
             analysis=analysis,
         )
 
+        return self.evaluate_audit(audit)
+
+    def evaluate_audit(
+        self,
+        audit: StrategyConditionAudit,
+    ) -> MarketSignal:
+        """Build the STRICT signal from an already calculated audit."""
+
         if audit.call.is_confirmed:
             return MarketSignal(
                 direction=SignalDirection.CALL,

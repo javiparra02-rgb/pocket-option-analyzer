@@ -7,8 +7,10 @@ from pocket_option_analyzer.application.market import (
     VisualIndicatorSnapshotContext,
 )
 from pocket_option_analyzer.application.signals import (
+    StrategySignalGenerator,
     VisualStrategySignalAnalysisPipeline,
 )
+from pocket_option_analyzer.application.strategy import StrategyConditionEvaluator
 from pocket_option_analyzer.application.timing import (
     CandleIntervalKey,
 )
@@ -560,3 +562,52 @@ def test_visual_diagnostics_include_candle_filter_stages() -> None:
     )
 
     assert "Ancho dominante: 34.00 px" in result.reason
+
+
+def test_strategy_diagnostics_match_the_audit_used_for_the_signal() -> None:
+    profile = StrategyProfile.otc_precision_10s()
+    generator = StrategySignalGenerator(
+        profile=profile,
+        evaluator=StrategyConditionEvaluator(),
+    )
+    pipeline = VisualStrategySignalAnalysisPipeline(
+        market_analysis_pipeline=FakeMarketAnalysisPipeline(
+            result=_market_analysis(),
+        ),
+        indicator_snapshot_builder=FakeVisualIndicatorSnapshotBuilder(
+            result=_indicators(),
+        ),
+        signal_generator=generator,
+        profile=profile,
+    )
+
+    result = pipeline.analyze(image=np.zeros((100, 100, 3), dtype=np.uint8))
+
+    audit = generator.last_condition_audit
+    assert audit is not None
+    assert result.direction is SignalDirection.CALL
+    assert f"CALL: {audit.call.passed_count}/7" in result.reason
+    assert f"PUT: {audit.put.passed_count}/7" in result.reason
+    assert "✅ Tendencia" in result.reason
+    assert "❌ Tendencia — BLOQUEA" in result.reason
+    assert result.reason.count("— BLOQUEA") == len(audit.put.failures)
+
+
+def test_strategy_diagnostics_are_optional_for_compatible_fakes() -> None:
+    pipeline = VisualStrategySignalAnalysisPipeline(
+        market_analysis_pipeline=FakeMarketAnalysisPipeline(
+            result=_market_analysis(),
+        ),
+        indicator_snapshot_builder=FakeVisualIndicatorSnapshotBuilder(
+            result=_indicators(),
+        ),
+        signal_generator=FakeStrategySignalGenerator(
+            result=MarketSignal.neutral(reason="Waiting."),
+        ),
+        profile=StrategyProfile.otc_precision_10s(),
+    )
+
+    result = pipeline.analyze(image=np.zeros((100, 100, 3), dtype=np.uint8))
+
+    assert result.direction is SignalDirection.NONE
+    assert "[strategy_diagnostics]" not in result.reason
