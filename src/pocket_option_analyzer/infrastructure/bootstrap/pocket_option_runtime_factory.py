@@ -59,12 +59,14 @@ class PocketOptionRuntimeFactory:
         )
         / "signals.jsonl"
     )
+    DEFAULT_OBSERVATION_FILE_PATH = Path("logs") / "strategy_observations.jsonl"
 
     @staticmethod
     def create_runtime_service(
         capture_service: FrameCaptureService | None = None,
         signal_history: SignalHistory | None = None,
         signal_file_path: Path | None = DEFAULT_SIGNAL_FILE_PATH,
+        observation_file_path: Path | None = DEFAULT_OBSERVATION_FILE_PATH,
         strategy_profile: StrategyProfile | None = None,
         color_profile: CandleColorProfile | None = None,
         window_title: str = DEFAULT_WINDOW_TITLE,
@@ -96,6 +98,7 @@ class PocketOptionRuntimeFactory:
             capture_service=resolved_capture_service,
             signal_history=signal_history,
             signal_file_path=signal_file_path,
+            observation_file_path=observation_file_path,
             strategy_profile=strategy_profile,
             color_profile=resolved_color_profile,
             interval_seconds=interval_seconds,

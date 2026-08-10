@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
+
 import numpy as np
 
 from pocket_option_analyzer.application.market import (
@@ -15,10 +18,22 @@ from pocket_option_analyzer.application.strategy import (
     DirectionConditionAudit,
     StrategyCondition,
     StrategyConditionAudit,
+    StrategyObservation,
 )
+from pocket_option_analyzer.domain.indicators import IndicatorSnapshot
 from pocket_option_analyzer.domain.signals import MarketSignal
 from pocket_option_analyzer.domain.strategy import StrategyProfile
+from pocket_option_analyzer.vision.models import MarketAnalysis
 from pocket_option_analyzer.vision.services import MarketAnalysisPipeline
+
+
+@dataclass(frozen=True, slots=True)
+class _ObservationData:
+    audit: StrategyConditionAudit
+    market_analysis: MarketAnalysis
+    indicators: IndicatorSnapshot
+    context: VisualIndicatorSnapshotContext | None
+    timing: CandleIntervalIndicatorCacheStatus
 
 
 class VisualStrategySignalAnalysisPipeline:
@@ -55,6 +70,26 @@ class VisualStrategySignalAnalysisPipeline:
             if entry_context_analyzer is not None
             else VisualEntryContextAnalyzer()
         )
+        self._last_observation_data: _ObservationData | None = None
+
+    def build_last_observation(
+        self,
+        observed_at: datetime,
+    ) -> StrategyObservation | None:
+        """Build the structured observation produced by the last analysis."""
+
+        data = self._last_observation_data
+        if data is None or data.timing.cached_key is None:
+            return None
+        return StrategyObservation(
+            observed_at=observed_at,
+            candle_interval_started_at=data.timing.cached_key.started_at,
+            audit=data.audit,
+            trend=data.market_analysis.trend,
+            indicators=data.indicators,
+            visual_context=data.context,
+            detection_diagnostics=data.market_analysis.detection_diagnostics,
+        )
 
     def analyze(
         self,
@@ -67,6 +102,7 @@ class VisualStrategySignalAnalysisPipeline:
         velas para calcular indicadores.
         """
 
+        self._last_observation_data = None
         market_analysis = self._market_analysis_pipeline.analyze(
             image=image,
         )
@@ -129,6 +165,20 @@ class VisualStrategySignalAnalysisPipeline:
             analysis=market_analysis,
             indicators=indicators,
         )
+
+        audit = getattr(self._signal_generator, "last_condition_audit", None)
+        if (
+            isinstance(audit, StrategyConditionAudit)
+            and snapshot_timing_status is not None
+            and snapshot_timing_status.is_current
+        ):
+            self._last_observation_data = _ObservationData(
+                audit=audit,
+                market_analysis=market_analysis,
+                indicators=indicators,
+                context=self._indicator_snapshot_builder.snapshot_context,
+                timing=snapshot_timing_status,
+            )
 
         visual_diagnostics_line = self._visual_diagnostics_line(
             market_analysis=market_analysis,

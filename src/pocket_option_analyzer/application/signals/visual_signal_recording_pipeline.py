@@ -13,8 +13,11 @@ from pocket_option_analyzer.application.signals.contracts import (
 from pocket_option_analyzer.application.signals.signal_recorder import (
     SignalRecorder,
 )
-from pocket_option_analyzer.application.signals.visual_strategy_signal_analysis_pipeline import (
+from pocket_option_analyzer.application.signals.visual_strategy_signal_analysis_pipeline import (  # noqa: E501
     VisualStrategySignalAnalysisPipeline,
+)
+from pocket_option_analyzer.application.strategy import (
+    StrategyObservationRecorder,
 )
 from pocket_option_analyzer.domain.signals import SignalRecord
 
@@ -34,11 +37,13 @@ class VisualSignalRecordingPipeline:
         recorder: SignalRecorder,
         record_writer: SignalRecordWriter | None = None,
         actionable_signal_gate: ActionableSignalGate | None = None,
+        observation_recorder: StrategyObservationRecorder | None = None,
     ) -> None:
         self._analysis_pipeline = analysis_pipeline
         self._recorder = recorder
         self._record_writer = record_writer
         self._actionable_signal_gate = actionable_signal_gate or ActionableSignalGate()
+        self._observation_recorder = observation_recorder
 
     def analyze_and_record(
         self,
@@ -57,6 +62,13 @@ class VisualSignalRecordingPipeline:
         resolved_created_at = created_at or datetime.now(
             UTC,
         )
+
+        if self._observation_recorder is not None:
+            observation = self._analysis_pipeline.build_last_observation(
+                observed_at=resolved_created_at,
+            )
+            if observation is not None:
+                self._observation_recorder.record(observation)
 
         gate_decision = self._actionable_signal_gate.evaluate(
             signal=signal,
