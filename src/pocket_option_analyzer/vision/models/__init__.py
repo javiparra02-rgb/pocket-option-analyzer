@@ -11,6 +11,11 @@ from .candle_series import CandleSeries
 from .candle_type import CandleType
 from .chart_region import ChartRegion
 from .classified_candle import ClassifiedCandle
+from .current_visual_price import CurrentVisualPrice
+from .current_visual_price_extraction import (
+    CurrentVisualPriceExtraction,
+    CurrentVisualPriceStatus,
+)
 from .market_analysis import MarketAnalysis
 from .trend_direction import TrendDirection
 
@@ -24,6 +29,9 @@ __all__ = [
     "CandleType",
     "ChartRegion",
     "ClassifiedCandle",
+    "CurrentVisualPrice",
+    "CurrentVisualPriceExtraction",
+    "CurrentVisualPriceStatus",
     "MarketAnalysis",
     "TrendDirection",
     "CandleGeometry",

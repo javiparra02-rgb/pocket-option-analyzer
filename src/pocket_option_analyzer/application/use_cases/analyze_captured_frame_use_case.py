@@ -53,6 +53,11 @@ class AnalyzeCapturedFrameUseCase:
 
         return self._pipeline.analyze_and_record(
             image=frame.image,
+            price_observation_image=getattr(
+                frame,
+                "price_observation_image",
+                None,
+            ),
             created_at=self._resolve_created_at(frame),
             source=self._source,
         )

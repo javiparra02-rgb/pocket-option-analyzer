@@ -15,6 +15,7 @@ class Frame:
     frame_id: int
     timestamp: datetime
     image: np.ndarray
+    price_observation_image: np.ndarray | None = None
 
     @property
     def width(self) -> int:

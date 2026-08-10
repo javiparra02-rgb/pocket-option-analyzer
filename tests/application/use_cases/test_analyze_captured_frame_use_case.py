@@ -28,21 +28,30 @@ class FakeFrameWithoutTimestamp:
     image: np.ndarray
 
 
+@dataclass(frozen=True, slots=True)
+class FakeFrameWithPriceObservationImage:
+    image: np.ndarray
+    price_observation_image: np.ndarray
+
+
 class FakeVisualSignalRecordingPipeline:
     def __init__(self) -> None:
         self.received_image = None
         self.received_created_at = None
         self.received_source = None
+        self.received_price_observation_image = None
 
     def analyze_and_record(
         self,
         image,
         created_at=None,
         source="visual_strategy_signal_analysis",
+        price_observation_image=None,
     ) -> SignalRecord:
         self.received_image = image
         self.received_created_at = created_at
         self.received_source = source
+        self.received_price_observation_image = price_observation_image
 
         return SignalRecord(
             signal=MarketSignal(
@@ -122,4 +131,22 @@ def test_execute_accepts_frame_without_timestamp() -> None:
     assert record.signal.direction is SignalDirection.CALL
     assert pipeline.received_image is image
     assert pipeline.received_created_at is None
+    assert pipeline.received_price_observation_image is None
     assert record.source == "captured_frame_visual_analysis"
+
+
+def test_execute_propagates_price_observation_image_by_identity() -> None:
+    image = np.zeros((100, 100, 3), dtype=np.uint8)
+    price_observation_image = np.zeros((20, 100, 3), dtype=np.uint8)
+    pipeline = FakeVisualSignalRecordingPipeline()
+    use_case = AnalyzeCapturedFrameUseCase(pipeline=pipeline)
+
+    use_case.execute(
+        frame=FakeFrameWithPriceObservationImage(
+            image=image,
+            price_observation_image=price_observation_image,
+        )
+    )
+
+    assert pipeline.received_image is image
+    assert pipeline.received_price_observation_image is price_observation_image

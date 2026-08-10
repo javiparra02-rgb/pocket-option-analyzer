@@ -50,6 +50,7 @@ class VisualSignalRecordingPipeline:
         image: np.ndarray,
         created_at: datetime | None = None,
         source: str = "visual_strategy_signal_analysis",
+        price_observation_image: np.ndarray | None = None,
     ) -> SignalRecord:
         """
         Analiza una imagen y registra la decisión del gate.
@@ -57,6 +58,7 @@ class VisualSignalRecordingPipeline:
 
         signal = self._analysis_pipeline.analyze(
             image=image,
+            price_observation_image=price_observation_image,
         )
 
         resolved_created_at = created_at or datetime.now(
@@ -64,6 +66,14 @@ class VisualSignalRecordingPipeline:
         )
 
         if self._observation_recorder is not None:
+            self._observation_recorder.resolve_due(
+                observed_at=resolved_created_at,
+                exit_reference=getattr(
+                    self._analysis_pipeline,
+                    "last_price_reference",
+                    None,
+                ),
+            )
             observation = self._analysis_pipeline.build_last_observation(
                 observed_at=resolved_created_at,
             )

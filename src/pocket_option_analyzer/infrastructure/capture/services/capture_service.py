@@ -24,6 +24,7 @@ from pocket_option_analyzer.vision.preprocessing import FrameValidator
 from pocket_option_analyzer.vision.services import (
     ChartRegionExtractor,
     DatasetCaptureService,
+    PriceObservationRegionExtractor,
 )
 
 
@@ -42,6 +43,8 @@ class CaptureService:
         frame_buffer: FrameBuffer,
         dataset_capture: DatasetCaptureService | None = None,
         window_title: str = "Pocket Option",
+        price_observation_region_extractor: PriceObservationRegionExtractor
+        | None = None,
     ) -> None:
         self._finder = finder
         self._reader = reader
@@ -51,6 +54,9 @@ class CaptureService:
         self._frame_buffer = frame_buffer
         self._dataset_capture = dataset_capture
         self._window_title = window_title
+        self._price_observation_region_extractor = (
+            price_observation_region_extractor
+        )
 
     def capture_once(
         self,
@@ -107,13 +113,47 @@ class CaptureService:
         ):
             return None
 
+        price_observation_image: np.ndarray | None = None
+
+        if self._price_observation_region_extractor is not None:
+            price_observation_region = (
+                self._price_observation_region_extractor.extract(
+                    image,
+                )
+            )
+
+            if not self._region_fits_image(
+                region=price_observation_region,
+                image=image,
+            ):
+                return None
+
+            price_observation_image = image[
+                price_observation_region.y : (
+                    price_observation_region.y
+                    + price_observation_region.height
+                ),
+                price_observation_region.x : (
+                    price_observation_region.x
+                    + price_observation_region.width
+                ),
+            ].copy(
+                order="C",
+            )
+
+            if not FrameValidator.validate(
+                price_observation_image,
+            ):
+                return None
+
         if self._dataset_capture is not None:
             self._dataset_capture.save(
                 roi,
             )
 
         frame = self._frame_factory.create(
-            roi,
+            image=roi,
+            price_observation_image=price_observation_image,
         )
 
         self._frame_buffer.append(

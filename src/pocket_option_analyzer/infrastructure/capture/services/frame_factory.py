@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import numpy as np
 
@@ -19,7 +19,11 @@ class FrameFactory:
     def __init__(self) -> None:
         self._next_frame_id = 1
 
-    def create(self, image: np.ndarray) -> Frame:
+    def create(
+        self,
+        image: np.ndarray,
+        price_observation_image: np.ndarray | None = None,
+    ) -> Frame:
         """
         Crea un nuevo Frame.
 
@@ -27,6 +31,8 @@ class FrameFactory:
         ----------
         image:
             Imagen capturada.
+        price_observation_image:
+            Imagen opcional para observar el precio visual.
 
         Returns
         -------
@@ -35,8 +41,9 @@ class FrameFactory:
 
         frame = Frame(
             frame_id=self._next_frame_id,
-            timestamp=datetime.now(),
+            timestamp=datetime.now(UTC),
             image=image,
+            price_observation_image=price_observation_image,
         )
 
         self._next_frame_id += 1

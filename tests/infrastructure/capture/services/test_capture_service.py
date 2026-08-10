@@ -104,14 +104,14 @@ class FakeRegionExtractor:
         )
 
         self.extract_calls = 0
+        self.received_images: list[np.ndarray] = []
 
     def extract(
         self,
         image,
     ) -> ChartRegion:
-        del image
-
         self.extract_calls += 1
+        self.received_images.append(image)
 
         return self._region
 
@@ -195,6 +195,89 @@ def test_capture_once_detaches_roi_from_full_capture() -> None:
     )
 
     assert frame_buffer.latest() is frame
+
+
+def test_capture_once_derives_independent_rois_from_one_capture() -> None:
+    source_image = np.arange(
+        200 * 200 * 3,
+        dtype=np.uint8,
+    ).reshape(200, 200, 3)
+    expected_chart_roi = source_image[20:120, 20:120].copy()
+    expected_price_roi = source_image[60:160, 60:160].copy()
+    capture = FakeCapture(image=source_image)
+    chart_extractor = FakeRegionExtractor()
+    price_extractor = FakeRegionExtractor(
+        region=ChartRegion(x=60, y=60, width=100, height=100)
+    )
+
+    service = CaptureService(
+        finder=FakeFinder(),
+        reader=FakeReader(),
+        capture=capture,
+        region_extractor=chart_extractor,
+        frame_factory=FrameFactory(),
+        frame_buffer=FrameBuffer(),
+        price_observation_region_extractor=price_extractor,
+    )
+
+    frame = service.capture_once()
+
+    assert frame is not None
+    assert frame.price_observation_image is not None
+    assert capture.capture_calls == 1
+    assert chart_extractor.received_images == [source_image]
+    assert price_extractor.received_images == [source_image]
+    assert frame.image.flags.c_contiguous is True
+    assert frame.price_observation_image.flags.c_contiguous is True
+    assert not np.shares_memory(frame.image, source_image)
+    assert not np.shares_memory(frame.price_observation_image, source_image)
+    assert not np.shares_memory(frame.image, frame.price_observation_image)
+    assert np.array_equal(frame.image, expected_chart_roi)
+    assert np.array_equal(frame.price_observation_image, expected_price_roi)
+
+    source_image.fill(0)
+
+    assert np.array_equal(frame.image, expected_chart_roi)
+    assert np.array_equal(
+        frame.price_observation_image,
+        expected_price_roi,
+    )
+
+
+def test_capture_once_without_price_extractor_keeps_optional_image_none() -> None:
+    service = CaptureService(
+        finder=FakeFinder(),
+        reader=FakeReader(),
+        capture=FakeCapture(),
+        region_extractor=FakeRegionExtractor(),
+        frame_factory=FrameFactory(),
+        frame_buffer=FrameBuffer(),
+    )
+
+    frame = service.capture_once()
+
+    assert frame is not None
+    assert frame.price_observation_image is None
+
+
+def test_capture_once_rejects_price_region_outside_capture_bounds() -> None:
+    frame_buffer = FrameBuffer()
+    service = CaptureService(
+        finder=FakeFinder(),
+        reader=FakeReader(),
+        capture=FakeCapture(),
+        region_extractor=FakeRegionExtractor(),
+        frame_factory=FrameFactory(),
+        frame_buffer=frame_buffer,
+        price_observation_region_extractor=FakeRegionExtractor(
+            region=ChartRegion(x=150, y=20, width=100, height=100)
+        ),
+    )
+
+    result = service.capture_once()
+
+    assert result is None
+    assert frame_buffer.latest() is None
 
 
 def test_capture_once_returns_none_when_window_is_temporarily_unavailable() -> None:

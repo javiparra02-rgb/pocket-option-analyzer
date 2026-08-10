@@ -19,6 +19,9 @@ from pocket_option_analyzer.domain.signals import (
 from pocket_option_analyzer.infrastructure.bootstrap import (
     SignalPipelineFactory,
 )
+from pocket_option_analyzer.vision.services import (
+    PocketOptionCurrentVisualPriceExtractor,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,7 +71,7 @@ def _frame() -> FakeFrame:
 
     return FakeFrame(
         image=np.zeros(
-            (100, 100, 3),
+            (100, 1161, 3),
             dtype=np.uint8,
         ),
         captured_at=datetime(
@@ -90,7 +93,7 @@ def test_factory_creates_pipeline_that_records_in_memory() -> None:
 
     record = pipeline.analyze_and_record(
         image=np.zeros(
-            (100, 100, 3),
+            (100, 1161, 3),
             dtype=np.uint8,
         ),
         indicators=_indicators(),
@@ -114,7 +117,7 @@ def test_factory_creates_pipeline_that_writes_jsonl_file(
 
     record = pipeline.analyze_and_record(
         image=np.zeros(
-            (100, 100, 3),
+            (100, 1161, 3),
             dtype=np.uint8,
         ),
         indicators=_indicators(),
@@ -146,7 +149,7 @@ def test_factory_creates_visual_pipeline_that_records_in_memory() -> None:
 
     record = pipeline.analyze_and_record(
         image=np.zeros(
-            (100, 100, 3),
+            (100, 1161, 3),
             dtype=np.uint8,
         ),
     )
@@ -170,7 +173,7 @@ def test_factory_creates_visual_pipeline_that_writes_jsonl_file(
 
     record = pipeline.analyze_and_record(
         image=np.zeros(
-            (100, 100, 3),
+            (100, 1161, 3),
             dtype=np.uint8,
         ),
     )
@@ -370,3 +373,15 @@ def test_factory_creates_analysis_runtime_service_that_writes_jsonl_file(
     assert data["strength"] == "none"
     assert data["source"] == "captured_frame_visual_analysis"
     assert data["is_actionable"] is False
+
+
+def test_factory_injects_current_visual_price_extractor() -> None:
+    pipeline = SignalPipelineFactory._create_market_analysis_pipeline()
+
+    assert isinstance(
+        pipeline._current_visual_price_extractor,
+        PocketOptionCurrentVisualPriceExtractor,
+    )
+    assert (
+        pipeline._current_visual_price_extractor._effective_chart_right_x == 1062
+    )

@@ -44,6 +44,7 @@ from pocket_option_analyzer.vision.services import (
     CandleSeriesBuilder,
     MarketAnalysisPipeline,
     PocketOptionCandleMaskBuilder,
+    PocketOptionCurrentVisualPriceExtractor,
     TrendDetector,
 )
 
@@ -300,6 +301,11 @@ class SignalPipelineFactory:
             candle_analysis_pipeline=candle_analysis_pipeline,
             series_builder=CandleSeriesBuilder(),
             trend_detector=TrendDetector(),
+            current_visual_price_extractor=(
+                PocketOptionCurrentVisualPriceExtractor(
+                    effective_chart_right_x=1062,
+                )
+            ),
         )
 
     @staticmethod

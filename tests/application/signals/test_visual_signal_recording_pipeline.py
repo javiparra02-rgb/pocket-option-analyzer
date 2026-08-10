@@ -17,15 +17,42 @@ from pocket_option_analyzer.domain.signals import (
 
 
 class FakeVisualStrategySignalAnalysisPipeline:
+    def __init__(self) -> None:
+        self.received_image = None
+        self.received_price_observation_image = None
+
     def analyze(
         self,
         image,
+        price_observation_image=None,
     ) -> MarketSignal:
+        self.received_image = image
+        self.received_price_observation_image = price_observation_image
         return MarketSignal(
             direction=SignalDirection.CALL,
             strength=SignalStrength.HIGH,
             reason="Visual strategy conditions confirmed.",
         )
+
+
+def test_analyze_and_record_propagates_price_observation_image_by_identity() -> None:
+    image = np.zeros((100, 100, 3), dtype=np.uint8)
+    price_observation_image = np.zeros((20, 100, 3), dtype=np.uint8)
+    analysis_pipeline = FakeVisualStrategySignalAnalysisPipeline()
+    pipeline = VisualSignalRecordingPipeline(
+        analysis_pipeline=analysis_pipeline,
+        recorder=SignalRecorder(SignalHistory()),
+    )
+
+    pipeline.analyze_and_record(
+        image=image,
+        price_observation_image=price_observation_image,
+    )
+
+    assert analysis_pipeline.received_image is image
+    assert analysis_pipeline.received_price_observation_image is (
+        price_observation_image
+    )
 
 
 class FakeSignalRecordWriter:

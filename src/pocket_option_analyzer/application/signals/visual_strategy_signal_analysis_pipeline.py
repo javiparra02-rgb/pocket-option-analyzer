@@ -19,11 +19,14 @@ from pocket_option_analyzer.application.strategy import (
     StrategyCondition,
     StrategyConditionAudit,
     StrategyObservation,
+    VisualPriceReference,
+    VisualPriceReferenceResult,
+    VisualPriceReferenceStatus,
 )
 from pocket_option_analyzer.domain.indicators import IndicatorSnapshot
-from pocket_option_analyzer.domain.signals import MarketSignal
+from pocket_option_analyzer.domain.signals import MarketSignal, SignalDirection
 from pocket_option_analyzer.domain.strategy import StrategyProfile
-from pocket_option_analyzer.vision.models import MarketAnalysis
+from pocket_option_analyzer.vision.models import CandleType, MarketAnalysis
 from pocket_option_analyzer.vision.services import MarketAnalysisPipeline
 
 
@@ -34,6 +37,8 @@ class _ObservationData:
     indicators: IndicatorSnapshot
     context: VisualIndicatorSnapshotContext | None
     timing: CandleIntervalIndicatorCacheStatus
+    direction: SignalDirection
+    entry_reference: VisualPriceReference | None
 
 
 class VisualStrategySignalAnalysisPipeline:
@@ -71,6 +76,22 @@ class VisualStrategySignalAnalysisPipeline:
             else VisualEntryContextAnalyzer()
         )
         self._last_observation_data: _ObservationData | None = None
+        self._last_price_reference: VisualPriceReference | None = None
+        self._last_price_reference_result: VisualPriceReferenceResult | None = None
+
+    @property
+    def last_price_reference(self) -> VisualPriceReference | None:
+        return self._last_price_reference
+
+    @property
+    def last_price_reference_result(
+        self,
+    ) -> VisualPriceReferenceResult | None:
+        """
+        Devuelve el diagnóstico de la última referencia visual calculada.
+        """
+
+        return self._last_price_reference_result
 
     def build_last_observation(
         self,
@@ -87,6 +108,15 @@ class VisualStrategySignalAnalysisPipeline:
             audit=data.audit,
             trend=data.market_analysis.trend,
             indicators=data.indicators,
+            resolve_at=StrategyObservation.resolve_time(observed_at),
+            direction=(
+                data.direction
+                if data.direction in (SignalDirection.CALL, SignalDirection.PUT)
+                else None
+            ),
+            entry_reference=data.entry_reference,
+            entry_reference_result=self._last_price_reference_result,
+            current_visual_price=data.market_analysis.current_visual_price,
             visual_context=data.context,
             detection_diagnostics=data.market_analysis.detection_diagnostics,
         )
@@ -94,6 +124,7 @@ class VisualStrategySignalAnalysisPipeline:
     def analyze(
         self,
         image: np.ndarray,
+        price_observation_image: np.ndarray | None = None,
     ) -> MarketSignal:
         """
         Analiza una imagen y devuelve una señal de mercado.
@@ -103,9 +134,20 @@ class VisualStrategySignalAnalysisPipeline:
         """
 
         self._last_observation_data = None
+        self._last_price_reference = None
+        self._last_price_reference_result = None
+
         market_analysis = self._market_analysis_pipeline.analyze(
             image=image,
+            price_observation_image=price_observation_image,
         )
+
+        reference_result = self._price_reference_result(
+            market_analysis=market_analysis,
+        )
+
+        self._last_price_reference_result = reference_result
+        self._last_price_reference = reference_result.reference
 
         indicators = self._indicator_snapshot_builder.build(
             series=market_analysis.series,
@@ -178,6 +220,8 @@ class VisualStrategySignalAnalysisPipeline:
                 indicators=indicators,
                 context=self._indicator_snapshot_builder.snapshot_context,
                 timing=snapshot_timing_status,
+                direction=signal.direction,
+                entry_reference=self._last_price_reference,
             )
 
         visual_diagnostics_line = self._visual_diagnostics_line(
@@ -204,6 +248,158 @@ class VisualStrategySignalAnalysisPipeline:
                 f"{signal.reason}"
                 f"{self._strategy_diagnostics_suffix()}"
             ),
+        )
+
+    @staticmethod
+    def _price_reference_result(
+        market_analysis: MarketAnalysis,
+    ) -> VisualPriceReferenceResult:
+        """
+        Calcula la referencia visual del precio y conserva el motivo
+        exacto cuando no puede producir una referencia fiable.
+
+        Este método no relaja ninguna condición de comparabilidad.
+        Los casos que anteriormente devolvían None siguen teniendo
+        reference=None.
+        """
+
+        latest = market_analysis.series.latest
+
+        if latest is None:
+            return VisualPriceReferenceResult(
+                reference=None,
+                status=VisualPriceReferenceStatus.LATEST_CANDLE_MISSING,
+            )
+
+        latest_candidate = latest.candidate
+        latest_geometry = latest_candidate.geometry
+
+        if latest_geometry is None:
+            return VisualPriceReferenceResult(
+                reference=None,
+                status=VisualPriceReferenceStatus.LATEST_GEOMETRY_MISSING,
+                latest_candle_type=latest.candle_type.value,
+                latest_candidate_x=latest_candidate.x,
+                latest_candidate_y=latest_candidate.y,
+            )
+
+        anchor_candles = tuple(
+            candle
+            for candle in market_analysis.series.without_latest().candles
+            if (
+                candle.candle_type is not CandleType.UNKNOWN
+                and candle.candidate.geometry is not None
+            )
+        )
+
+        if len(anchor_candles) < 2:
+            return VisualPriceReferenceResult(
+                reference=None,
+                status=VisualPriceReferenceStatus.INSUFFICIENT_ANCHORS,
+                anchor_count=len(anchor_candles),
+                latest_candle_type=latest.candle_type.value,
+                latest_candidate_x=latest_candidate.x,
+                latest_candidate_y=latest_candidate.y,
+            )
+
+        chart_top_roi_y = min(
+            candle.candidate.geometry.high_y  # type: ignore[union-attr]
+            for candle in anchor_candles
+        )
+
+        chart_bottom_roi_y = max(
+            candle.candidate.geometry.low_y  # type: ignore[union-attr]
+            for candle in anchor_candles
+        )
+
+        chart_range_roi_px = chart_bottom_roi_y - chart_top_roi_y
+
+        if chart_range_roi_px <= 0:
+            return VisualPriceReferenceResult(
+                reference=None,
+                status=VisualPriceReferenceStatus.ZERO_ANCHOR_RANGE,
+                anchor_count=len(anchor_candles),
+                latest_candle_type=latest.candle_type.value,
+                latest_candidate_x=latest_candidate.x,
+                latest_candidate_y=latest_candidate.y,
+                anchor_top_roi_y=chart_top_roi_y,
+                anchor_bottom_roi_y=chart_bottom_roi_y,
+            )
+
+        if latest.candle_type is CandleType.BULLISH:
+            close_roi_y = latest_geometry.body_top_y
+
+        elif latest.candle_type is CandleType.BEARISH:
+            close_roi_y = latest_geometry.body_bottom_y
+
+        else:
+            return VisualPriceReferenceResult(
+                reference=None,
+                status=VisualPriceReferenceStatus.LATEST_CANDLE_NOT_DIRECTIONAL,
+                anchor_count=len(anchor_candles),
+                latest_candle_type=latest.candle_type.value,
+                latest_candidate_x=latest_candidate.x,
+                latest_candidate_y=latest_candidate.y,
+                anchor_top_roi_y=chart_top_roi_y,
+                anchor_bottom_roi_y=chart_bottom_roi_y,
+            )
+
+        raw_normalized_close = (chart_bottom_roi_y - close_roi_y) / chart_range_roi_px
+
+        if not chart_top_roi_y <= close_roi_y <= chart_bottom_roi_y:
+            return VisualPriceReferenceResult(
+                reference=None,
+                status=(VisualPriceReferenceStatus.CLOSE_OUTSIDE_ANCHOR_RANGE),
+                anchor_count=len(anchor_candles),
+                latest_candle_type=latest.candle_type.value,
+                latest_candidate_x=latest_candidate.x,
+                latest_candidate_y=latest_candidate.y,
+                close_roi_y=close_roi_y,
+                anchor_top_roi_y=chart_top_roi_y,
+                anchor_bottom_roi_y=chart_bottom_roi_y,
+                raw_normalized_close=raw_normalized_close,
+            )
+
+        def normalize(
+            roi_y: int,
+        ) -> float:
+            return (chart_bottom_roi_y - roi_y) / chart_range_roi_px
+
+        anchor_shape = tuple(
+            (
+                candle.candle_type.value,
+                normalize(
+                    candle.candidate.geometry.high_y,  # type: ignore[union-attr]
+                ),
+                normalize(
+                    candle.candidate.geometry.body_top_y,  # type: ignore[union-attr]
+                ),
+                normalize(
+                    candle.candidate.geometry.body_bottom_y,  # type: ignore[union-attr]
+                ),
+                normalize(
+                    candle.candidate.geometry.low_y,  # type: ignore[union-attr]
+                ),
+            )
+            for candle in anchor_candles
+        )
+
+        reference = VisualPriceReference(
+            value=raw_normalized_close,
+            anchor_shape=anchor_shape,
+        )
+
+        return VisualPriceReferenceResult(
+            reference=reference,
+            status=VisualPriceReferenceStatus.OK,
+            anchor_count=len(anchor_candles),
+            latest_candle_type=latest.candle_type.value,
+            latest_candidate_x=latest_candidate.x,
+            latest_candidate_y=latest_candidate.y,
+            close_roi_y=close_roi_y,
+            anchor_top_roi_y=chart_top_roi_y,
+            anchor_bottom_roi_y=chart_bottom_roi_y,
+            raw_normalized_close=raw_normalized_close,
         )
 
     def _strategy_diagnostics_suffix(self) -> str:

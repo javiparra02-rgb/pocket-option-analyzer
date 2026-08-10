@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 
 import numpy as np
 
@@ -34,6 +34,9 @@ from pocket_option_analyzer.vision.models import (
     CandleSeries,
     CandleType,
     ClassifiedCandle,
+    CurrentVisualPrice,
+    CurrentVisualPriceExtraction,
+    CurrentVisualPriceStatus,
     MarketAnalysis,
     TrendDirection,
 )
@@ -46,12 +49,15 @@ class FakeMarketAnalysisPipeline:
     ) -> None:
         self.result = result
         self.received_image = None
+        self.received_price_observation_image = None
 
     def analyze(
         self,
         image,
+        price_observation_image=None,
     ) -> MarketAnalysis:
         self.received_image = image
+        self.received_price_observation_image = price_observation_image
         return self.result
 
 
@@ -222,6 +228,7 @@ def test_analyze_generates_signal_from_visual_indicators() -> None:
     assert result.direction is SignalDirection.CALL
     assert result.strength is SignalStrength.HIGH
     assert market_pipeline.received_image is image
+    assert market_pipeline.received_price_observation_image is None
     assert indicator_builder.received_series is analysis.series
     assert indicator_builder.received_profile is profile
     assert signal_generator.received_analysis is analysis
@@ -564,7 +571,28 @@ def test_visual_diagnostics_include_candle_filter_stages() -> None:
     assert "Ancho dominante: 34.00 px" in result.reason
 
 
-def test_strategy_diagnostics_match_the_audit_used_for_the_signal() -> None:
+def test_analyze_propagates_price_image_and_keeps_strategy_audit() -> None:
+    image = np.zeros((100, 100, 3), dtype=np.uint8)
+    price_observation_image = np.zeros((20, 100, 3), dtype=np.uint8)
+    market_pipeline = FakeMarketAnalysisPipeline(result=_market_analysis())
+    pipeline = VisualStrategySignalAnalysisPipeline(
+        market_analysis_pipeline=market_pipeline,
+        indicator_snapshot_builder=FakeVisualIndicatorSnapshotBuilder(result=None),
+        signal_generator=FakeStrategySignalGenerator(
+            result=MarketSignal.neutral(reason="Waiting.")
+        ),
+        profile=StrategyProfile.otc_precision_10s(),
+    )
+
+    pipeline.analyze(
+        image=image,
+        price_observation_image=price_observation_image,
+    )
+
+    assert market_pipeline.received_image is image
+    assert market_pipeline.received_price_observation_image is (
+        price_observation_image
+    )
     profile = StrategyProfile.otc_precision_10s()
     generator = StrategySignalGenerator(
         profile=profile,
@@ -611,3 +639,46 @@ def test_strategy_diagnostics_are_optional_for_compatible_fakes() -> None:
 
     assert result.direction is SignalDirection.NONE
     assert "[strategy_diagnostics]" not in result.reason
+
+
+def test_build_last_observation_preserves_current_visual_price_identity() -> None:
+    instant = datetime(2026, 8, 9, 12, 0, tzinfo=UTC)
+    key = CandleIntervalKey(started_at=instant, duration_seconds=30)
+    extraction = CurrentVisualPriceExtraction(
+        price=CurrentVisualPrice(514.0, 0.73125, 1320, 800, "test", 0.92),
+        status=CurrentVisualPriceStatus.OK,
+        candidate_count=1,
+        selected_x=1268.5,
+        selected_y=514.0,
+        confidence=0.92,
+    )
+    analysis = MarketAnalysis(
+        series=_visual_series(),
+        trend=TrendDirection.BULLISH,
+        current_visual_price=extraction,
+    )
+    profile = StrategyProfile.otc_precision_10s()
+    pipeline = VisualStrategySignalAnalysisPipeline(
+        market_analysis_pipeline=FakeMarketAnalysisPipeline(result=analysis),
+        indicator_snapshot_builder=FakeVisualIndicatorSnapshotBuilder(
+            result=_indicators(),
+            snapshot_timing_status=CandleIntervalIndicatorCacheStatus(
+                requested_key=key,
+                cached_key=key,
+                has_snapshot=True,
+                is_current=True,
+                is_settling=False,
+            ),
+        ),
+        signal_generator=StrategySignalGenerator(
+            profile=profile,
+            evaluator=StrategyConditionEvaluator(),
+        ),
+        profile=profile,
+    )
+
+    pipeline.analyze(image=np.zeros((100, 100, 3), dtype=np.uint8))
+    observation = pipeline.build_last_observation(instant)
+
+    assert observation is not None
+    assert observation.current_visual_price is extraction

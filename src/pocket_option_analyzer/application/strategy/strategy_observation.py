@@ -1,14 +1,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 
 from pocket_option_analyzer.application.market import VisualIndicatorSnapshotContext
 from pocket_option_analyzer.application.strategy.strategy_condition_audit import (
     StrategyConditionAudit,
 )
 from pocket_option_analyzer.domain.indicators import IndicatorSnapshot
-from pocket_option_analyzer.vision.models import CandleFilterDiagnostics, TrendDirection
+from pocket_option_analyzer.domain.signals import SignalDirection
+from pocket_option_analyzer.vision.models import (
+    CandleFilterDiagnostics,
+    CurrentVisualPriceExtraction,
+    TrendDirection,
+)
+
+from .strategy_observation_outcome import (
+    StrategyObservationOutcome,
+    VisualPriceReference,
+)
+from .visual_price_reference_result import VisualPriceReferenceResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +31,26 @@ class StrategyObservation:
     audit: StrategyConditionAudit
     trend: TrendDirection
     indicators: IndicatorSnapshot
+    resolve_at: datetime
+    direction: SignalDirection | None
+    entry_reference: VisualPriceReference | None
+    entry_reference_result: VisualPriceReferenceResult | None = None
+    current_visual_price: CurrentVisualPriceExtraction | None = None
+    outcome: StrategyObservationOutcome = StrategyObservationOutcome.UNRESOLVED
     visual_context: VisualIndicatorSnapshotContext | None = None
     detection_diagnostics: CandleFilterDiagnostics | None = None
 
+    def __post_init__(self) -> None:
+        for field_name in (
+            "observed_at",
+            "resolve_at",
+            "candle_interval_started_at",
+        ):
+            value = getattr(self, field_name)
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError(f"{field_name} debe incluir zona horaria.")
+            object.__setattr__(self, field_name, value.astimezone(UTC))
+
+    @classmethod
+    def resolve_time(cls, observed_at: datetime) -> datetime:
+        return observed_at + timedelta(seconds=10)

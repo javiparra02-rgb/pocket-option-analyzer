@@ -14,6 +14,7 @@ from .candle_segmenter import CandleSegmenter
 from .candle_series_builder import CandleSeriesBuilder
 from .chart_locator import ChartLocator
 from .chart_region_extractor import ChartRegionExtractor
+from .current_visual_price_extractor import CurrentVisualPriceExtractor
 from .dataset_capture_service import DatasetCaptureService
 from .dataset_directory_manager import DatasetDirectoryManager
 from .dataset_filename_generator import DatasetFilenameGenerator
@@ -25,6 +26,16 @@ from .pocket_option_candle_mask_builder import PocketOptionCandleMaskBuilder
 from .pocket_option_chart_region_extractor import (
     PocketOptionChartRegionExtractor,
 )
+from .pocket_option_current_price_mask_builder import (
+    PocketOptionCurrentPriceMaskBuilder,
+)
+from .pocket_option_current_visual_price_extractor import (
+    PocketOptionCurrentVisualPriceExtractor,
+)
+from .pocket_option_price_observation_region_extractor import (
+    PocketOptionPriceObservationRegionExtractor,
+)
+from .price_observation_region_extractor import PriceObservationRegionExtractor
 from .roi_debug_renderer import RoiDebugRenderer
 from .trend_detector import TrendDetector
 from .vision_pipeline import VisionPipeline
@@ -43,6 +54,7 @@ __all__ = [
     "CandleSeriesBuilder",
     "ChartLocator",
     "ChartRegionExtractor",
+    "CurrentVisualPriceExtractor",
     "DatasetCaptureService",
     "DatasetDirectoryManager",
     "DatasetFilenameGenerator",
@@ -51,7 +63,11 @@ __all__ = [
     "FixedChartRegionExtractor",
     "MarketAnalysisPipeline",
     "PocketOptionCandleMaskBuilder",
+    "PocketOptionCurrentPriceMaskBuilder",
     "PocketOptionChartRegionExtractor",
+    "PocketOptionCurrentVisualPriceExtractor",
+    "PocketOptionPriceObservationRegionExtractor",
+    "PriceObservationRegionExtractor",
     "RoiDebugRenderer",
     "TrendDetector",
     "VisionPipeline",

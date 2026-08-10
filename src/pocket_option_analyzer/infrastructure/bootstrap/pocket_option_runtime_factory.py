@@ -39,6 +39,9 @@ from pocket_option_analyzer.vision.services.fixed_chart_region_extractor import 
 from pocket_option_analyzer.vision.services.pocket_option_chart_region_extractor import (  # noqa: E501
     PocketOptionChartRegionExtractor,
 )
+from pocket_option_analyzer.vision.services.pocket_option_price_observation_region_extractor import (  # noqa: E501
+    PocketOptionPriceObservationRegionExtractor,
+)
 
 
 class PocketOptionRuntimeFactory:
@@ -155,4 +158,9 @@ class PocketOptionRuntimeFactory:
             ),
             dataset_capture=dataset_capture,
             window_title=window_title,
+            price_observation_region_extractor=(
+                PocketOptionPriceObservationRegionExtractor(
+                    bottom_extension_ratio=0.0,
+                )
+            ),
         )

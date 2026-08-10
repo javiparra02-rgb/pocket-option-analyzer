@@ -18,6 +18,7 @@ from pocket_option_analyzer.vision.services import (
     ChartRegionExtractor,
     FixedChartRegionExtractor,
     PocketOptionChartRegionExtractor,
+    PocketOptionPriceObservationRegionExtractor,
 )
 
 
@@ -46,7 +47,7 @@ class FakeCaptureService:
 def _frame() -> FakeFrame:
     return FakeFrame(
         image=np.zeros(
-            (100, 100, 3),
+            (100, 1161, 3),
             dtype=np.uint8,
         ),
         captured_at=datetime(
@@ -190,6 +191,19 @@ def test_pocket_option_runtime_factory_disables_roi_debug_by_default() -> None:
     )
 
     assert capture_service is not None
+
+
+def test_pocket_option_runtime_factory_configures_price_observation_region() -> None:
+
+    capture_service = PocketOptionRuntimeFactory.create_capture_service()
+
+    extractor = capture_service._price_observation_region_extractor
+
+    assert isinstance(
+        extractor,
+        PocketOptionPriceObservationRegionExtractor,
+    )
+    assert extractor._bottom_extension_ratio == 0.0
 
 
 def test_pocket_option_runtime_factory_can_enable_roi_debug(
