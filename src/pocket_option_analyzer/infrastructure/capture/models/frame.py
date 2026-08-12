@@ -5,6 +5,8 @@ from datetime import datetime
 
 import numpy as np
 
+from pocket_option_analyzer.vision.models import ChartRegion
+
 
 @dataclass(slots=True, frozen=True)
 class Frame:
@@ -16,6 +18,8 @@ class Frame:
     timestamp: datetime
     image: np.ndarray
     price_observation_image: np.ndarray | None = None
+    chart_region: ChartRegion | None = None
+    price_observation_region: ChartRegion | None = None
 
     @property
     def width(self) -> int:

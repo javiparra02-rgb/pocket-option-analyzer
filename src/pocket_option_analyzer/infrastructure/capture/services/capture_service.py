@@ -114,6 +114,7 @@ class CaptureService:
             return None
 
         price_observation_image: np.ndarray | None = None
+        price_observation_region: ChartRegion | None = None
 
         if self._price_observation_region_extractor is not None:
             price_observation_region = (
@@ -154,6 +155,8 @@ class CaptureService:
         frame = self._frame_factory.create(
             image=roi,
             price_observation_image=price_observation_image,
+            chart_region=region,
+            price_observation_region=price_observation_region,
         )
 
         self._frame_buffer.append(

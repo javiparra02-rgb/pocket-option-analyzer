@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import numpy as np
 
 from pocket_option_analyzer.infrastructure.capture.models import Frame
+from pocket_option_analyzer.vision.models import ChartRegion
 
 
 class FrameFactory:
@@ -23,6 +24,8 @@ class FrameFactory:
         self,
         image: np.ndarray,
         price_observation_image: np.ndarray | None = None,
+        chart_region: ChartRegion | None = None,
+        price_observation_region: ChartRegion | None = None,
     ) -> Frame:
         """
         Crea un nuevo Frame.
@@ -44,6 +47,8 @@ class FrameFactory:
             timestamp=datetime.now(UTC),
             image=image,
             price_observation_image=price_observation_image,
+            chart_region=chart_region,
+            price_observation_region=price_observation_region,
         )
 
         self._next_frame_id += 1

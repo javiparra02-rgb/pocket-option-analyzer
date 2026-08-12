@@ -28,6 +28,7 @@ from pocket_option_analyzer.domain.signals import MarketSignal, SignalDirection
 from pocket_option_analyzer.domain.strategy import StrategyProfile
 from pocket_option_analyzer.vision.models import (
     CandleType,
+    ChartRegion,
     CurrentVisualPriceExtraction,
     MarketAnalysis,
 )
@@ -138,6 +139,8 @@ class VisualStrategySignalAnalysisPipeline:
         self,
         image: np.ndarray,
         price_observation_image: np.ndarray | None = None,
+        chart_region: ChartRegion | None = None,
+        price_observation_region: ChartRegion | None = None,
     ) -> MarketSignal:
         """
         Analiza una imagen y devuelve una señal de mercado.
@@ -154,6 +157,8 @@ class VisualStrategySignalAnalysisPipeline:
         market_analysis = self._market_analysis_pipeline.analyze(
             image=image,
             price_observation_image=price_observation_image,
+            chart_region=chart_region,
+            price_observation_region=price_observation_region,
         )
         self._last_current_visual_price = market_analysis.current_visual_price
 

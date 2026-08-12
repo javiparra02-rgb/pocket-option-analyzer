@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from pocket_option_analyzer.vision.models import MarketAnalysis
+from pocket_option_analyzer.vision.models import ChartRegion, MarketAnalysis
 from pocket_option_analyzer.vision.services.candle_analysis_pipeline import (
     CandleAnalysisPipeline,
 )
@@ -38,6 +38,8 @@ class MarketAnalysisPipeline:
         self,
         image: np.ndarray,
         price_observation_image: np.ndarray | None = None,
+        chart_region: ChartRegion | None = None,
+        price_observation_region: ChartRegion | None = None,
     ) -> MarketAnalysis:
         """
         Analiza una imagen del gráfico y devuelve un análisis de mercado.
@@ -68,4 +70,6 @@ class MarketAnalysisPipeline:
                 self._candle_analysis_pipeline.last_detection_diagnostics
             ),
             current_visual_price=current_visual_price,
+            chart_region=chart_region,
+            price_observation_region=price_observation_region,
         )

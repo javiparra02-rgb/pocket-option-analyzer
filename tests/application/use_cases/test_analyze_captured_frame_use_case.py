@@ -14,6 +14,7 @@ from pocket_option_analyzer.domain.signals import (
     SignalRecord,
     SignalStrength,
 )
+from pocket_option_analyzer.vision.models import ChartRegion
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,12 +35,21 @@ class FakeFrameWithPriceObservationImage:
     price_observation_image: np.ndarray
 
 
+@dataclass(frozen=True, slots=True)
+class FakeFrameWithCaptureGeometry:
+    image: np.ndarray
+    chart_region: ChartRegion
+    price_observation_region: ChartRegion
+
+
 class FakeVisualSignalRecordingPipeline:
     def __init__(self) -> None:
         self.received_image = None
         self.received_created_at = None
         self.received_source = None
         self.received_price_observation_image = None
+        self.received_chart_region = None
+        self.received_price_observation_region = None
 
     def analyze_and_record(
         self,
@@ -47,11 +57,15 @@ class FakeVisualSignalRecordingPipeline:
         created_at=None,
         source="visual_strategy_signal_analysis",
         price_observation_image=None,
+        chart_region=None,
+        price_observation_region=None,
     ) -> SignalRecord:
         self.received_image = image
         self.received_created_at = created_at
         self.received_source = source
         self.received_price_observation_image = price_observation_image
+        self.received_chart_region = chart_region
+        self.received_price_observation_region = price_observation_region
 
         return SignalRecord(
             signal=MarketSignal(
@@ -150,3 +164,20 @@ def test_execute_propagates_price_observation_image_by_identity() -> None:
 
     assert pipeline.received_image is image
     assert pipeline.received_price_observation_image is price_observation_image
+
+
+def test_execute_propagates_capture_geometry_by_identity() -> None:
+    chart_region = ChartRegion(x=10, y=20, width=100, height=80)
+    price_region = ChartRegion(x=30, y=40, width=100, height=80)
+    pipeline = FakeVisualSignalRecordingPipeline()
+
+    AnalyzeCapturedFrameUseCase(pipeline=pipeline).execute(
+        frame=FakeFrameWithCaptureGeometry(
+            image=np.zeros((80, 100, 3), dtype=np.uint8),
+            chart_region=chart_region,
+            price_observation_region=price_region,
+        )
+    )
+
+    assert pipeline.received_chart_region is chart_region
+    assert pipeline.received_price_observation_region is price_region

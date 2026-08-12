@@ -19,6 +19,10 @@ from pocket_option_analyzer.infrastructure.windows.models import (
 from pocket_option_analyzer.vision.models import (
     ChartRegion,
 )
+from pocket_option_analyzer.vision.services import (
+    FixedChartRegionExtractor,
+    PocketOptionPriceObservationRegionExtractor,
+)
 
 
 class FakeFinder:
@@ -205,10 +209,10 @@ def test_capture_once_derives_independent_rois_from_one_capture() -> None:
     expected_chart_roi = source_image[20:120, 20:120].copy()
     expected_price_roi = source_image[60:160, 60:160].copy()
     capture = FakeCapture(image=source_image)
-    chart_extractor = FakeRegionExtractor()
-    price_extractor = FakeRegionExtractor(
-        region=ChartRegion(x=60, y=60, width=100, height=100)
-    )
+    chart_region = ChartRegion(x=20, y=20, width=100, height=100)
+    price_region = ChartRegion(x=60, y=60, width=100, height=100)
+    chart_extractor = FakeRegionExtractor(region=chart_region)
+    price_extractor = FakeRegionExtractor(region=price_region)
 
     service = CaptureService(
         finder=FakeFinder(),
@@ -234,6 +238,11 @@ def test_capture_once_derives_independent_rois_from_one_capture() -> None:
     assert not np.shares_memory(frame.image, frame.price_observation_image)
     assert np.array_equal(frame.image, expected_chart_roi)
     assert np.array_equal(frame.price_observation_image, expected_price_roi)
+    assert frame.chart_region is chart_region
+    assert frame.price_observation_region is price_region
+    assert frame.chart_region.width == frame.price_observation_region.width
+    assert frame.chart_region.height == frame.price_observation_region.height
+    assert frame.chart_region.y != frame.price_observation_region.y
 
     source_image.fill(0)
 
@@ -258,6 +267,31 @@ def test_capture_once_without_price_extractor_keeps_optional_image_none() -> Non
 
     assert frame is not None
     assert frame.price_observation_image is None
+    assert frame.chart_region is not None
+    assert frame.price_observation_region is None
+
+
+def test_capture_once_preserves_fixed_chart_and_proportional_price_regions() -> None:
+    source_image = np.zeros((200, 200, 3), dtype=np.uint8)
+    chart_region = ChartRegion(x=15, y=35, width=120, height=90)
+    price_extractor = PocketOptionPriceObservationRegionExtractor()
+    expected_price_region = price_extractor.extract(source_image)
+    service = CaptureService(
+        finder=FakeFinder(),
+        reader=FakeReader(),
+        capture=FakeCapture(image=source_image),
+        region_extractor=FixedChartRegionExtractor(chart_region),
+        frame_factory=FrameFactory(),
+        frame_buffer=FrameBuffer(),
+        price_observation_region_extractor=price_extractor,
+    )
+
+    frame = service.capture_once()
+
+    assert frame is not None
+    assert frame.chart_region is chart_region
+    assert frame.price_observation_region == expected_price_region
+    assert frame.chart_region != frame.price_observation_region
 
 
 def test_capture_once_rejects_price_region_outside_capture_bounds() -> None:

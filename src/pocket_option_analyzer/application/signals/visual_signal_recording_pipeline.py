@@ -20,6 +20,7 @@ from pocket_option_analyzer.application.strategy import (
     StrategyObservationRecorder,
 )
 from pocket_option_analyzer.domain.signals import SignalRecord
+from pocket_option_analyzer.vision.models import ChartRegion
 
 
 class VisualSignalRecordingPipeline:
@@ -51,6 +52,8 @@ class VisualSignalRecordingPipeline:
         created_at: datetime | None = None,
         source: str = "visual_strategy_signal_analysis",
         price_observation_image: np.ndarray | None = None,
+        chart_region: ChartRegion | None = None,
+        price_observation_region: ChartRegion | None = None,
     ) -> SignalRecord:
         """
         Analiza una imagen y registra la decisión del gate.
@@ -59,6 +62,8 @@ class VisualSignalRecordingPipeline:
         signal = self._analysis_pipeline.analyze(
             image=image,
             price_observation_image=price_observation_image,
+            chart_region=chart_region,
+            price_observation_region=price_observation_region,
         )
 
         resolved_created_at = created_at or datetime.now(

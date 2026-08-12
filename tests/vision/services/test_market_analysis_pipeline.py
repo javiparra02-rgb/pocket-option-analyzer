@@ -6,6 +6,7 @@ from pocket_option_analyzer.vision.models import (
     CandleFilterDiagnostics,
     CandleSeries,
     CandleType,
+    ChartRegion,
     ClassifiedCandle,
     CurrentVisualPrice,
     CurrentVisualPriceExtraction,
@@ -216,3 +217,22 @@ def test_analyze_uses_main_image_for_visual_price_when_second_image_is_none() ->
 
     assert candle_pipeline.received_image is image
     assert extractor.received_image is image
+
+
+def test_market_analysis_preserves_capture_geometry_by_identity() -> None:
+    chart_region = ChartRegion(x=10, y=20, width=100, height=80)
+    price_region = ChartRegion(x=30, y=40, width=100, height=80)
+    pipeline = MarketAnalysisPipeline(
+        candle_analysis_pipeline=FakeCandleAnalysisPipeline(),
+        series_builder=FakeSeriesBuilder(),
+        trend_detector=FakeTrendDetector(),
+    )
+
+    result = pipeline.analyze(
+        image=np.zeros((80, 100, 3), dtype=np.uint8),
+        chart_region=chart_region,
+        price_observation_region=price_region,
+    )
+
+    assert result.chart_region is chart_region
+    assert result.price_observation_region is price_region

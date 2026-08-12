@@ -33,6 +33,7 @@ from pocket_option_analyzer.vision.models import (
     CandleGeometry,
     CandleSeries,
     CandleType,
+    ChartRegion,
     ClassifiedCandle,
     CurrentVisualPrice,
     CurrentVisualPriceExtraction,
@@ -50,14 +51,20 @@ class FakeMarketAnalysisPipeline:
         self.result = result
         self.received_image = None
         self.received_price_observation_image = None
+        self.received_chart_region = None
+        self.received_price_observation_region = None
 
     def analyze(
         self,
         image,
         price_observation_image=None,
+        chart_region=None,
+        price_observation_region=None,
     ) -> MarketAnalysis:
         self.received_image = image
         self.received_price_observation_image = price_observation_image
+        self.received_chart_region = chart_region
+        self.received_price_observation_region = price_observation_region
         return self.result
 
 
@@ -574,6 +581,8 @@ def test_visual_diagnostics_include_candle_filter_stages() -> None:
 def test_analyze_propagates_price_image_and_keeps_strategy_audit() -> None:
     image = np.zeros((100, 100, 3), dtype=np.uint8)
     price_observation_image = np.zeros((20, 100, 3), dtype=np.uint8)
+    chart_region = ChartRegion(x=10, y=20, width=100, height=80)
+    price_region = ChartRegion(x=30, y=40, width=100, height=80)
     market_pipeline = FakeMarketAnalysisPipeline(result=_market_analysis())
     pipeline = VisualStrategySignalAnalysisPipeline(
         market_analysis_pipeline=market_pipeline,
@@ -587,12 +596,16 @@ def test_analyze_propagates_price_image_and_keeps_strategy_audit() -> None:
     pipeline.analyze(
         image=image,
         price_observation_image=price_observation_image,
+        chart_region=chart_region,
+        price_observation_region=price_region,
     )
 
     assert market_pipeline.received_image is image
     assert market_pipeline.received_price_observation_image is (
         price_observation_image
     )
+    assert market_pipeline.received_chart_region is chart_region
+    assert market_pipeline.received_price_observation_region is price_region
     profile = StrategyProfile.otc_precision_10s()
     generator = StrategySignalGenerator(
         profile=profile,

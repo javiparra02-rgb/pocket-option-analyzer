@@ -1,6 +1,7 @@
 import numpy as np
 
 from pocket_option_analyzer.infrastructure.capture import FrameFactory
+from pocket_option_analyzer.vision.models import ChartRegion
 
 
 def test_frame_factory_generates_incremental_ids() -> None:
@@ -16,6 +17,8 @@ def test_frame_factory_generates_incremental_ids() -> None:
 
     assert frame2.frame_id > frame1.frame_id
     assert frame1.price_observation_image is None
+    assert frame1.chart_region is None
+    assert frame1.price_observation_region is None
 
 
 def test_frame_factory_propagates_both_images_by_identity() -> None:
@@ -30,6 +33,20 @@ def test_frame_factory_propagates_both_images_by_identity() -> None:
 
     assert frame.image is image
     assert frame.price_observation_image is price_observation_image
+
+
+def test_frame_factory_propagates_capture_regions_by_identity() -> None:
+    chart_region = ChartRegion(x=10, y=20, width=100, height=80)
+    price_region = ChartRegion(x=30, y=40, width=100, height=80)
+
+    frame = FrameFactory().create(
+        image=np.zeros((80, 100, 4), dtype=np.uint8),
+        chart_region=chart_region,
+        price_observation_region=price_region,
+    )
+
+    assert frame.chart_region is chart_region
+    assert frame.price_observation_region is price_region
 
 
 def test_frame_factory_keeps_ids_monotonic_during_long_session() -> None:

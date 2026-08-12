@@ -15,6 +15,7 @@ from pocket_option_analyzer.domain.signals import (
     SignalStrength,
 )
 from pocket_option_analyzer.vision.models import (
+    ChartRegion,
     CurrentVisualPrice,
     CurrentVisualPriceExtraction,
     CurrentVisualPriceStatus,
@@ -25,6 +26,8 @@ class FakeVisualStrategySignalAnalysisPipeline:
     def __init__(self) -> None:
         self.received_image = None
         self.received_price_observation_image = None
+        self.received_chart_region = None
+        self.received_price_observation_region = None
         self.last_price_reference = None
         self.last_current_visual_price = None
 
@@ -32,9 +35,13 @@ class FakeVisualStrategySignalAnalysisPipeline:
         self,
         image,
         price_observation_image=None,
+        chart_region=None,
+        price_observation_region=None,
     ) -> MarketSignal:
         self.received_image = image
         self.received_price_observation_image = price_observation_image
+        self.received_chart_region = chart_region
+        self.received_price_observation_region = price_observation_region
         return MarketSignal(
             direction=SignalDirection.CALL,
             strength=SignalStrength.HIGH,
@@ -75,6 +82,25 @@ def test_analyze_and_record_propagates_price_observation_image_by_identity() -> 
     assert analysis_pipeline.received_price_observation_image is (
         price_observation_image
     )
+
+
+def test_analyze_and_record_propagates_capture_geometry_by_identity() -> None:
+    chart_region = ChartRegion(x=10, y=20, width=100, height=80)
+    price_region = ChartRegion(x=30, y=40, width=100, height=80)
+    analysis_pipeline = FakeVisualStrategySignalAnalysisPipeline()
+    pipeline = VisualSignalRecordingPipeline(
+        analysis_pipeline=analysis_pipeline,
+        recorder=SignalRecorder(SignalHistory()),
+    )
+
+    pipeline.analyze_and_record(
+        image=np.zeros((80, 100, 3), dtype=np.uint8),
+        chart_region=chart_region,
+        price_observation_region=price_region,
+    )
+
+    assert analysis_pipeline.received_chart_region is chart_region
+    assert analysis_pipeline.received_price_observation_region is price_region
 
 
 def test_analyze_and_record_propagates_exit_visual_price_by_identity() -> None:

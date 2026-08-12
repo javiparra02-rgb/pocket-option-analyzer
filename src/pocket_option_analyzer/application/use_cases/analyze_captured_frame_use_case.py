@@ -58,6 +58,16 @@ class AnalyzeCapturedFrameUseCase:
                 "price_observation_image",
                 None,
             ),
+            chart_region=getattr(
+                frame,
+                "chart_region",
+                None,
+            ),
+            price_observation_region=getattr(
+                frame,
+                "price_observation_region",
+                None,
+            ),
             created_at=self._resolve_created_at(frame),
             source=self._source,
         )
