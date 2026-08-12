@@ -59,6 +59,9 @@ class JsonlStrategyObservationWriter:
                 "resolved_at": resolution.resolved_at.isoformat(),
                 "entry_reference": self._reference_to_dict(resolution.entry_reference),
                 "exit_reference": self._reference_to_dict(resolution.exit_reference),
+                "exit_current_visual_price": self._current_visual_price_to_dict(
+                    resolution.exit_current_visual_price,
+                ),
                 "movement": resolution.movement.value,
                 "diagnostic": resolution.diagnostic,
             }
@@ -174,6 +177,11 @@ class JsonlStrategyObservationWriter:
             ),
             "exit_reference": JsonlStrategyObservationWriter._reference_to_dict(
                 resolution.exit_reference,
+            ),
+            "exit_current_visual_price": (
+                JsonlStrategyObservationWriter._current_visual_price_to_dict(
+                    resolution.exit_current_visual_price,
+                )
             ),
             "outcome": resolution.outcome.value,
         }

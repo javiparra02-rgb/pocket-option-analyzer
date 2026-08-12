@@ -114,6 +114,21 @@ def test_writer_appends_resolution_event(tmp_path) -> None:
     path = tmp_path / "observations.jsonl"
     anchors = (("bullish", 1.0, 0.8, 0.6, 0.0),)
     reference = VisualPriceReference(0.42, anchor_shape=anchors)
+    exit_extraction = CurrentVisualPriceExtraction(
+        price=CurrentVisualPrice(
+            roi_y=514.0,
+            normalized_roi_y=0.73125,
+            roi_width=1320,
+            roi_height=800,
+            source="current_visual_price_roi_v1",
+            confidence=0.92,
+        ),
+        status=CurrentVisualPriceStatus.OK,
+        candidate_count=1,
+        selected_x=1268.5,
+        selected_y=514.0,
+        confidence=0.92,
+    )
     resolution = StrategyObservationResolution(
         snapshot_id=instant.isoformat(),
         observed_at=instant,
@@ -123,6 +138,7 @@ def test_writer_appends_resolution_event(tmp_path) -> None:
         entry_reference=reference,
         exit_reference=VisualPriceReference(0.45, anchor_shape=anchors),
         outcome=StrategyObservationOutcome.WIN,
+        exit_current_visual_price=exit_extraction,
     )
 
     JsonlStrategyObservationWriter(path).write_resolution(resolution)
@@ -131,7 +147,48 @@ def test_writer_appends_resolution_event(tmp_path) -> None:
     assert payload["event_type"] == "resolution"
     assert payload["resolved_at"] == (instant + timedelta(seconds=11)).isoformat()
     assert payload["exit_reference"]["value"] == 0.45
+    assert payload["exit_current_visual_price"] == {
+        "status": "ok",
+        "candidate_count": 1,
+        "selected_x": 1268.5,
+        "selected_y": 514.0,
+        "confidence": 0.92,
+        "diagnostic": None,
+        "price": {
+            "roi_y": 514.0,
+            "normalized_roi_y": 0.73125,
+            "roi_width": 1320,
+            "roi_height": 800,
+            "source": "current_visual_price_roi_v1",
+            "confidence": 0.92,
+        },
+    }
     assert payload["outcome"] == "win"
+
+
+def test_writer_serializes_null_exit_visual_price_for_resolution(tmp_path) -> None:
+    instant = datetime(2026, 8, 9, 12, 0, tzinfo=UTC)
+    path = tmp_path / "observations.jsonl"
+    reference = VisualPriceReference(
+        0.42,
+        anchor_shape=(("bullish", 1.0, 0.8, 0.6, 0.0),),
+    )
+    resolution = StrategyObservationResolution(
+        snapshot_id=instant.isoformat(),
+        observed_at=instant,
+        resolve_at=instant + timedelta(seconds=10),
+        resolved_at=instant + timedelta(seconds=11),
+        direction=SignalDirection.CALL,
+        entry_reference=reference,
+        exit_reference=None,
+        outcome=StrategyObservationOutcome.UNRESOLVED,
+        exit_current_visual_price=None,
+    )
+
+    JsonlStrategyObservationWriter(path).write_resolution(resolution)
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["exit_current_visual_price"] is None
 
 
 def test_writer_appends_passive_reference_events(tmp_path) -> None:
@@ -140,6 +197,12 @@ def test_writer_appends_passive_reference_events(tmp_path) -> None:
     reference = VisualPriceReference(
         0.42,
         anchor_shape=(("bullish", 1.0, 0.8, 0.6, 0.0),),
+    )
+    exit_extraction = CurrentVisualPriceExtraction(
+        price=None,
+        status=CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE,
+        candidate_count=2,
+        diagnostic="no candidate matched the visual price mask",
     )
     writer = JsonlStrategyObservationWriter(path)
     writer.write_reference_validation(
@@ -161,6 +224,7 @@ def test_writer_appends_passive_reference_events(tmp_path) -> None:
                 0.45, anchor_shape=reference.anchor_shape
             ),
             movement=VisualReferenceMovement.UP,
+            exit_current_visual_price=exit_extraction,
         )
     )
 
@@ -174,7 +238,42 @@ def test_writer_appends_passive_reference_events(tmp_path) -> None:
     assert payloads[0]["entry_reference"]["value"] == 0.42
     assert payloads[1]["exit_reference"]["value"] == 0.45
     assert payloads[1]["movement"] == "up"
-    assert "current_visual_price" not in payloads[1]
+    assert payloads[1]["exit_current_visual_price"] == {
+        "status": "no_visual_price_candidate",
+        "candidate_count": 2,
+        "selected_x": None,
+        "selected_y": None,
+        "confidence": None,
+        "diagnostic": "no candidate matched the visual price mask",
+        "price": None,
+    }
+
+
+def test_writer_serializes_null_exit_visual_price_for_reference_resolution(
+    tmp_path,
+) -> None:
+    instant = datetime(2026, 8, 9, 12, 0, tzinfo=UTC)
+    path = tmp_path / "observations.jsonl"
+    reference = VisualPriceReference(
+        0.42,
+        anchor_shape=(("bullish", 1.0, 0.8, 0.6, 0.0),),
+    )
+    resolution = VisualReferenceResolution(
+        snapshot_id=instant.isoformat(),
+        observed_at=instant,
+        resolve_at=instant + timedelta(seconds=10),
+        resolved_at=instant + timedelta(seconds=11),
+        entry_reference=reference,
+        exit_reference=None,
+        movement=VisualReferenceMovement.UNRESOLVED,
+        diagnostic="missing_exit_reference",
+        exit_current_visual_price=None,
+    )
+
+    JsonlStrategyObservationWriter(path).write_reference_resolution(resolution)
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["exit_current_visual_price"] is None
 
 
 def test_writer_serializes_missing_reference_diagnostic(tmp_path) -> None:

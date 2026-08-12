@@ -682,3 +682,4 @@ def test_build_last_observation_preserves_current_visual_price_identity() -> Non
 
     assert observation is not None
     assert observation.current_visual_price is extraction
+    assert pipeline.last_current_visual_price is extraction

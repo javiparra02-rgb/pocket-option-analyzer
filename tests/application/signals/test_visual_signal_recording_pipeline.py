@@ -14,12 +14,19 @@ from pocket_option_analyzer.domain.signals import (
     SignalRecordDisposition,
     SignalStrength,
 )
+from pocket_option_analyzer.vision.models import (
+    CurrentVisualPrice,
+    CurrentVisualPriceExtraction,
+    CurrentVisualPriceStatus,
+)
 
 
 class FakeVisualStrategySignalAnalysisPipeline:
     def __init__(self) -> None:
         self.received_image = None
         self.received_price_observation_image = None
+        self.last_price_reference = None
+        self.last_current_visual_price = None
 
     def analyze(
         self,
@@ -33,6 +40,21 @@ class FakeVisualStrategySignalAnalysisPipeline:
             strength=SignalStrength.HIGH,
             reason="Visual strategy conditions confirmed.",
         )
+
+    def build_last_observation(self, observed_at):
+        return None
+
+
+class FakeObservationRecorder:
+    def __init__(self) -> None:
+        self.resolve_calls: list[dict[str, object]] = []
+
+    def resolve_due(self, **kwargs):
+        self.resolve_calls.append(kwargs)
+        return ()
+
+    def record(self, observation) -> bool:
+        return True
 
 
 def test_analyze_and_record_propagates_price_observation_image_by_identity() -> None:
@@ -53,6 +75,39 @@ def test_analyze_and_record_propagates_price_observation_image_by_identity() -> 
     assert analysis_pipeline.received_price_observation_image is (
         price_observation_image
     )
+
+
+def test_analyze_and_record_propagates_exit_visual_price_by_identity() -> None:
+    extraction = CurrentVisualPriceExtraction(
+        price=CurrentVisualPrice(514.0, 0.73125, 1320, 800, "test", 0.92),
+        status=CurrentVisualPriceStatus.OK,
+        candidate_count=1,
+        selected_x=1268.5,
+        selected_y=514.0,
+        confidence=0.92,
+    )
+    analysis_pipeline = FakeVisualStrategySignalAnalysisPipeline()
+    analysis_pipeline.last_current_visual_price = extraction
+    observation_recorder = FakeObservationRecorder()
+    created_at = datetime(2026, 8, 11, 12, 0, tzinfo=UTC)
+    pipeline = VisualSignalRecordingPipeline(
+        analysis_pipeline=analysis_pipeline,
+        recorder=SignalRecorder(SignalHistory()),
+        observation_recorder=observation_recorder,
+    )
+
+    pipeline.analyze_and_record(
+        image=np.zeros((100, 100, 3), dtype=np.uint8),
+        created_at=created_at,
+    )
+
+    assert observation_recorder.resolve_calls == [
+        {
+            "observed_at": created_at,
+            "exit_reference": None,
+            "exit_current_visual_price": extraction,
+        }
+    ]
 
 
 class FakeSignalRecordWriter:

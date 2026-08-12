@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 from pocket_option_analyzer.domain.signals import SignalDirection
+from pocket_option_analyzer.vision.models import CurrentVisualPriceExtraction
 
 
 class StrategyObservationOutcome(StrEnum):
@@ -37,6 +38,7 @@ class StrategyObservationResolution:
     entry_reference: VisualPriceReference
     exit_reference: VisualPriceReference | None
     outcome: StrategyObservationOutcome
+    exit_current_visual_price: CurrentVisualPriceExtraction | None = None
 
     def __post_init__(self) -> None:
         for field_name in ("observed_at", "resolve_at", "resolved_at"):

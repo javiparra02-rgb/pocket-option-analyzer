@@ -79,6 +79,7 @@ class VisualReferenceResolution:
     exit_reference: VisualPriceReference | None
     movement: VisualReferenceMovement
     diagnostic: str | None = None
+    exit_current_visual_price: CurrentVisualPriceExtraction | None = None
 
     def __post_init__(self) -> None:
         _normalize_utc(self, "observed_at", "resolve_at", "resolved_at")

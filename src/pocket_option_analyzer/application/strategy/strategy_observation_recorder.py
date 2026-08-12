@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime
 from typing import Protocol
 
@@ -20,6 +21,7 @@ from pocket_option_analyzer.application.strategy.visual_reference_validation imp
 from pocket_option_analyzer.application.strategy.visual_reference_validation_resolver import (  # noqa: E501
     VisualReferenceValidationResolver,
 )
+from pocket_option_analyzer.vision.models import CurrentVisualPriceExtraction
 
 
 class StrategyObservationWriter(Protocol):
@@ -71,11 +73,27 @@ class StrategyObservationRecorder:
         self,
         observed_at: datetime,
         exit_reference: VisualPriceReference | None,
+        exit_current_visual_price: CurrentVisualPriceExtraction | None = None,
     ) -> tuple[StrategyObservationResolution, ...]:
-        resolutions = self._resolver.resolve_due(observed_at, exit_reference)
-        reference_resolutions = self._reference_resolver.resolve_due(
-            observed_at,
-            exit_reference,
+        resolutions = tuple(
+            replace(
+                resolution,
+                exit_current_visual_price=exit_current_visual_price,
+            )
+            for resolution in self._resolver.resolve_due(
+                observed_at,
+                exit_reference,
+            )
+        )
+        reference_resolutions = tuple(
+            replace(
+                resolution,
+                exit_current_visual_price=exit_current_visual_price,
+            )
+            for resolution in self._reference_resolver.resolve_due(
+                observed_at,
+                exit_reference,
+            )
         )
         if self._writer is not None:
             for resolution in resolutions:

@@ -26,7 +26,11 @@ from pocket_option_analyzer.application.strategy import (
 from pocket_option_analyzer.domain.indicators import IndicatorSnapshot
 from pocket_option_analyzer.domain.signals import MarketSignal, SignalDirection
 from pocket_option_analyzer.domain.strategy import StrategyProfile
-from pocket_option_analyzer.vision.models import CandleType, MarketAnalysis
+from pocket_option_analyzer.vision.models import (
+    CandleType,
+    CurrentVisualPriceExtraction,
+    MarketAnalysis,
+)
 from pocket_option_analyzer.vision.services import MarketAnalysisPipeline
 
 
@@ -78,6 +82,7 @@ class VisualStrategySignalAnalysisPipeline:
         self._last_observation_data: _ObservationData | None = None
         self._last_price_reference: VisualPriceReference | None = None
         self._last_price_reference_result: VisualPriceReferenceResult | None = None
+        self._last_current_visual_price: CurrentVisualPriceExtraction | None = None
 
     @property
     def last_price_reference(self) -> VisualPriceReference | None:
@@ -92,6 +97,14 @@ class VisualStrategySignalAnalysisPipeline:
         """
 
         return self._last_price_reference_result
+
+    @property
+    def last_current_visual_price(
+        self,
+    ) -> CurrentVisualPriceExtraction | None:
+        """Return the visual-price extraction from the last analyzed frame."""
+
+        return self._last_current_visual_price
 
     def build_last_observation(
         self,
@@ -136,11 +149,13 @@ class VisualStrategySignalAnalysisPipeline:
         self._last_observation_data = None
         self._last_price_reference = None
         self._last_price_reference_result = None
+        self._last_current_visual_price = None
 
         market_analysis = self._market_analysis_pipeline.analyze(
             image=image,
             price_observation_image=price_observation_image,
         )
+        self._last_current_visual_price = market_analysis.current_visual_price
 
         reference_result = self._price_reference_result(
             market_analysis=market_analysis,
