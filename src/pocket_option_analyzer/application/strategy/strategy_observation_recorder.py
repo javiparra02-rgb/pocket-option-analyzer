@@ -23,6 +23,8 @@ from pocket_option_analyzer.application.strategy.visual_reference_validation_res
 )
 from pocket_option_analyzer.vision.models import CurrentVisualPriceExtraction
 
+from .current_visual_price_comparator import CurrentVisualPriceComparator
+from .current_visual_price_comparison import CurrentVisualPriceComparison
 from .current_visual_price_comparison_context import (
     CurrentVisualPriceComparisonContext,
 )
@@ -52,11 +54,15 @@ class StrategyObservationRecorder:
         writer: StrategyObservationWriter | None = None,
         resolver: StrategyObservationOutcomeResolver | None = None,
         reference_resolver: VisualReferenceValidationResolver | None = None,
+        visual_price_comparator: CurrentVisualPriceComparator | None = None,
     ) -> None:
         self._writer = writer
         self._resolver = resolver or StrategyObservationOutcomeResolver()
         self._reference_resolver = (
             reference_resolver or VisualReferenceValidationResolver()
+        )
+        self._visual_price_comparator = (
+            visual_price_comparator or CurrentVisualPriceComparator()
         )
         self._seen_snapshot_ids: set[str] = set()
 
@@ -88,27 +94,56 @@ class StrategyObservationRecorder:
                 exit_visual_price_context=exit_visual_price_context,
             )
         )
+        legacy_resolutions = self._resolver.resolve_due(
+            observed_at,
+            exit_reference,
+            exit_visual_price_context,
+        )
+        legacy_reference_resolutions = self._reference_resolver.resolve_due(
+            observed_at,
+            exit_reference,
+            exit_visual_price_context,
+        )
+        comparisons: dict[str, CurrentVisualPriceComparison] = {}
+        context_pairs: dict[
+            str,
+            tuple[
+                CurrentVisualPriceComparisonContext | None,
+                CurrentVisualPriceComparisonContext | None,
+            ],
+        ] = {}
+        for resolution in (*legacy_resolutions, *legacy_reference_resolutions):
+            pair = (
+                resolution.entry_visual_price_context,
+                resolution.exit_visual_price_context,
+            )
+            existing_pair = context_pairs.get(resolution.snapshot_id)
+            if existing_pair is not None and existing_pair != pair:
+                raise ValueError(
+                    "Las resoluciones del mismo snapshot deben compartir "
+                    "contextos visuales."
+                )
+            if resolution.snapshot_id not in comparisons:
+                context_pairs[resolution.snapshot_id] = pair
+                comparisons[resolution.snapshot_id] = (
+                    self._visual_price_comparator.compare(*pair)
+                )
+
         resolutions = tuple(
             replace(
                 resolution,
                 exit_current_visual_price=exit_current_visual_price,
+                visual_price_comparison=comparisons[resolution.snapshot_id],
             )
-            for resolution in self._resolver.resolve_due(
-                observed_at,
-                exit_reference,
-                exit_visual_price_context,
-            )
+            for resolution in legacy_resolutions
         )
         reference_resolutions = tuple(
             replace(
                 resolution,
                 exit_current_visual_price=exit_current_visual_price,
+                visual_price_comparison=comparisons[resolution.snapshot_id],
             )
-            for resolution in self._reference_resolver.resolve_due(
-                observed_at,
-                exit_reference,
-                exit_visual_price_context,
-            )
+            for resolution in legacy_reference_resolutions
         )
         if self._writer is not None:
             for resolution in resolutions:

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from pocket_option_analyzer.application.strategy import (
+    CurrentVisualPriceComparison,
     StrategyObservation,
     StrategyObservationResolution,
     VisualPriceReferenceResult,
@@ -64,6 +65,9 @@ class JsonlStrategyObservationWriter:
                 ),
                 "movement": resolution.movement.value,
                 "diagnostic": resolution.diagnostic,
+                "visual_price_comparison": self._visual_price_comparison_to_dict(
+                    resolution.visual_price_comparison,
+                ),
             }
         )
 
@@ -184,6 +188,30 @@ class JsonlStrategyObservationWriter:
                 )
             ),
             "outcome": resolution.outcome.value,
+            "visual_price_comparison": (
+                JsonlStrategyObservationWriter._visual_price_comparison_to_dict(
+                    resolution.visual_price_comparison,
+                )
+            ),
+        }
+
+    @staticmethod
+    def _visual_price_comparison_to_dict(
+        comparison: CurrentVisualPriceComparison | None,
+    ) -> dict[str, Any] | None:
+        if comparison is None:
+            return None
+
+        return {
+            "status": comparison.status.value,
+            "diagnostic": comparison.diagnostic.value,
+            "entry_anchored_value": comparison.entry_anchored_value,
+            "exit_anchored_value": comparison.exit_anchored_value,
+            "delta": comparison.delta,
+            "entry_price_y_in_chart_roi": (
+                comparison.entry_price_y_in_chart_roi
+            ),
+            "exit_price_y_in_chart_roi": comparison.exit_price_y_in_chart_roi,
         }
 
     @staticmethod

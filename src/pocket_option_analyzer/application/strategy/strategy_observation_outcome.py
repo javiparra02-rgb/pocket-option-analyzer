@@ -7,6 +7,8 @@ from enum import StrEnum
 from pocket_option_analyzer.domain.signals import SignalDirection
 from pocket_option_analyzer.vision.models import CurrentVisualPriceExtraction
 
+from .current_visual_price_comparison import CurrentVisualPriceComparison
+
 
 class StrategyObservationOutcome(StrEnum):
     WIN = "win"
@@ -45,6 +47,7 @@ class StrategyObservationResolution:
     exit_visual_price_context: (
         comparison_context.CurrentVisualPriceComparisonContext | None
     ) = None
+    visual_price_comparison: CurrentVisualPriceComparison | None = None
 
     def __post_init__(self) -> None:
         for field_name in ("observed_at", "resolve_at", "resolved_at"):

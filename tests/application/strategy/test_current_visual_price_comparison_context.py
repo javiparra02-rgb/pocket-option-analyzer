@@ -7,6 +7,8 @@ from pocket_option_analyzer.application.signals import (
     VisualStrategySignalAnalysisPipeline,
 )
 from pocket_option_analyzer.application.strategy import (
+    CurrentVisualPriceComparator,
+    CurrentVisualPriceComparison,
     CurrentVisualPriceComparisonContext,
     StrategyObservation,
     StrategyObservationOutcomeResolver,
@@ -93,6 +95,8 @@ def test_context_is_immutable_and_contains_no_comparison_result() -> None:
     "target",
     (
         CurrentVisualPriceComparisonContext,
+        CurrentVisualPriceComparison,
+        CurrentVisualPriceComparator.compare,
         StrategyObservation,
         StrategyObservationResolution,
         VisualReferenceValidation,

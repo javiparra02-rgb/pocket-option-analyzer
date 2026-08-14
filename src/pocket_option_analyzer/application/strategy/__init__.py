@@ -1,3 +1,9 @@
+from .current_visual_price_comparator import CurrentVisualPriceComparator
+from .current_visual_price_comparison import (
+    CurrentVisualPriceComparison,
+    CurrentVisualPriceComparisonDiagnostic,
+    CurrentVisualPriceComparisonStatus,
+)
 from .current_visual_price_comparison_context import (
     CurrentVisualPriceComparisonContext,
 )
@@ -31,7 +37,11 @@ from .visual_reference_validation import (
 from .visual_reference_validation_resolver import VisualReferenceValidationResolver
 
 __all__ = [
+    "CurrentVisualPriceComparator",
+    "CurrentVisualPriceComparison",
     "CurrentVisualPriceComparisonContext",
+    "CurrentVisualPriceComparisonDiagnostic",
+    "CurrentVisualPriceComparisonStatus",
     "DirectionConditionAudit",
     "StrategyCondition",
     "StrategyConditionAudit",

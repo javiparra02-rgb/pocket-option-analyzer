@@ -2,6 +2,9 @@ import json
 from datetime import UTC, datetime, timedelta
 
 from pocket_option_analyzer.application.strategy import (
+    CurrentVisualPriceComparison,
+    CurrentVisualPriceComparisonDiagnostic,
+    CurrentVisualPriceComparisonStatus,
     DirectionConditionAudit,
     StrategyCondition,
     StrategyConditionAudit,
@@ -139,6 +142,17 @@ def test_writer_appends_resolution_event(tmp_path) -> None:
         exit_reference=VisualPriceReference(0.45, anchor_shape=anchors),
         outcome=StrategyObservationOutcome.WIN,
         exit_current_visual_price=exit_extraction,
+        visual_price_comparison=CurrentVisualPriceComparison(
+            status=CurrentVisualPriceComparisonStatus.AVAILABLE,
+            diagnostic=(
+                CurrentVisualPriceComparisonDiagnostic.COMPARISON_AVAILABLE
+            ),
+            entry_anchored_value=0.25,
+            exit_anchored_value=0.75,
+            delta=0.5,
+            entry_price_y_in_chart_roi=250.0,
+            exit_price_y_in_chart_roi=150.0,
+        ),
     )
 
     JsonlStrategyObservationWriter(path).write_resolution(resolution)
@@ -162,6 +176,15 @@ def test_writer_appends_resolution_event(tmp_path) -> None:
             "source": "current_visual_price_roi_v1",
             "confidence": 0.92,
         },
+    }
+    assert payload["visual_price_comparison"] == {
+        "status": "available",
+        "diagnostic": "comparison_available",
+        "entry_anchored_value": 0.25,
+        "exit_anchored_value": 0.75,
+        "delta": 0.5,
+        "entry_price_y_in_chart_roi": 250.0,
+        "exit_price_y_in_chart_roi": 150.0,
     }
     assert payload["outcome"] == "win"
 
@@ -189,6 +212,7 @@ def test_writer_serializes_null_exit_visual_price_for_resolution(tmp_path) -> No
 
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["exit_current_visual_price"] is None
+    assert payload["visual_price_comparison"] is None
 
 
 def test_writer_appends_passive_reference_events(tmp_path) -> None:
@@ -225,6 +249,17 @@ def test_writer_appends_passive_reference_events(tmp_path) -> None:
             ),
             movement=VisualReferenceMovement.UP,
             exit_current_visual_price=exit_extraction,
+            visual_price_comparison=CurrentVisualPriceComparison(
+                status=CurrentVisualPriceComparisonStatus.AVAILABLE,
+                diagnostic=(
+                    CurrentVisualPriceComparisonDiagnostic.COMPARISON_AVAILABLE
+                ),
+                entry_anchored_value=0.42,
+                exit_anchored_value=0.42,
+                delta=0.0,
+                entry_price_y_in_chart_roi=514.0,
+                exit_price_y_in_chart_roi=514.0,
+            ),
         )
     )
 
@@ -247,6 +282,7 @@ def test_writer_appends_passive_reference_events(tmp_path) -> None:
         "diagnostic": "no candidate matched the visual price mask",
         "price": None,
     }
+    assert payloads[1]["visual_price_comparison"]["delta"] == 0.0
 
 
 def test_writer_serializes_null_exit_visual_price_for_reference_resolution(
@@ -274,6 +310,44 @@ def test_writer_serializes_null_exit_visual_price_for_reference_resolution(
 
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["exit_current_visual_price"] is None
+    assert payload["visual_price_comparison"] is None
+
+
+def test_writer_serializes_unavailable_visual_price_comparison(tmp_path) -> None:
+    instant = datetime(2026, 8, 9, 12, 0, tzinfo=UTC)
+    path = tmp_path / "observations.jsonl"
+    reference = VisualPriceReference(
+        0.42,
+        anchor_shape=(("bullish", 1.0, 0.8, 0.6, 0.0),),
+    )
+    resolution = VisualReferenceResolution(
+        snapshot_id=instant.isoformat(),
+        observed_at=instant,
+        resolve_at=instant + timedelta(seconds=10),
+        resolved_at=instant + timedelta(seconds=11),
+        entry_reference=reference,
+        exit_reference=None,
+        movement=VisualReferenceMovement.UNRESOLVED,
+        visual_price_comparison=CurrentVisualPriceComparison(
+            status=CurrentVisualPriceComparisonStatus.UNAVAILABLE,
+            diagnostic=(
+                CurrentVisualPriceComparisonDiagnostic.EXIT_GEOMETRY_MISSING
+            ),
+        ),
+    )
+
+    JsonlStrategyObservationWriter(path).write_reference_resolution(resolution)
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["visual_price_comparison"] == {
+        "status": "unavailable",
+        "diagnostic": "exit_geometry_missing",
+        "entry_anchored_value": None,
+        "exit_anchored_value": None,
+        "delta": None,
+        "entry_price_y_in_chart_roi": None,
+        "exit_price_y_in_chart_roi": None,
+    }
 
 
 def test_writer_serializes_missing_reference_diagnostic(tmp_path) -> None:
