@@ -6,6 +6,9 @@ from enum import StrEnum
 
 from pocket_option_analyzer.vision.models import CurrentVisualPriceExtraction
 
+from .current_visual_price_comparison_context import (
+    CurrentVisualPriceComparisonContext,
+)
 from .strategy_observation_outcome import VisualPriceReference
 from .visual_price_reference_result import VisualPriceReferenceResult
 
@@ -64,6 +67,7 @@ class VisualReferenceValidation:
     entry_reference: VisualPriceReference | None
     entry_reference_result: VisualPriceReferenceResult | None = None
     current_visual_price: CurrentVisualPriceExtraction | None = None
+    entry_visual_price_context: CurrentVisualPriceComparisonContext | None = None
 
     def __post_init__(self) -> None:
         _normalize_utc(self, "observed_at", "resolve_at")
@@ -80,6 +84,8 @@ class VisualReferenceResolution:
     movement: VisualReferenceMovement
     diagnostic: str | None = None
     exit_current_visual_price: CurrentVisualPriceExtraction | None = None
+    entry_visual_price_context: CurrentVisualPriceComparisonContext | None = None
+    exit_visual_price_context: CurrentVisualPriceComparisonContext | None = None
 
     def __post_init__(self) -> None:
         _normalize_utc(self, "observed_at", "resolve_at", "resolved_at")

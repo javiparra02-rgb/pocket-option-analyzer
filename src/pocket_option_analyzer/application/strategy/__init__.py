@@ -1,3 +1,6 @@
+from .current_visual_price_comparison_context import (
+    CurrentVisualPriceComparisonContext,
+)
 from .strategy_condition_audit import (
     DirectionConditionAudit,
     StrategyCondition,
@@ -28,6 +31,7 @@ from .visual_reference_validation import (
 from .visual_reference_validation_resolver import VisualReferenceValidationResolver
 
 __all__ = [
+    "CurrentVisualPriceComparisonContext",
     "DirectionConditionAudit",
     "StrategyCondition",
     "StrategyConditionAudit",

@@ -654,6 +654,30 @@ def test_strategy_diagnostics_are_optional_for_compatible_fakes() -> None:
     assert "[strategy_diagnostics]" not in result.reason
 
 
+def test_analyze_builds_context_without_price_or_capture_geometry() -> None:
+    pipeline = VisualStrategySignalAnalysisPipeline(
+        market_analysis_pipeline=FakeMarketAnalysisPipeline(
+            result=_market_analysis(),
+        ),
+        indicator_snapshot_builder=FakeVisualIndicatorSnapshotBuilder(
+            result=None,
+        ),
+        signal_generator=FakeStrategySignalGenerator(
+            result=MarketSignal.neutral(reason="Waiting."),
+        ),
+        profile=StrategyProfile.otc_precision_10s(),
+    )
+
+    pipeline.analyze(image=np.zeros((100, 100, 3), dtype=np.uint8))
+
+    context = pipeline.last_visual_price_comparison_context
+    assert context is not None
+    assert context.current_visual_price is None
+    assert context.chart_region is None
+    assert context.price_observation_region is None
+    assert context.reference_result is pipeline.last_price_reference_result
+
+
 def test_build_last_observation_preserves_current_visual_price_identity() -> None:
     instant = datetime(2026, 8, 9, 12, 0, tzinfo=UTC)
     key = CandleIntervalKey(started_at=instant, duration_seconds=30)
@@ -665,10 +689,14 @@ def test_build_last_observation_preserves_current_visual_price_identity() -> Non
         selected_y=514.0,
         confidence=0.92,
     )
+    chart_region = ChartRegion(x=20, y=30, width=100, height=100)
+    price_region = ChartRegion(x=0, y=10, width=100, height=100)
     analysis = MarketAnalysis(
         series=_visual_series(),
         trend=TrendDirection.BULLISH,
         current_visual_price=extraction,
+        chart_region=chart_region,
+        price_observation_region=price_region,
     )
     profile = StrategyProfile.otc_precision_10s()
     pipeline = VisualStrategySignalAnalysisPipeline(
@@ -696,3 +724,11 @@ def test_build_last_observation_preserves_current_visual_price_identity() -> Non
     assert observation is not None
     assert observation.current_visual_price is extraction
     assert pipeline.last_current_visual_price is extraction
+    context = observation.visual_price_comparison_context
+    assert context is pipeline.last_visual_price_comparison_context
+    assert context is not None
+    assert context.current_visual_price is extraction
+    assert context.chart_region is chart_region
+    assert context.price_observation_region is price_region
+    assert context.reference_result is observation.entry_reference_result
+    assert context.reference_result.reference is observation.entry_reference

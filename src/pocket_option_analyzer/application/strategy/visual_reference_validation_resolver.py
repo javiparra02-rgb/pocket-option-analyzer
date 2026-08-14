@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from .current_visual_price_comparison_context import (
+    CurrentVisualPriceComparisonContext,
+)
 from .strategy_observation import StrategyObservation
 from .strategy_observation_outcome import VisualPriceReference
 from .visual_reference_validation import (
@@ -29,6 +32,11 @@ class VisualReferenceValidationResolver:
             entry_reference=observation.entry_reference,
             entry_reference_result=observation.entry_reference_result,
             current_visual_price=observation.current_visual_price,
+            entry_visual_price_context=getattr(
+                observation,
+                "visual_price_comparison_context",
+                None,
+            ),
         )
         self._pending[snapshot_id] = validation
         return validation
@@ -37,6 +45,8 @@ class VisualReferenceValidationResolver:
         self,
         observed_at: datetime,
         exit_reference: VisualPriceReference | None,
+        exit_visual_price_context: CurrentVisualPriceComparisonContext
+        | None = None,
     ) -> tuple[VisualReferenceResolution, ...]:
         due = tuple(
             validation
@@ -59,6 +69,10 @@ class VisualReferenceValidationResolver:
                     validation.entry_reference,
                     exit_reference,
                 ),
+                entry_visual_price_context=(
+                    validation.entry_visual_price_context
+                ),
+                exit_visual_price_context=exit_visual_price_context,
             )
             for validation in due
         )

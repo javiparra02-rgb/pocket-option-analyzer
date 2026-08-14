@@ -83,6 +83,11 @@ class VisualSignalRecordingPipeline:
                     "last_current_visual_price",
                     None,
                 ),
+                exit_visual_price_context=getattr(
+                    self._analysis_pipeline,
+                    "last_visual_price_comparison_context",
+                    None,
+                ),
             )
             observation = self._analysis_pipeline.build_last_observation(
                 observed_at=resolved_created_at,

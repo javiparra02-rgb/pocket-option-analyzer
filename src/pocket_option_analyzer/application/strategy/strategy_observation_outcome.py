@@ -39,6 +39,12 @@ class StrategyObservationResolution:
     exit_reference: VisualPriceReference | None
     outcome: StrategyObservationOutcome
     exit_current_visual_price: CurrentVisualPriceExtraction | None = None
+    entry_visual_price_context: (
+        comparison_context.CurrentVisualPriceComparisonContext | None
+    ) = None
+    exit_visual_price_context: (
+        comparison_context.CurrentVisualPriceComparisonContext | None
+    ) = None
 
     def __post_init__(self) -> None:
         for field_name in ("observed_at", "resolve_at", "resolved_at"):
@@ -46,3 +52,10 @@ class StrategyObservationResolution:
             if value.tzinfo is None or value.utcoffset() is None:
                 raise ValueError(f"{field_name} debe incluir zona horaria.")
             object.__setattr__(self, field_name, value.astimezone(UTC))
+
+
+# Imported after VisualPriceReference is defined to break the existing cycle:
+# context -> reference result -> this module -> context.
+from . import (  # noqa: E402, I001
+    current_visual_price_comparison_context as comparison_context,
+)

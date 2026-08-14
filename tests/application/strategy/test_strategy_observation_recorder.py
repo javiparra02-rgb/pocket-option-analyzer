@@ -4,15 +4,19 @@ from types import SimpleNamespace
 import pytest
 
 from pocket_option_analyzer.application.strategy import (
+    CurrentVisualPriceComparisonContext,
     StrategyObservationOutcome,
     StrategyObservationRecorder,
     StrategyObservationResolution,
     VisualPriceReference,
+    VisualPriceReferenceResult,
+    VisualPriceReferenceStatus,
     VisualReferenceMovement,
     VisualReferenceResolution,
 )
 from pocket_option_analyzer.domain.signals import SignalDirection
 from pocket_option_analyzer.vision.models import (
+    ChartRegion,
     CurrentVisualPrice,
     CurrentVisualPriceExtraction,
     CurrentVisualPriceStatus,
@@ -44,6 +48,39 @@ def _failed_extraction() -> CurrentVisualPriceExtraction:
         price=None,
         status=CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE,
         diagnostic="no candidate matched the visual price mask",
+    )
+
+
+def _comparison_context(
+    *,
+    reference: VisualPriceReference | None,
+    extraction: CurrentVisualPriceExtraction | None = None,
+    region_offset: int = 0,
+) -> CurrentVisualPriceComparisonContext:
+    return CurrentVisualPriceComparisonContext(
+        current_visual_price=extraction,
+        chart_region=ChartRegion(
+            x=20,
+            y=30 + region_offset,
+            width=1000,
+            height=700,
+        ),
+        price_observation_region=ChartRegion(
+            x=0,
+            y=80 + region_offset,
+            width=1320,
+            height=800,
+        ),
+        reference_result=VisualPriceReferenceResult(
+            reference=reference,
+            status=(
+                VisualPriceReferenceStatus.OK
+                if reference is not None
+                else VisualPriceReferenceStatus.LATEST_CANDLE_MISSING
+            ),
+            anchor_top_roi_y=100,
+            anchor_bottom_roi_y=700,
+        ),
     )
 
 
@@ -190,20 +227,162 @@ def test_exit_visual_price_does_not_change_existing_outcome_resolution(
     recorder = StrategyObservationRecorder(writer=writer)
     recorder.record(_observation(instant))
     exit_extraction = _failed_extraction()
+    exit_context = _comparison_context(
+        reference=exit_reference,
+        extraction=exit_extraction,
+    )
 
     resolutions = recorder.resolve_due(
         instant + timedelta(seconds=10),
         exit_reference,
         exit_current_visual_price=exit_extraction,
+        exit_visual_price_context=exit_context,
     )
 
     assert len(resolutions) == 1
     assert resolutions[0].outcome is expected_outcome
-    assert resolutions[0].exit_current_visual_price is exit_extraction
+    assert (
+        resolutions[0].exit_reference
+        is exit_context.reference_result.reference
+    )
+    assert resolutions[0].exit_current_visual_price is exit_context.current_visual_price
+    assert resolutions[0].exit_visual_price_context is exit_context
     reference_resolution = next(
         item for item in writer.items if isinstance(item, VisualReferenceResolution)
     )
-    assert reference_resolution.exit_current_visual_price is exit_extraction
+    assert (
+        reference_resolution.exit_reference
+        is exit_context.reference_result.reference
+    )
+    assert (
+        reference_resolution.exit_current_visual_price
+        is exit_context.current_visual_price
+    )
+    assert reference_resolution.exit_visual_price_context is exit_context
+
+
+def test_contexts_remain_associated_with_each_snapshot_on_shared_exit() -> None:
+    first_instant = datetime(2026, 8, 9, tzinfo=UTC)
+    second_instant = first_instant + timedelta(seconds=5)
+    entry_reference = _reference(100.0)
+    exit_reference = _reference(101.0)
+    exit_extraction = _valid_extraction()
+    first_context = _comparison_context(
+        reference=entry_reference,
+        region_offset=10,
+    )
+    second_context = _comparison_context(
+        reference=entry_reference,
+        region_offset=20,
+    )
+    exit_context = _comparison_context(
+        reference=exit_reference,
+        extraction=exit_extraction,
+        region_offset=30,
+    )
+    first_observation = _observation(first_instant)
+    second_observation = _observation(second_instant)
+    first_observation.entry_reference = entry_reference
+    second_observation.entry_reference = entry_reference
+    first_observation.visual_price_comparison_context = first_context
+    second_observation.visual_price_comparison_context = second_context
+    writer = _Writer()
+    recorder = StrategyObservationRecorder(writer=writer)
+    recorder.record(first_observation)
+    recorder.record(second_observation)
+
+    resolutions = recorder.resolve_due(
+        second_instant + timedelta(seconds=10),
+        exit_reference,
+        exit_current_visual_price=exit_extraction,
+        exit_visual_price_context=exit_context,
+    )
+
+    assert [resolution.snapshot_id for resolution in resolutions] == [
+        first_instant.isoformat(),
+        second_instant.isoformat(),
+    ]
+    assert resolutions[0].entry_visual_price_context is first_context
+    assert resolutions[1].entry_visual_price_context is second_context
+    assert all(
+        resolution.exit_visual_price_context is exit_context
+        for resolution in resolutions
+    )
+    assert all(
+        resolution.exit_reference is exit_context.reference_result.reference
+        for resolution in resolutions
+    )
+    assert all(
+        resolution.exit_current_visual_price is exit_context.current_visual_price
+        for resolution in resolutions
+    )
+    reference_resolutions = [
+        item for item in writer.items if isinstance(item, VisualReferenceResolution)
+    ]
+    assert reference_resolutions[0].entry_visual_price_context is first_context
+    assert reference_resolutions[1].entry_visual_price_context is second_context
+    assert all(
+        resolution.exit_visual_price_context is exit_context
+        for resolution in reference_resolutions
+    )
+    assert all(
+        resolution.exit_reference is exit_context.reference_result.reference
+        for resolution in reference_resolutions
+    )
+    assert all(
+        resolution.exit_current_visual_price is exit_context.current_visual_price
+        for resolution in reference_resolutions
+    )
+
+
+def test_recorder_derives_missing_exit_evidence_from_canonical_context() -> None:
+    instant = datetime(2026, 8, 9, tzinfo=UTC)
+    exit_context = _comparison_context(
+        reference=_reference(101.0),
+        extraction=_valid_extraction(),
+    )
+    writer = _Writer()
+    recorder = StrategyObservationRecorder(writer=writer)
+    recorder.record(_observation(instant))
+
+    resolutions = recorder.resolve_due(
+        instant + timedelta(seconds=10),
+        None,
+        exit_visual_price_context=exit_context,
+    )
+
+    assert len(resolutions) == 1
+    assert resolutions[0].outcome is StrategyObservationOutcome.WIN
+    assert resolutions[0].exit_reference is exit_context.reference_result.reference
+    assert resolutions[0].exit_current_visual_price is exit_context.current_visual_price
+
+
+@pytest.mark.parametrize(
+    ("exit_reference", "exit_extraction", "message"),
+    [
+        (_reference(99.0), _valid_extraction(), "exit_reference"),
+        (_reference(101.0), _failed_extraction(), "exit_current_visual_price"),
+    ],
+)
+def test_recorder_rejects_exit_evidence_that_contradicts_canonical_context(
+    exit_reference: VisualPriceReference,
+    exit_extraction: CurrentVisualPriceExtraction,
+    message: str,
+) -> None:
+    instant = datetime(2026, 8, 9, tzinfo=UTC)
+    exit_context = _comparison_context(
+        reference=_reference(101.0),
+        extraction=_valid_extraction(),
+    )
+    recorder = StrategyObservationRecorder(writer=_Writer())
+
+    with pytest.raises(ValueError, match=message):
+        recorder.resolve_due(
+            instant,
+            exit_reference,
+            exit_current_visual_price=exit_extraction,
+            exit_visual_price_context=exit_context,
+        )
 
 
 def test_exit_visual_price_is_associated_with_each_due_snapshot() -> None:

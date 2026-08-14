@@ -12,6 +12,9 @@ from pocket_option_analyzer.application.strategy.strategy_observation_outcome im
 )
 from pocket_option_analyzer.domain.signals import SignalDirection
 
+from .current_visual_price_comparison_context import (
+    CurrentVisualPriceComparisonContext,
+)
 from .visual_reference_validation import (
     VisualReferenceMovement,
     compare_visual_references,
@@ -40,6 +43,8 @@ class StrategyObservationOutcomeResolver:
         self,
         observed_at: datetime,
         exit_reference: VisualPriceReference | None,
+        exit_visual_price_context: CurrentVisualPriceComparisonContext
+        | None = None,
     ) -> tuple[StrategyObservationResolution, ...]:
         due = tuple(
             (snapshot_id, observation)
@@ -47,7 +52,13 @@ class StrategyObservationOutcomeResolver:
             if observed_at >= observation.resolve_at
         )
         resolutions = tuple(
-            self._resolve(snapshot_id, observation, observed_at, exit_reference)
+            self._resolve(
+                snapshot_id,
+                observation,
+                observed_at,
+                exit_reference,
+                exit_visual_price_context,
+            )
             for snapshot_id, observation in due
         )
         for snapshot_id, _ in due:
@@ -60,6 +71,7 @@ class StrategyObservationOutcomeResolver:
         observation: StrategyObservation,
         resolved_at: datetime,
         exit_reference: VisualPriceReference | None,
+        exit_visual_price_context: CurrentVisualPriceComparisonContext | None,
     ) -> StrategyObservationResolution:
         entry_reference = observation.entry_reference
         direction = observation.direction
@@ -79,6 +91,12 @@ class StrategyObservationOutcomeResolver:
             entry_reference=entry_reference,
             exit_reference=exit_reference,
             outcome=outcome,
+            entry_visual_price_context=getattr(
+                observation,
+                "visual_price_comparison_context",
+                None,
+            ),
+            exit_visual_price_context=exit_visual_price_context,
         )
 
     @staticmethod

@@ -15,6 +15,7 @@ from pocket_option_analyzer.application.signals.strategy_signal_generator import
     StrategySignalGenerator,
 )
 from pocket_option_analyzer.application.strategy import (
+    CurrentVisualPriceComparisonContext,
     DirectionConditionAudit,
     StrategyCondition,
     StrategyConditionAudit,
@@ -43,7 +44,7 @@ class _ObservationData:
     context: VisualIndicatorSnapshotContext | None
     timing: CandleIntervalIndicatorCacheStatus
     direction: SignalDirection
-    entry_reference: VisualPriceReference | None
+    visual_price_comparison_context: CurrentVisualPriceComparisonContext
 
 
 class VisualStrategySignalAnalysisPipeline:
@@ -84,6 +85,9 @@ class VisualStrategySignalAnalysisPipeline:
         self._last_price_reference: VisualPriceReference | None = None
         self._last_price_reference_result: VisualPriceReferenceResult | None = None
         self._last_current_visual_price: CurrentVisualPriceExtraction | None = None
+        self._last_visual_price_comparison_context: (
+            CurrentVisualPriceComparisonContext | None
+        ) = None
 
     @property
     def last_price_reference(self) -> VisualPriceReference | None:
@@ -107,6 +111,14 @@ class VisualStrategySignalAnalysisPipeline:
 
         return self._last_current_visual_price
 
+    @property
+    def last_visual_price_comparison_context(
+        self,
+    ) -> CurrentVisualPriceComparisonContext | None:
+        """Return the comparison evidence from the last analyzed frame."""
+
+        return self._last_visual_price_comparison_context
+
     def build_last_observation(
         self,
         observed_at: datetime,
@@ -128,11 +140,20 @@ class VisualStrategySignalAnalysisPipeline:
                 if data.direction in (SignalDirection.CALL, SignalDirection.PUT)
                 else None
             ),
-            entry_reference=data.entry_reference,
-            entry_reference_result=self._last_price_reference_result,
-            current_visual_price=data.market_analysis.current_visual_price,
+            entry_reference=(
+                data.visual_price_comparison_context.reference_result.reference
+            ),
+            entry_reference_result=(
+                data.visual_price_comparison_context.reference_result
+            ),
+            current_visual_price=(
+                data.visual_price_comparison_context.current_visual_price
+            ),
             visual_context=data.context,
             detection_diagnostics=data.market_analysis.detection_diagnostics,
+            visual_price_comparison_context=(
+                data.visual_price_comparison_context
+            ),
         )
 
     def analyze(
@@ -153,6 +174,7 @@ class VisualStrategySignalAnalysisPipeline:
         self._last_price_reference = None
         self._last_price_reference_result = None
         self._last_current_visual_price = None
+        self._last_visual_price_comparison_context = None
 
         market_analysis = self._market_analysis_pipeline.analyze(
             image=image,
@@ -168,6 +190,15 @@ class VisualStrategySignalAnalysisPipeline:
 
         self._last_price_reference_result = reference_result
         self._last_price_reference = reference_result.reference
+        visual_price_comparison_context = CurrentVisualPriceComparisonContext(
+            current_visual_price=market_analysis.current_visual_price,
+            chart_region=market_analysis.chart_region,
+            price_observation_region=market_analysis.price_observation_region,
+            reference_result=reference_result,
+        )
+        self._last_visual_price_comparison_context = (
+            visual_price_comparison_context
+        )
 
         indicators = self._indicator_snapshot_builder.build(
             series=market_analysis.series,
@@ -241,7 +272,9 @@ class VisualStrategySignalAnalysisPipeline:
                 context=self._indicator_snapshot_builder.snapshot_context,
                 timing=snapshot_timing_status,
                 direction=signal.direction,
-                entry_reference=self._last_price_reference,
+                visual_price_comparison_context=(
+                    visual_price_comparison_context
+                ),
             )
 
         visual_diagnostics_line = self._visual_diagnostics_line(

@@ -23,6 +23,10 @@ from pocket_option_analyzer.application.strategy.visual_reference_validation_res
 )
 from pocket_option_analyzer.vision.models import CurrentVisualPriceExtraction
 
+from .current_visual_price_comparison_context import (
+    CurrentVisualPriceComparisonContext,
+)
+
 
 class StrategyObservationWriter(Protocol):
     def write(self, observation: StrategyObservation) -> None: ...
@@ -74,7 +78,16 @@ class StrategyObservationRecorder:
         observed_at: datetime,
         exit_reference: VisualPriceReference | None,
         exit_current_visual_price: CurrentVisualPriceExtraction | None = None,
+        exit_visual_price_context: CurrentVisualPriceComparisonContext
+        | None = None,
     ) -> tuple[StrategyObservationResolution, ...]:
+        exit_reference, exit_current_visual_price = (
+            self._canonical_exit_evidence(
+                exit_reference=exit_reference,
+                exit_current_visual_price=exit_current_visual_price,
+                exit_visual_price_context=exit_visual_price_context,
+            )
+        )
         resolutions = tuple(
             replace(
                 resolution,
@@ -83,6 +96,7 @@ class StrategyObservationRecorder:
             for resolution in self._resolver.resolve_due(
                 observed_at,
                 exit_reference,
+                exit_visual_price_context,
             )
         )
         reference_resolutions = tuple(
@@ -93,6 +107,7 @@ class StrategyObservationRecorder:
             for resolution in self._reference_resolver.resolve_due(
                 observed_at,
                 exit_reference,
+                exit_visual_price_context,
             )
         )
         if self._writer is not None:
@@ -101,3 +116,39 @@ class StrategyObservationRecorder:
             for resolution in reference_resolutions:
                 self._writer.write_reference_resolution(resolution)
         return resolutions
+
+    @staticmethod
+    def _canonical_exit_evidence(
+        *,
+        exit_reference: VisualPriceReference | None,
+        exit_current_visual_price: CurrentVisualPriceExtraction | None,
+        exit_visual_price_context: CurrentVisualPriceComparisonContext | None,
+    ) -> tuple[
+        VisualPriceReference | None,
+        CurrentVisualPriceExtraction | None,
+    ]:
+        if exit_visual_price_context is None:
+            return exit_reference, exit_current_visual_price
+
+        canonical_reference = (
+            exit_visual_price_context.reference_result.reference
+        )
+        canonical_visual_price = (
+            exit_visual_price_context.current_visual_price
+        )
+        if (
+            exit_reference is not None
+            and exit_reference != canonical_reference
+        ):
+            raise ValueError(
+                "exit_reference debe coincidir con exit_visual_price_context."
+            )
+        if (
+            exit_current_visual_price is not None
+            and exit_current_visual_price != canonical_visual_price
+        ):
+            raise ValueError(
+                "exit_current_visual_price debe coincidir con "
+                "exit_visual_price_context."
+            )
+        return canonical_reference, canonical_visual_price

@@ -68,6 +68,8 @@ def test_resolver_uses_first_snapshot_at_or_after_resolve_at() -> None:
     assert len(resolutions) == 1
     assert resolutions[0].resolved_at == instant + timedelta(seconds=10)
     assert resolutions[0].outcome is StrategyObservationOutcome.WIN
+    assert resolutions[0].entry_visual_price_context is None
+    assert resolutions[0].exit_visual_price_context is None
     assert resolver.resolve_due(
         instant + timedelta(seconds=11), _reference(80.0),
     ) == ()

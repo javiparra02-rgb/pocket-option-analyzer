@@ -6,6 +6,11 @@ from pocket_option_analyzer.application.signals import (
     SignalRecorder,
     VisualSignalRecordingPipeline,
 )
+from pocket_option_analyzer.application.strategy import (
+    CurrentVisualPriceComparisonContext,
+    VisualPriceReferenceResult,
+    VisualPriceReferenceStatus,
+)
 from pocket_option_analyzer.domain.signals import (
     MarketSignal,
     SignalDirection,
@@ -30,6 +35,7 @@ class FakeVisualStrategySignalAnalysisPipeline:
         self.received_price_observation_region = None
         self.last_price_reference = None
         self.last_current_visual_price = None
+        self.last_visual_price_comparison_context = None
 
     def analyze(
         self,
@@ -112,8 +118,23 @@ def test_analyze_and_record_propagates_exit_visual_price_by_identity() -> None:
         selected_y=514.0,
         confidence=0.92,
     )
+    context = CurrentVisualPriceComparisonContext(
+        current_visual_price=extraction,
+        chart_region=ChartRegion(x=10, y=20, width=100, height=80),
+        price_observation_region=ChartRegion(
+            x=0,
+            y=30,
+            width=120,
+            height=90,
+        ),
+        reference_result=VisualPriceReferenceResult(
+            reference=None,
+            status=VisualPriceReferenceStatus.LATEST_CANDLE_MISSING,
+        ),
+    )
     analysis_pipeline = FakeVisualStrategySignalAnalysisPipeline()
     analysis_pipeline.last_current_visual_price = extraction
+    analysis_pipeline.last_visual_price_comparison_context = context
     observation_recorder = FakeObservationRecorder()
     created_at = datetime(2026, 8, 11, 12, 0, tzinfo=UTC)
     pipeline = VisualSignalRecordingPipeline(
@@ -132,8 +153,45 @@ def test_analyze_and_record_propagates_exit_visual_price_by_identity() -> None:
             "observed_at": created_at,
             "exit_reference": None,
             "exit_current_visual_price": extraction,
+            "exit_visual_price_context": context,
         }
     ]
+    assert context.current_visual_price is extraction
+
+
+def test_analyze_and_record_propagates_exit_comparison_context_by_identity() -> None:
+    context = CurrentVisualPriceComparisonContext(
+        current_visual_price=None,
+        chart_region=ChartRegion(x=10, y=20, width=100, height=80),
+        price_observation_region=ChartRegion(
+            x=0,
+            y=30,
+            width=120,
+            height=90,
+        ),
+        reference_result=VisualPriceReferenceResult(
+            reference=None,
+            status=VisualPriceReferenceStatus.LATEST_CANDLE_MISSING,
+        ),
+    )
+    analysis_pipeline = FakeVisualStrategySignalAnalysisPipeline()
+    analysis_pipeline.last_visual_price_comparison_context = context
+    observation_recorder = FakeObservationRecorder()
+    created_at = datetime(2026, 8, 11, 12, 0, tzinfo=UTC)
+    pipeline = VisualSignalRecordingPipeline(
+        analysis_pipeline=analysis_pipeline,
+        recorder=SignalRecorder(SignalHistory()),
+        observation_recorder=observation_recorder,
+    )
+
+    pipeline.analyze_and_record(
+        image=np.zeros((100, 100, 3), dtype=np.uint8),
+        created_at=created_at,
+    )
+
+    assert observation_recorder.resolve_calls[0][
+        "exit_visual_price_context"
+    ] is context
 
 
 class FakeSignalRecordWriter:
