@@ -28,6 +28,10 @@ from .current_visual_price_comparison import CurrentVisualPriceComparison
 from .current_visual_price_comparison_context import (
     CurrentVisualPriceComparisonContext,
 )
+from .visual_price_movement_classification import (
+    VisualPriceMovementClassification,
+)
+from .visual_price_movement_classifier import VisualPriceMovementClassifier
 
 
 class StrategyObservationWriter(Protocol):
@@ -55,6 +59,8 @@ class StrategyObservationRecorder:
         resolver: StrategyObservationOutcomeResolver | None = None,
         reference_resolver: VisualReferenceValidationResolver | None = None,
         visual_price_comparator: CurrentVisualPriceComparator | None = None,
+        visual_price_movement_classifier: VisualPriceMovementClassifier
+        | None = None,
     ) -> None:
         self._writer = writer
         self._resolver = resolver or StrategyObservationOutcomeResolver()
@@ -63,6 +69,9 @@ class StrategyObservationRecorder:
         )
         self._visual_price_comparator = (
             visual_price_comparator or CurrentVisualPriceComparator()
+        )
+        self._visual_price_movement_classifier = (
+            visual_price_movement_classifier or VisualPriceMovementClassifier()
         )
         self._seen_snapshot_ids: set[str] = set()
 
@@ -105,6 +114,7 @@ class StrategyObservationRecorder:
             exit_visual_price_context,
         )
         comparisons: dict[str, CurrentVisualPriceComparison] = {}
+        classifications: dict[str, VisualPriceMovementClassification] = {}
         context_pairs: dict[
             str,
             tuple[
@@ -125,8 +135,10 @@ class StrategyObservationRecorder:
                 )
             if resolution.snapshot_id not in comparisons:
                 context_pairs[resolution.snapshot_id] = pair
-                comparisons[resolution.snapshot_id] = (
-                    self._visual_price_comparator.compare(*pair)
+                comparison = self._visual_price_comparator.compare(*pair)
+                comparisons[resolution.snapshot_id] = comparison
+                classifications[resolution.snapshot_id] = (
+                    self._visual_price_movement_classifier.classify(comparison)
                 )
 
         resolutions = tuple(
@@ -134,6 +146,9 @@ class StrategyObservationRecorder:
                 resolution,
                 exit_current_visual_price=exit_current_visual_price,
                 visual_price_comparison=comparisons[resolution.snapshot_id],
+                visual_price_movement_classification=(
+                    classifications[resolution.snapshot_id]
+                ),
             )
             for resolution in legacy_resolutions
         )
@@ -142,6 +157,9 @@ class StrategyObservationRecorder:
                 resolution,
                 exit_current_visual_price=exit_current_visual_price,
                 visual_price_comparison=comparisons[resolution.snapshot_id],
+                visual_price_movement_classification=(
+                    classifications[resolution.snapshot_id]
+                ),
             )
             for resolution in legacy_reference_resolutions
         )

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from enum import StrEnum
 
 from pocket_option_analyzer.vision.models import CurrentVisualPriceExtraction
 
@@ -10,15 +9,12 @@ from .current_visual_price_comparison import CurrentVisualPriceComparison
 from .current_visual_price_comparison_context import (
     CurrentVisualPriceComparisonContext,
 )
+from .price_movement import VisualReferenceMovement
 from .strategy_observation_outcome import VisualPriceReference
+from .visual_price_movement_classification import (
+    VisualPriceMovementClassification,
+)
 from .visual_price_reference_result import VisualPriceReferenceResult
-
-
-class VisualReferenceMovement(StrEnum):
-    UP = "up"
-    DOWN = "down"
-    FLAT = "flat"
-    UNRESOLVED = "unresolved"
 
 
 def references_are_comparable(
@@ -88,6 +84,9 @@ class VisualReferenceResolution:
     entry_visual_price_context: CurrentVisualPriceComparisonContext | None = None
     exit_visual_price_context: CurrentVisualPriceComparisonContext | None = None
     visual_price_comparison: CurrentVisualPriceComparison | None = None
+    visual_price_movement_classification: (
+        VisualPriceMovementClassification | None
+    ) = None
 
     def __post_init__(self) -> None:
         _normalize_utc(self, "observed_at", "resolve_at", "resolved_at")

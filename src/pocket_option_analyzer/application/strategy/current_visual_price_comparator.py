@@ -30,6 +30,7 @@ _Failure = Literal[
 class _CanonicalVisualPrice:
     anchored_value: float
     price_y_in_chart_roi: float
+    anchor_span_px: float
     source: str
     reference: VisualPriceReference
 
@@ -84,6 +85,8 @@ class CurrentVisualPriceComparator:
             delta=exit.anchored_value - entry.anchored_value,
             entry_price_y_in_chart_roi=entry.price_y_in_chart_roi,
             exit_price_y_in_chart_roi=exit.price_y_in_chart_roi,
+            entry_anchor_span_px=entry.anchor_span_px,
+            exit_anchor_span_px=exit.anchor_span_px,
         )
 
     @staticmethod
@@ -147,10 +150,12 @@ class CurrentVisualPriceComparator:
         anchored_value = (anchor_bottom - price_y_in_chart_roi) / (
             anchor_bottom - anchor_top
         )
+        anchor_span_px = float(anchor_bottom - anchor_top)
         return (
             _CanonicalVisualPrice(
                 anchored_value=anchored_value,
                 price_y_in_chart_roi=price_y_in_chart_roi,
+                anchor_span_px=anchor_span_px,
                 source=price.source,
                 reference=reference,
             ),
@@ -179,6 +184,12 @@ class CurrentVisualPriceComparator:
             ),
             exit_price_y_in_chart_roi=(
                 exit.price_y_in_chart_roi if exit is not None else None
+            ),
+            entry_anchor_span_px=(
+                entry.anchor_span_px if entry is not None else None
+            ),
+            exit_anchor_span_px=(
+                exit.anchor_span_px if exit is not None else None
             ),
         )
 

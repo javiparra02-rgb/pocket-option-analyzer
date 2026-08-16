@@ -8,6 +8,7 @@ from pocket_option_analyzer.application.strategy import (
     CurrentVisualPriceComparison,
     StrategyObservation,
     StrategyObservationResolution,
+    VisualPriceMovementClassification,
     VisualPriceReferenceResult,
     VisualReferenceResolution,
     VisualReferenceValidation,
@@ -67,6 +68,11 @@ class JsonlStrategyObservationWriter:
                 "diagnostic": resolution.diagnostic,
                 "visual_price_comparison": self._visual_price_comparison_to_dict(
                     resolution.visual_price_comparison,
+                ),
+                "visual_price_movement_classification": (
+                    self._visual_price_movement_classification_to_dict(
+                        resolution.visual_price_movement_classification,
+                    )
                 ),
             }
         )
@@ -193,6 +199,11 @@ class JsonlStrategyObservationWriter:
                     resolution.visual_price_comparison,
                 )
             ),
+            "visual_price_movement_classification": (
+                JsonlStrategyObservationWriter._visual_price_movement_classification_to_dict(
+                    resolution.visual_price_movement_classification,
+                )
+            ),
         }
 
     @staticmethod
@@ -212,6 +223,22 @@ class JsonlStrategyObservationWriter:
                 comparison.entry_price_y_in_chart_roi
             ),
             "exit_price_y_in_chart_roi": comparison.exit_price_y_in_chart_roi,
+            "entry_anchor_span_px": comparison.entry_anchor_span_px,
+            "exit_anchor_span_px": comparison.exit_anchor_span_px,
+        }
+
+    @staticmethod
+    def _visual_price_movement_classification_to_dict(
+        classification: VisualPriceMovementClassification | None,
+    ) -> dict[str, Any] | None:
+        if classification is None:
+            return None
+
+        return {
+            "movement": classification.movement.value,
+            "epsilon": classification.epsilon,
+            "pixel_tolerance": classification.pixel_tolerance,
+            "diagnostic": classification.diagnostic.value,
         }
 
     @staticmethod

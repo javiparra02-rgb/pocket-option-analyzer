@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import StrEnum
+from math import isfinite
+from numbers import Real
 
 
 class CurrentVisualPriceComparisonStatus(StrEnum):
@@ -42,8 +44,35 @@ class CurrentVisualPriceComparison:
     delta: float | None = None
     entry_price_y_in_chart_roi: float | None = None
     exit_price_y_in_chart_roi: float | None = None
+    entry_anchor_span_px: float | None = None
+    exit_anchor_span_px: float | None = None
 
     def __post_init__(self) -> None:
+        numeric_evidence = (
+            ("entry_anchored_value", self.entry_anchored_value),
+            ("exit_anchored_value", self.exit_anchored_value),
+            ("delta", self.delta),
+            ("entry_price_y_in_chart_roi", self.entry_price_y_in_chart_roi),
+            ("exit_price_y_in_chart_roi", self.exit_price_y_in_chart_roi),
+            ("entry_anchor_span_px", self.entry_anchor_span_px),
+            ("exit_anchor_span_px", self.exit_anchor_span_px),
+        )
+        for field_name, value in numeric_evidence:
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, Real)
+                or not isfinite(value)
+            ):
+                raise ValueError(f"{field_name} debe ser un número finito.")
+
+        spans = (
+            ("entry_anchor_span_px", self.entry_anchor_span_px),
+            ("exit_anchor_span_px", self.exit_anchor_span_px),
+        )
+        for field_name, span in spans:
+            if span is not None and span <= 0:
+                raise ValueError(f"{field_name} debe ser mayor que cero.")
+
         if self.status is CurrentVisualPriceComparisonStatus.AVAILABLE:
             if (
                 self.diagnostic
@@ -58,10 +87,12 @@ class CurrentVisualPriceComparison:
                 self.entry_anchored_value,
                 self.exit_anchored_value,
                 self.delta,
+                self.entry_anchor_span_px,
+                self.exit_anchor_span_px,
             )
             if any(value is None for value in required_numbers):
                 raise ValueError(
-                    "AVAILABLE requiere todas las coordenadas y valores numéricos."
+                    "AVAILABLE requiere todas las coordenadas, valores y spans."
                 )
             return
 
@@ -82,15 +113,21 @@ class CurrentVisualPriceComparison:
                 "entry",
                 self.entry_price_y_in_chart_roi,
                 self.entry_anchored_value,
+                self.entry_anchor_span_px,
             ),
             (
                 "exit",
                 self.exit_price_y_in_chart_roi,
                 self.exit_anchored_value,
+                self.exit_anchor_span_px,
             ),
         )
-        for side, coordinate, anchored_value in sides:
+        for side, coordinate, anchored_value, anchor_span in sides:
             if (coordinate is None) != (anchored_value is None):
                 raise ValueError(
                     f"{side} requiere coordenada y valor anclado coherentes."
+                )
+            if anchor_span is not None and coordinate is None:
+                raise ValueError(
+                    f"{side} no admite span sin evidencia normalizada coherente."
                 )

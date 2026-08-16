@@ -7,6 +7,7 @@ from .current_visual_price_comparison import (
 from .current_visual_price_comparison_context import (
     CurrentVisualPriceComparisonContext,
 )
+from .price_movement import PriceMovement
 from .strategy_condition_audit import (
     DirectionConditionAudit,
     StrategyCondition,
@@ -25,6 +26,11 @@ from .strategy_observation_recorder import (
     StrategyObservationRecorder,
     StrategyObservationWriter,
 )
+from .visual_price_movement_classification import (
+    VisualPriceMovementClassification,
+    VisualPriceMovementClassificationDiagnostic,
+)
+from .visual_price_movement_classifier import VisualPriceMovementClassifier
 from .visual_price_reference_result import (
     VisualPriceReferenceResult,
     VisualPriceReferenceStatus,
@@ -43,6 +49,7 @@ __all__ = [
     "CurrentVisualPriceComparisonDiagnostic",
     "CurrentVisualPriceComparisonStatus",
     "DirectionConditionAudit",
+    "PriceMovement",
     "StrategyCondition",
     "StrategyConditionAudit",
     "StrategyConditionResult",
@@ -54,6 +61,9 @@ __all__ = [
     "StrategyObservationResolution",
     "StrategyObservationWriter",
     "VisualPriceReference",
+    "VisualPriceMovementClassification",
+    "VisualPriceMovementClassificationDiagnostic",
+    "VisualPriceMovementClassifier",
     "VisualReferenceMovement",
     "VisualReferenceResolution",
     "VisualReferenceValidation",

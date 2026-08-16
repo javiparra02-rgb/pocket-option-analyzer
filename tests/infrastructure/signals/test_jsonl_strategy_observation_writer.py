@@ -1,17 +1,22 @@
 import json
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from pocket_option_analyzer.application.strategy import (
     CurrentVisualPriceComparison,
     CurrentVisualPriceComparisonDiagnostic,
     CurrentVisualPriceComparisonStatus,
     DirectionConditionAudit,
+    PriceMovement,
     StrategyCondition,
     StrategyConditionAudit,
     StrategyConditionResult,
     StrategyObservation,
     StrategyObservationOutcome,
     StrategyObservationResolution,
+    VisualPriceMovementClassification,
+    VisualPriceMovementClassificationDiagnostic,
     VisualPriceReference,
     VisualPriceReferenceResult,
     VisualPriceReferenceStatus,
@@ -152,6 +157,18 @@ def test_writer_appends_resolution_event(tmp_path) -> None:
             delta=0.5,
             entry_price_y_in_chart_roi=250.0,
             exit_price_y_in_chart_roi=150.0,
+            entry_anchor_span_px=200.0,
+            exit_anchor_span_px=200.0,
+        ),
+        visual_price_movement_classification=(
+            VisualPriceMovementClassification(
+                movement=PriceMovement.UNRESOLVED,
+                epsilon=None,
+                pixel_tolerance=None,
+                diagnostic=(
+                    VisualPriceMovementClassificationDiagnostic.EPSILON_NOT_CALIBRATED
+                ),
+            )
         ),
     )
 
@@ -185,6 +202,14 @@ def test_writer_appends_resolution_event(tmp_path) -> None:
         "delta": 0.5,
         "entry_price_y_in_chart_roi": 250.0,
         "exit_price_y_in_chart_roi": 150.0,
+        "entry_anchor_span_px": 200.0,
+        "exit_anchor_span_px": 200.0,
+    }
+    assert payload["visual_price_movement_classification"] == {
+        "movement": "unresolved",
+        "epsilon": None,
+        "pixel_tolerance": None,
+        "diagnostic": "epsilon_not_calibrated",
     }
     assert payload["outcome"] == "win"
 
@@ -213,6 +238,7 @@ def test_writer_serializes_null_exit_visual_price_for_resolution(tmp_path) -> No
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["exit_current_visual_price"] is None
     assert payload["visual_price_comparison"] is None
+    assert payload["visual_price_movement_classification"] is None
 
 
 def test_writer_appends_passive_reference_events(tmp_path) -> None:
@@ -259,6 +285,18 @@ def test_writer_appends_passive_reference_events(tmp_path) -> None:
                 delta=0.0,
                 entry_price_y_in_chart_roi=514.0,
                 exit_price_y_in_chart_roi=514.0,
+                entry_anchor_span_px=256.0,
+                exit_anchor_span_px=256.0,
+            ),
+            visual_price_movement_classification=(
+                VisualPriceMovementClassification(
+                    movement=PriceMovement.FLAT,
+                    epsilon=0.0078125,
+                    pixel_tolerance=1.0,
+                    diagnostic=(
+                        VisualPriceMovementClassificationDiagnostic.CLASSIFIED
+                    ),
+                )
             ),
         )
     )
@@ -283,6 +321,14 @@ def test_writer_appends_passive_reference_events(tmp_path) -> None:
         "price": None,
     }
     assert payloads[1]["visual_price_comparison"]["delta"] == 0.0
+    assert payloads[1]["visual_price_comparison"]["entry_anchor_span_px"] == 256.0
+    assert payloads[1]["visual_price_comparison"]["exit_anchor_span_px"] == 256.0
+    assert payloads[1]["visual_price_movement_classification"] == {
+        "movement": "flat",
+        "epsilon": 0.0078125,
+        "pixel_tolerance": 1.0,
+        "diagnostic": "classified",
+    }
 
 
 def test_writer_serializes_null_exit_visual_price_for_reference_resolution(
@@ -311,6 +357,7 @@ def test_writer_serializes_null_exit_visual_price_for_reference_resolution(
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["exit_current_visual_price"] is None
     assert payload["visual_price_comparison"] is None
+    assert payload["visual_price_movement_classification"] is None
 
 
 def test_writer_serializes_unavailable_visual_price_comparison(tmp_path) -> None:
@@ -334,6 +381,16 @@ def test_writer_serializes_unavailable_visual_price_comparison(tmp_path) -> None
                 CurrentVisualPriceComparisonDiagnostic.EXIT_GEOMETRY_MISSING
             ),
         ),
+        visual_price_movement_classification=(
+            VisualPriceMovementClassification(
+                movement=PriceMovement.UNRESOLVED,
+                epsilon=None,
+                pixel_tolerance=1.0,
+                diagnostic=(
+                    VisualPriceMovementClassificationDiagnostic.COMPARISON_UNAVAILABLE
+                ),
+            )
+        ),
     )
 
     JsonlStrategyObservationWriter(path).write_reference_resolution(resolution)
@@ -347,7 +404,68 @@ def test_writer_serializes_unavailable_visual_price_comparison(tmp_path) -> None
         "delta": None,
         "entry_price_y_in_chart_roi": None,
         "exit_price_y_in_chart_roi": None,
+        "entry_anchor_span_px": None,
+        "exit_anchor_span_px": None,
     }
+    assert payload["visual_price_movement_classification"] == {
+        "movement": "unresolved",
+        "epsilon": None,
+        "pixel_tolerance": 1.0,
+        "diagnostic": "comparison_unavailable",
+    }
+
+
+@pytest.mark.parametrize(
+    ("movement", "epsilon", "pixel_tolerance"),
+    [
+        (PriceMovement.UP, 0.012345678901234567, 1.2345678901234567),
+        (PriceMovement.DOWN, 0.0078125, 1.0),
+        (PriceMovement.FLAT, 0.0, 0.0),
+    ],
+)
+def test_writer_serializes_shadow_movement_without_rounding(
+    tmp_path,
+    movement: PriceMovement,
+    epsilon: float,
+    pixel_tolerance: float,
+) -> None:
+    instant = datetime(2026, 8, 9, 12, 0, tzinfo=UTC)
+    path = tmp_path / f"{movement.value}.jsonl"
+    reference = VisualPriceReference(
+        0.42,
+        anchor_shape=(("bullish", 1.0, 0.8, 0.6, 0.0),),
+    )
+    resolution = StrategyObservationResolution(
+        snapshot_id=instant.isoformat(),
+        observed_at=instant,
+        resolve_at=instant + timedelta(seconds=10),
+        resolved_at=instant + timedelta(seconds=11),
+        direction=SignalDirection.CALL,
+        entry_reference=reference,
+        exit_reference=reference,
+        outcome=StrategyObservationOutcome.UNRESOLVED,
+        visual_price_movement_classification=(
+            VisualPriceMovementClassification(
+                movement=movement,
+                epsilon=epsilon,
+                pixel_tolerance=pixel_tolerance,
+                diagnostic=(
+                    VisualPriceMovementClassificationDiagnostic.CLASSIFIED
+                ),
+            )
+        ),
+    )
+
+    JsonlStrategyObservationWriter(path).write_resolution(resolution)
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["visual_price_movement_classification"] == {
+        "movement": movement.value,
+        "epsilon": epsilon,
+        "pixel_tolerance": pixel_tolerance,
+        "diagnostic": "classified",
+    }
+    assert payload["outcome"] == "unresolved"
 
 
 def test_writer_serializes_missing_reference_diagnostic(tmp_path) -> None:

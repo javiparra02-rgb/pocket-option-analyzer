@@ -89,6 +89,8 @@ def test_comparator_produces_positive_delta() -> None:
     assert comparison.entry_anchored_value == pytest.approx(0.75)
     assert comparison.exit_anchored_value == pytest.approx(1.0)
     assert comparison.delta == pytest.approx(0.25)
+    assert comparison.entry_anchor_span_px == 200.0
+    assert comparison.exit_anchor_span_px == 200.0
 
 
 def test_comparison_result_is_immutable() -> None:
@@ -120,6 +122,8 @@ def test_available_comparison_requires_available_diagnostic() -> None:
             delta=0.0,
             entry_price_y_in_chart_roi=100.0,
             exit_price_y_in_chart_roi=100.0,
+            entry_anchor_span_px=200.0,
+            exit_anchor_span_px=200.0,
         )
 
 
@@ -149,14 +153,16 @@ def test_unavailable_comparison_rejects_delta() -> None:
     (
         {"entry_price_y_in_chart_roi": 100.0},
         {"entry_anchored_value": 0.5},
+        {"entry_anchor_span_px": 200.0},
         {"exit_price_y_in_chart_roi": 100.0},
         {"exit_anchored_value": 0.5},
+        {"exit_anchor_span_px": 200.0},
     ),
 )
 def test_unavailable_comparison_rejects_incoherent_side_evidence(
     partial_evidence: dict[str, float],
 ) -> None:
-    with pytest.raises(ValueError, match="coherentes"):
+    with pytest.raises(ValueError, match="coherente"):
         CurrentVisualPriceComparison(
             status=CurrentVisualPriceComparisonStatus.UNAVAILABLE,
             diagnostic=(
@@ -174,12 +180,68 @@ def test_unavailable_comparison_accepts_coherent_partial_entry_evidence() -> Non
         ),
         entry_anchored_value=0.5,
         entry_price_y_in_chart_roi=100.0,
+        entry_anchor_span_px=200.0,
     )
 
     assert comparison.entry_anchored_value == 0.5
     assert comparison.entry_price_y_in_chart_roi == 100.0
+    assert comparison.entry_anchor_span_px == 200.0
     assert comparison.exit_anchored_value is None
     assert comparison.exit_price_y_in_chart_roi is None
+    assert comparison.exit_anchor_span_px is None
+
+
+def test_unavailable_comparison_preserves_legacy_partial_evidence() -> None:
+    comparison = CurrentVisualPriceComparison(
+        status=CurrentVisualPriceComparisonStatus.UNAVAILABLE,
+        diagnostic=(
+            CurrentVisualPriceComparisonDiagnostic.EXIT_EXTRACTION_UNAVAILABLE
+        ),
+        entry_anchored_value=0.5,
+        entry_price_y_in_chart_roi=100.0,
+    )
+
+    assert comparison.entry_anchored_value == 0.5
+    assert comparison.entry_price_y_in_chart_roi == 100.0
+    assert comparison.entry_anchor_span_px is None
+
+
+@pytest.mark.parametrize("span", (0.0, -1.0))
+@pytest.mark.parametrize(
+    "field_name",
+    ("entry_anchor_span_px", "exit_anchor_span_px"),
+)
+def test_comparison_rejects_non_positive_anchor_spans(
+    field_name: str,
+    span: float,
+) -> None:
+    comparison = _compare(_context(), _context())
+
+    with pytest.raises(ValueError, match="mayor que cero"):
+        replace(comparison, **{field_name: span})
+
+
+@pytest.mark.parametrize("value", (float("nan"), float("inf"), float("-inf")))
+@pytest.mark.parametrize(
+    "field_name",
+    (
+        "entry_anchored_value",
+        "exit_anchored_value",
+        "delta",
+        "entry_price_y_in_chart_roi",
+        "exit_price_y_in_chart_roi",
+        "entry_anchor_span_px",
+        "exit_anchor_span_px",
+    ),
+)
+def test_comparison_rejects_non_finite_numeric_evidence(
+    field_name: str,
+    value: float,
+) -> None:
+    comparison = _compare(_context(), _context())
+
+    with pytest.raises(ValueError, match="finito"):
+        replace(comparison, **{field_name: value})
 
 
 def test_comparator_produces_negative_delta() -> None:
@@ -301,6 +363,8 @@ def test_comparator_rejects_different_extraction_sources() -> None:
     )
     assert comparison.entry_anchored_value == pytest.approx(0.75)
     assert comparison.exit_anchored_value == pytest.approx(0.75)
+    assert comparison.entry_anchor_span_px == 200.0
+    assert comparison.exit_anchor_span_px == 200.0
     assert comparison.delta is None
 
 
@@ -382,6 +446,8 @@ def test_comparator_accepts_different_frame_geometries() -> None:
     assert comparison.status is CurrentVisualPriceComparisonStatus.AVAILABLE
     assert comparison.entry_price_y_in_chart_roi == pytest.approx(150.0)
     assert comparison.exit_price_y_in_chart_roi == pytest.approx(175.0)
+    assert comparison.entry_anchor_span_px == 200.0
+    assert comparison.exit_anchor_span_px == 250.0
     assert comparison.delta == pytest.approx(-0.05)
 
 

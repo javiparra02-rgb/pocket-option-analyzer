@@ -9,10 +9,14 @@ from pocket_option_analyzer.application.strategy import (
     CurrentVisualPriceComparisonContext,
     CurrentVisualPriceComparisonDiagnostic,
     CurrentVisualPriceComparisonStatus,
+    PriceMovement,
     StrategyObservation,
     StrategyObservationOutcome,
     StrategyObservationRecorder,
     StrategyObservationResolution,
+    VisualPriceMovementClassification,
+    VisualPriceMovementClassificationDiagnostic,
+    VisualPriceMovementClassifier,
     VisualPriceReference,
     VisualPriceReferenceResult,
     VisualPriceReferenceStatus,
@@ -132,6 +136,53 @@ class _SpyComparator(CurrentVisualPriceComparator):
     ) -> CurrentVisualPriceComparison:
         self.calls.append((entry_context, exit_context))
         return super().compare(entry_context, exit_context)
+
+
+class _SpyMovementClassifier(VisualPriceMovementClassifier):
+    def __init__(self, pixel_tolerance: float | None = None) -> None:
+        super().__init__(pixel_tolerance)
+        self.calls: list[CurrentVisualPriceComparison] = []
+
+    def classify(
+        self,
+        comparison: CurrentVisualPriceComparison,
+    ) -> VisualPriceMovementClassification:
+        self.calls.append(comparison)
+        return super().classify(comparison)
+
+
+class _FixedMovementClassifier(VisualPriceMovementClassifier):
+    def __init__(
+        self,
+        classification: VisualPriceMovementClassification,
+    ) -> None:
+        self._classification = classification
+
+    def classify(
+        self,
+        comparison: CurrentVisualPriceComparison,
+    ) -> VisualPriceMovementClassification:
+        return self._classification
+
+
+def _shadow_classification(
+    movement: PriceMovement,
+) -> VisualPriceMovementClassification:
+    if movement is PriceMovement.UNRESOLVED:
+        return VisualPriceMovementClassification(
+            movement=movement,
+            epsilon=None,
+            pixel_tolerance=None,
+            diagnostic=(
+                VisualPriceMovementClassificationDiagnostic.EPSILON_NOT_CALIBRATED
+            ),
+        )
+    return VisualPriceMovementClassification(
+        movement=movement,
+        epsilon=0.0,
+        pixel_tolerance=0.0,
+        diagnostic=VisualPriceMovementClassificationDiagnostic.CLASSIFIED,
+    )
 
 
 class _NoReferenceResolutionResolver(VisualReferenceValidationResolver):
@@ -307,6 +358,10 @@ def test_exit_visual_price_does_not_change_existing_outcome_resolution(
         resolutions[0].visual_price_comparison.diagnostic
         is CurrentVisualPriceComparisonDiagnostic.EXIT_EXTRACTION_UNAVAILABLE
     )
+    assert (
+        resolutions[0].visual_price_movement_classification.diagnostic
+        is VisualPriceMovementClassificationDiagnostic.COMPARISON_UNAVAILABLE
+    )
     reference_resolution = next(
         item for item in writer.items if isinstance(item, VisualReferenceResolution)
     )
@@ -319,6 +374,10 @@ def test_exit_visual_price_does_not_change_existing_outcome_resolution(
         is exit_context.current_visual_price
     )
     assert reference_resolution.exit_visual_price_context is exit_context
+    assert (
+        reference_resolution.visual_price_movement_classification
+        is resolutions[0].visual_price_movement_classification
+    )
 
 
 def test_contexts_remain_associated_with_each_snapshot_on_shared_exit() -> None:
@@ -350,9 +409,11 @@ def test_contexts_remain_associated_with_each_snapshot_on_shared_exit() -> None:
     second_observation.visual_price_comparison_context = second_context
     writer = _Writer()
     spy = _SpyComparator()
+    movement_spy = _SpyMovementClassifier()
     recorder = StrategyObservationRecorder(
         writer=writer,
         visual_price_comparator=spy,
+        visual_price_movement_classifier=movement_spy,
     )
     recorder.record(first_observation)
     recorder.record(second_observation)
@@ -421,9 +482,22 @@ def test_contexts_remain_associated_with_each_snapshot_on_shared_exit() -> None:
             strict=True,
         )
     )
+    assert all(
+        reference_resolution.visual_price_movement_classification
+        is strategy_resolution.visual_price_movement_classification
+        for strategy_resolution, reference_resolution in zip(
+            resolutions,
+            reference_resolutions,
+            strict=True,
+        )
+    )
     assert spy.calls == [
         (first_context, exit_context),
         (second_context, exit_context),
+    ]
+    assert movement_spy.calls == [
+        resolutions[0].visual_price_comparison,
+        resolutions[1].visual_price_comparison,
     ]
 
 
@@ -442,10 +516,12 @@ def test_recorder_compares_once_and_shares_result_between_resolution_dtos() -> N
         extraction=exit_extraction,
     )
     spy = _SpyComparator()
+    movement_spy = _SpyMovementClassifier()
     writer = _Writer()
     recorder = StrategyObservationRecorder(
         writer=writer,
         visual_price_comparator=spy,
+        visual_price_movement_classifier=movement_spy,
     )
     recorder.record(observation)
 
@@ -460,9 +536,14 @@ def test_recorder_compares_once_and_shares_result_between_resolution_dtos() -> N
     )
 
     assert spy.calls == [(entry_context, exit_context)]
+    assert movement_spy.calls == [strategy_resolution.visual_price_comparison]
     assert (
         strategy_resolution.visual_price_comparison
         is reference_resolution.visual_price_comparison
+    )
+    assert (
+        strategy_resolution.visual_price_movement_classification
+        is reference_resolution.visual_price_movement_classification
     )
 
 
@@ -481,9 +562,11 @@ def test_recorder_compares_once_when_only_primary_resolution_exists() -> None:
         extraction=exit_extraction,
     )
     spy = _SpyComparator()
+    movement_spy = _SpyMovementClassifier()
     recorder = StrategyObservationRecorder(
         reference_resolver=_NoReferenceResolutionResolver(),
         visual_price_comparator=spy,
+        visual_price_movement_classifier=movement_spy,
     )
     recorder.record(observation)
 
@@ -496,6 +579,7 @@ def test_recorder_compares_once_when_only_primary_resolution_exists() -> None:
 
     assert len(resolutions) == 1
     assert spy.calls == [(entry_context, exit_context)]
+    assert movement_spy.calls == [resolutions[0].visual_price_comparison]
 
 
 @pytest.mark.parametrize(
@@ -537,6 +621,92 @@ def test_visual_delta_does_not_change_legacy_outcome(
     assert resolutions[0].visual_price_comparison.delta == pytest.approx(
         expected_delta,
     )
+    assert (
+        resolutions[0].visual_price_movement_classification.movement
+        is PriceMovement.UNRESOLVED
+    )
+    assert (
+        resolutions[0].visual_price_movement_classification.diagnostic
+        is VisualPriceMovementClassificationDiagnostic.EPSILON_NOT_CALIBRATED
+    )
+
+
+@pytest.mark.parametrize(
+    (
+        "direction",
+        "exit_reference",
+        "shadow_movement",
+        "expected_outcome",
+    ),
+    (
+        (
+            SignalDirection.CALL,
+            _reference(101.0),
+            PriceMovement.DOWN,
+            StrategyObservationOutcome.WIN,
+        ),
+        (
+            SignalDirection.CALL,
+            _reference(101.0),
+            PriceMovement.FLAT,
+            StrategyObservationOutcome.WIN,
+        ),
+        (
+            SignalDirection.CALL,
+            _reference(99.0),
+            PriceMovement.UP,
+            StrategyObservationOutcome.LOSS,
+        ),
+        (
+            SignalDirection.PUT,
+            _reference(99.0),
+            PriceMovement.FLAT,
+            StrategyObservationOutcome.WIN,
+        ),
+        (
+            SignalDirection.PUT,
+            _reference(101.0),
+            PriceMovement.UNRESOLVED,
+            StrategyObservationOutcome.LOSS,
+        ),
+        (
+            SignalDirection.CALL,
+            _reference(100.0),
+            PriceMovement.UP,
+            StrategyObservationOutcome.DRAW,
+        ),
+        (
+            SignalDirection.CALL,
+            None,
+            PriceMovement.DOWN,
+            StrategyObservationOutcome.UNRESOLVED,
+        ),
+    ),
+)
+def test_shadow_classification_never_changes_legacy_outcome(
+    direction: SignalDirection,
+    exit_reference: VisualPriceReference | None,
+    shadow_movement: PriceMovement,
+    expected_outcome: StrategyObservationOutcome,
+) -> None:
+    instant = datetime(2026, 8, 9, tzinfo=UTC)
+    observation = _observation(instant)
+    observation.direction = direction
+    classification = _shadow_classification(shadow_movement)
+    recorder = StrategyObservationRecorder(
+        visual_price_movement_classifier=(
+            _FixedMovementClassifier(classification)
+        ),
+    )
+    recorder.record(observation)
+
+    resolution = recorder.resolve_due(
+        instant + timedelta(seconds=10),
+        exit_reference,
+    )[0]
+
+    assert resolution.outcome is expected_outcome
+    assert resolution.visual_price_movement_classification is classification
 
 
 def test_reference_resolution_keeps_comparison_without_primary_resolution() -> None:
@@ -555,9 +725,11 @@ def test_reference_resolution_keeps_comparison_without_primary_resolution() -> N
     )
     writer = _Writer()
     spy = _SpyComparator()
+    movement_spy = _SpyMovementClassifier()
     recorder = StrategyObservationRecorder(
         writer=writer,
         visual_price_comparator=spy,
+        visual_price_movement_classifier=movement_spy,
     )
     recorder.record(observation)
 
@@ -577,6 +749,7 @@ def test_reference_resolution_keeps_comparison_without_primary_resolution() -> N
         is CurrentVisualPriceComparisonStatus.AVAILABLE
     )
     assert spy.calls == [(observation.visual_price_comparison_context, exit_context)]
+    assert movement_spy.calls == [reference_resolution.visual_price_comparison]
 
 
 def test_recorder_derives_missing_exit_evidence_from_canonical_context() -> None:
