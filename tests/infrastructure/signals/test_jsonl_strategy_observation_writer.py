@@ -5,6 +5,7 @@ import pytest
 
 from pocket_option_analyzer.application.strategy import (
     CurrentVisualPriceComparison,
+    CurrentVisualPriceComparisonContext,
     CurrentVisualPriceComparisonDiagnostic,
     CurrentVisualPriceComparisonStatus,
     DirectionConditionAudit,
@@ -53,6 +54,18 @@ def _direction(direction: SignalDirection) -> DirectionConditionAudit:
                 "RSI blocks",
             ),
         ),
+    )
+
+
+def _exit_context(
+    reference_result: VisualPriceReferenceResult,
+    current_visual_price: CurrentVisualPriceExtraction | None = None,
+) -> CurrentVisualPriceComparisonContext:
+    return CurrentVisualPriceComparisonContext(
+        current_visual_price=current_visual_price,
+        chart_region=None,
+        price_observation_region=None,
+        reference_result=reference_result,
     )
 
 
@@ -137,6 +150,19 @@ def test_writer_appends_resolution_event(tmp_path) -> None:
         selected_y=514.0,
         confidence=0.92,
     )
+    exit_reference = VisualPriceReference(0.45, anchor_shape=anchors)
+    exit_reference_result = VisualPriceReferenceResult(
+        reference=exit_reference,
+        status=VisualPriceReferenceStatus.OK,
+        anchor_count=27,
+        latest_candle_type="bullish",
+        latest_candidate_x=1042,
+        latest_candidate_y=11,
+        close_roi_y=354,
+        anchor_top_roi_y=11,
+        anchor_bottom_roi_y=787,
+        raw_normalized_close=0.5579896907216495,
+    )
     resolution = StrategyObservationResolution(
         snapshot_id=instant.isoformat(),
         observed_at=instant,
@@ -144,9 +170,13 @@ def test_writer_appends_resolution_event(tmp_path) -> None:
         resolved_at=instant + timedelta(seconds=11),
         direction=SignalDirection.CALL,
         entry_reference=reference,
-        exit_reference=VisualPriceReference(0.45, anchor_shape=anchors),
+        exit_reference=exit_reference,
         outcome=StrategyObservationOutcome.WIN,
         exit_current_visual_price=exit_extraction,
+        exit_visual_price_context=_exit_context(
+            exit_reference_result,
+            exit_extraction,
+        ),
         visual_price_comparison=CurrentVisualPriceComparison(
             status=CurrentVisualPriceComparisonStatus.AVAILABLE,
             diagnostic=(
@@ -178,6 +208,17 @@ def test_writer_appends_resolution_event(tmp_path) -> None:
     assert payload["event_type"] == "resolution"
     assert payload["resolved_at"] == (instant + timedelta(seconds=11)).isoformat()
     assert payload["exit_reference"]["value"] == 0.45
+    assert payload["exit_reference_diagnostic"] == {
+        "status": "ok",
+        "anchor_count": 27,
+        "latest_candle_type": "bullish",
+        "latest_candidate_x": 1042,
+        "latest_candidate_y": 11,
+        "close_roi_y": 354,
+        "anchor_top_roi_y": 11,
+        "anchor_bottom_roi_y": 787,
+        "raw_normalized_close": 0.5579896907216495,
+    }
     assert payload["exit_current_visual_price"] == {
         "status": "ok",
         "candidate_count": 1,
@@ -237,6 +278,7 @@ def test_writer_serializes_null_exit_visual_price_for_resolution(tmp_path) -> No
 
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["exit_current_visual_price"] is None
+    assert payload["exit_reference_diagnostic"] is None
     assert payload["visual_price_comparison"] is None
     assert payload["visual_price_movement_classification"] is None
 
@@ -254,6 +296,22 @@ def test_writer_appends_passive_reference_events(tmp_path) -> None:
         candidate_count=2,
         diagnostic="no candidate matched the visual price mask",
     )
+    exit_reference = VisualPriceReference(
+        0.45,
+        anchor_shape=reference.anchor_shape,
+    )
+    exit_reference_result = VisualPriceReferenceResult(
+        reference=exit_reference,
+        status=VisualPriceReferenceStatus.OK,
+        anchor_count=25,
+        latest_candle_type="bullish",
+        latest_candidate_x=1042,
+        latest_candidate_y=11,
+        close_roi_y=354,
+        anchor_top_roi_y=11,
+        anchor_bottom_roi_y=787,
+        raw_normalized_close=0.5579896907216495,
+    )
     writer = JsonlStrategyObservationWriter(path)
     writer.write_reference_validation(
         VisualReferenceValidation(
@@ -270,11 +328,13 @@ def test_writer_appends_passive_reference_events(tmp_path) -> None:
             resolve_at=instant + timedelta(seconds=10),
             resolved_at=instant + timedelta(seconds=11),
             entry_reference=reference,
-            exit_reference=VisualPriceReference(
-                0.45, anchor_shape=reference.anchor_shape
-            ),
+            exit_reference=exit_reference,
             movement=VisualReferenceMovement.UP,
             exit_current_visual_price=exit_extraction,
+            exit_visual_price_context=_exit_context(
+                exit_reference_result,
+                exit_extraction,
+            ),
             visual_price_comparison=CurrentVisualPriceComparison(
                 status=CurrentVisualPriceComparisonStatus.AVAILABLE,
                 diagnostic=(
@@ -310,6 +370,17 @@ def test_writer_appends_passive_reference_events(tmp_path) -> None:
     ]
     assert payloads[0]["entry_reference"]["value"] == 0.42
     assert payloads[1]["exit_reference"]["value"] == 0.45
+    assert payloads[1]["exit_reference_diagnostic"] == {
+        "status": "ok",
+        "anchor_count": 25,
+        "latest_candle_type": "bullish",
+        "latest_candidate_x": 1042,
+        "latest_candidate_y": 11,
+        "close_roi_y": 354,
+        "anchor_top_roi_y": 11,
+        "anchor_bottom_roi_y": 787,
+        "raw_normalized_close": 0.5579896907216495,
+    }
     assert payloads[1]["movement"] == "up"
     assert payloads[1]["exit_current_visual_price"] == {
         "status": "no_visual_price_candidate",
@@ -356,6 +427,7 @@ def test_writer_serializes_null_exit_visual_price_for_reference_resolution(
 
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["exit_current_visual_price"] is None
+    assert payload["exit_reference_diagnostic"] is None
     assert payload["visual_price_comparison"] is None
     assert payload["visual_price_movement_classification"] is None
 
@@ -527,6 +599,59 @@ def test_writer_serializes_missing_reference_diagnostic(tmp_path) -> None:
     assert reference_diagnostic["anchor_top_roi_y"] == 526
     assert reference_diagnostic["anchor_bottom_roi_y"] == 782
     assert reference_diagnostic["raw_normalized_close"] == 1.046875
+
+
+def test_writer_serializes_failed_exit_reference_diagnostic(tmp_path) -> None:
+    instant = datetime(2026, 8, 16, 22, 47, tzinfo=UTC)
+    path = tmp_path / "observations.jsonl"
+    entry_reference = VisualPriceReference(
+        0.42,
+        anchor_shape=(("bullish", 1.0, 0.8, 0.6, 0.0),),
+    )
+    exit_reference_result = VisualPriceReferenceResult(
+        reference=None,
+        status=VisualPriceReferenceStatus.CLOSE_OUTSIDE_ANCHOR_RANGE,
+        anchor_count=26,
+        latest_candle_type="bullish",
+        latest_candidate_x=712,
+        latest_candidate_y=11,
+        close_roi_y=11,
+        anchor_top_roi_y=123,
+        anchor_bottom_roi_y=787,
+        raw_normalized_close=1.1686746987951808,
+    )
+    resolution = VisualReferenceResolution(
+        snapshot_id=instant.isoformat(),
+        observed_at=instant,
+        resolve_at=instant + timedelta(seconds=10),
+        resolved_at=instant + timedelta(seconds=11),
+        entry_reference=entry_reference,
+        exit_reference=None,
+        movement=VisualReferenceMovement.UNRESOLVED,
+        diagnostic="missing_exit_reference",
+        exit_visual_price_context=_exit_context(exit_reference_result),
+    )
+
+    JsonlStrategyObservationWriter(path).write_reference_resolution(resolution)
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["event_type"] == "reference_resolution"
+    assert payload["exit_reference"] is None
+    assert payload["movement"] == "unresolved"
+    assert payload["diagnostic"] == "missing_exit_reference"
+    assert payload["exit_reference_diagnostic"] == {
+        "status": "close_outside_anchor_range",
+        "anchor_count": 26,
+        "latest_candle_type": "bullish",
+        "latest_candidate_x": 712,
+        "latest_candidate_y": 11,
+        "close_roi_y": 11,
+        "anchor_top_roi_y": 123,
+        "anchor_bottom_roi_y": 787,
+        "raw_normalized_close": 1.1686746987951808,
+    }
+    assert payload["visual_price_comparison"] is None
+    assert payload["visual_price_movement_classification"] is None
 
 
 def test_writer_serializes_current_visual_price_for_observation(tmp_path) -> None:

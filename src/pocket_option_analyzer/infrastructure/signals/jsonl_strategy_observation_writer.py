@@ -6,6 +6,7 @@ from typing import Any
 
 from pocket_option_analyzer.application.strategy import (
     CurrentVisualPriceComparison,
+    CurrentVisualPriceComparisonContext,
     StrategyObservation,
     StrategyObservationResolution,
     VisualPriceMovementClassification,
@@ -61,6 +62,11 @@ class JsonlStrategyObservationWriter:
                 "resolved_at": resolution.resolved_at.isoformat(),
                 "entry_reference": self._reference_to_dict(resolution.entry_reference),
                 "exit_reference": self._reference_to_dict(resolution.exit_reference),
+                "exit_reference_diagnostic": (
+                    self._exit_reference_result_to_dict(
+                        resolution.exit_visual_price_context,
+                    )
+                ),
                 "exit_current_visual_price": self._current_visual_price_to_dict(
                     resolution.exit_current_visual_price,
                 ),
@@ -188,6 +194,11 @@ class JsonlStrategyObservationWriter:
             "exit_reference": JsonlStrategyObservationWriter._reference_to_dict(
                 resolution.exit_reference,
             ),
+            "exit_reference_diagnostic": (
+                JsonlStrategyObservationWriter._exit_reference_result_to_dict(
+                    resolution.exit_visual_price_context,
+                )
+            ),
             "exit_current_visual_price": (
                 JsonlStrategyObservationWriter._current_visual_price_to_dict(
                     resolution.exit_current_visual_price,
@@ -259,6 +270,14 @@ class JsonlStrategyObservationWriter:
             "anchor_bottom_roi_y": result.anchor_bottom_roi_y,
             "raw_normalized_close": result.raw_normalized_close,
         }
+
+    @staticmethod
+    def _exit_reference_result_to_dict(
+        context: CurrentVisualPriceComparisonContext | None,
+    ) -> dict[str, Any] | None:
+        return JsonlStrategyObservationWriter._reference_result_to_dict(
+            context.reference_result if context is not None else None,
+        )
 
     @staticmethod
     def _current_visual_price_to_dict(
