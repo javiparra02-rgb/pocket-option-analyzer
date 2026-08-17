@@ -51,7 +51,7 @@ class AnalyzeCapturedFrameUseCase:
         Analiza el frame capturado y devuelve el registro de señal.
         """
 
-        return self._pipeline.analyze_and_record(
+        arguments = dict(
             image=frame.image,
             price_observation_image=getattr(
                 frame,
@@ -71,6 +71,10 @@ class AnalyzeCapturedFrameUseCase:
             created_at=self._resolve_created_at(frame),
             source=self._source,
         )
+        frame_id = getattr(frame, "frame_id", None)
+        if frame_id is not None:
+            arguments["frame_id"] = frame_id
+        return self._pipeline.analyze_and_record(**arguments)
 
     def _resolve_created_at(
         self,

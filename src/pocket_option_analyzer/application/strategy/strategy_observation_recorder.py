@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Protocol
 
@@ -50,6 +50,14 @@ class StrategyObservationWriter(Protocol):
     ) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
+class StrategyObservationResolutionBatch:
+    """Complete set of primary and reference resolutions for one frame."""
+
+    resolutions: tuple[StrategyObservationResolution, ...]
+    reference_resolutions: tuple[VisualReferenceResolution, ...]
+
+
 class StrategyObservationRecorder:
     """Persists at most one observation for each stable candle snapshot."""
 
@@ -96,6 +104,25 @@ class StrategyObservationRecorder:
         exit_visual_price_context: CurrentVisualPriceComparisonContext
         | None = None,
     ) -> tuple[StrategyObservationResolution, ...]:
+        """Resolve due observations while preserving the legacy public result."""
+
+        return self.resolve_due_with_report(
+            observed_at=observed_at,
+            exit_reference=exit_reference,
+            exit_current_visual_price=exit_current_visual_price,
+            exit_visual_price_context=exit_visual_price_context,
+        ).resolutions
+
+    def resolve_due_with_report(
+        self,
+        observed_at: datetime,
+        exit_reference: VisualPriceReference | None,
+        exit_current_visual_price: CurrentVisualPriceExtraction | None = None,
+        exit_visual_price_context: CurrentVisualPriceComparisonContext
+        | None = None,
+    ) -> StrategyObservationResolutionBatch:
+        """Return every resolution emitted for the analyzed exit frame."""
+
         exit_reference, exit_current_visual_price = (
             self._canonical_exit_evidence(
                 exit_reference=exit_reference,
@@ -168,7 +195,10 @@ class StrategyObservationRecorder:
                 self._writer.write_resolution(resolution)
             for resolution in reference_resolutions:
                 self._writer.write_reference_resolution(resolution)
-        return resolutions
+        return StrategyObservationResolutionBatch(
+            resolutions=resolutions,
+            reference_resolutions=reference_resolutions,
+        )
 
     @staticmethod
     def _canonical_exit_evidence(

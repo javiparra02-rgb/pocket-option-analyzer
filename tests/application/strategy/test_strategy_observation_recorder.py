@@ -14,6 +14,7 @@ from pocket_option_analyzer.application.strategy import (
     StrategyObservationOutcome,
     StrategyObservationRecorder,
     StrategyObservationResolution,
+    StrategyObservationResolutionBatch,
     VisualPriceMovementClassification,
     VisualPriceMovementClassificationDiagnostic,
     VisualPriceMovementClassifier,
@@ -832,3 +833,38 @@ def test_exit_visual_price_is_associated_with_each_due_snapshot() -> None:
     ]
     assert resolutions[0].exit_current_visual_price is first_extraction
     assert resolutions[1].exit_current_visual_price is second_extraction
+
+
+def test_resolution_report_includes_reference_only_snapshot() -> None:
+    instant = datetime(2026, 8, 9, tzinfo=UTC)
+    observation = _observation(instant)
+    observation.direction = None
+    recorder = StrategyObservationRecorder()
+    recorder.record(observation)
+
+    report = recorder.resolve_due_with_report(
+        instant + timedelta(seconds=10),
+        _reference(101.0),
+    )
+
+    assert isinstance(report, StrategyObservationResolutionBatch)
+    assert report.resolutions == ()
+    assert len(report.reference_resolutions) == 1
+    assert report.reference_resolutions[0].snapshot_id == instant.isoformat()
+
+
+def test_legacy_resolve_due_return_remains_primary_only() -> None:
+    instant = datetime(2026, 8, 9, tzinfo=UTC)
+    observation = _observation(instant)
+    observation.direction = None
+    writer = _Writer()
+    recorder = StrategyObservationRecorder(writer=writer)
+    recorder.record(observation)
+
+    primary = recorder.resolve_due(
+        instant + timedelta(seconds=10),
+        _reference(101.0),
+    )
+
+    assert primary == ()
+    assert any(isinstance(item, VisualReferenceResolution) for item in writer.items)

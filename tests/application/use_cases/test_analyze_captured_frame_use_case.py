@@ -42,6 +42,12 @@ class FakeFrameWithCaptureGeometry:
     price_observation_region: ChartRegion
 
 
+@dataclass(frozen=True, slots=True)
+class FakeFrameWithId:
+    frame_id: int
+    image: np.ndarray
+
+
 class FakeVisualSignalRecordingPipeline:
     def __init__(self) -> None:
         self.received_image = None
@@ -50,6 +56,7 @@ class FakeVisualSignalRecordingPipeline:
         self.received_price_observation_image = None
         self.received_chart_region = None
         self.received_price_observation_region = None
+        self.received_frame_id = None
 
     def analyze_and_record(
         self,
@@ -59,6 +66,7 @@ class FakeVisualSignalRecordingPipeline:
         price_observation_image=None,
         chart_region=None,
         price_observation_region=None,
+        frame_id=None,
     ) -> SignalRecord:
         self.received_image = image
         self.received_created_at = created_at
@@ -66,6 +74,7 @@ class FakeVisualSignalRecordingPipeline:
         self.received_price_observation_image = price_observation_image
         self.received_chart_region = chart_region
         self.received_price_observation_region = price_observation_region
+        self.received_frame_id = frame_id
 
         return SignalRecord(
             signal=MarketSignal(
@@ -181,3 +190,16 @@ def test_execute_propagates_capture_geometry_by_identity() -> None:
 
     assert pipeline.received_chart_region is chart_region
     assert pipeline.received_price_observation_region is price_region
+
+
+def test_execute_propagates_existing_frame_id() -> None:
+    pipeline = FakeVisualSignalRecordingPipeline()
+
+    AnalyzeCapturedFrameUseCase(pipeline=pipeline).execute(
+        frame=FakeFrameWithId(
+            frame_id=42,
+            image=np.zeros((80, 100, 3), dtype=np.uint8),
+        )
+    )
+
+    assert pipeline.received_frame_id == 42

@@ -24,6 +24,7 @@ from .strategy_observation_outcome import (
 from .strategy_observation_outcome_resolver import StrategyObservationOutcomeResolver
 from .strategy_observation_recorder import (
     StrategyObservationRecorder,
+    StrategyObservationResolutionBatch,
     StrategyObservationWriter,
 )
 from .visual_price_movement_classification import (
@@ -58,6 +59,7 @@ __all__ = [
     "StrategyObservationOutcome",
     "StrategyObservationOutcomeResolver",
     "StrategyObservationRecorder",
+    "StrategyObservationResolutionBatch",
     "StrategyObservationResolution",
     "StrategyObservationWriter",
     "VisualPriceReference",
