@@ -27,6 +27,9 @@ from pocket_option_analyzer.application.use_cases import (
 )
 from pocket_option_analyzer.domain.signals import SignalHistory
 from pocket_option_analyzer.domain.strategy import StrategyProfile
+from pocket_option_analyzer.infrastructure.evidence import (
+    FilesystemVisualEvidenceRecorder,
+)
 from pocket_option_analyzer.infrastructure.signals import (
     JsonlSignalRecordWriter,
     JsonlStrategyObservationWriter,
@@ -118,6 +121,8 @@ class SignalPipelineFactory:
         observation_file_path: Path | None = None,
         strategy_profile: StrategyProfile | None = None,
         color_profile: CandleColorProfile | None = None,
+        visual_evidence_directory: Path | None = None,
+        application_version: str | None = None,
     ) -> VisualSignalRecordingPipeline:
         """
         Crea el pipeline visual completo de señales.
@@ -159,6 +164,16 @@ class SignalPipelineFactory:
             signal_file_path=signal_file_path,
         )
 
+        visual_evidence_recorder = (
+            FilesystemVisualEvidenceRecorder(
+                directory=visual_evidence_directory,
+                application_version=application_version,
+                observation_jsonl_path=observation_file_path,
+            )
+            if visual_evidence_directory is not None
+            else None
+        )
+
         return VisualSignalRecordingPipeline(
             analysis_pipeline=visual_strategy_signal_analysis_pipeline,
             recorder=recorder,
@@ -170,6 +185,7 @@ class SignalPipelineFactory:
                     else None
                 ),
             ),
+            visual_evidence_recorder=visual_evidence_recorder,
         )
 
     @staticmethod
@@ -180,6 +196,8 @@ class SignalPipelineFactory:
         strategy_profile: StrategyProfile | None = None,
         color_profile: CandleColorProfile | None = None,
         source: str = "captured_frame_visual_analysis",
+        visual_evidence_directory: Path | None = None,
+        application_version: str | None = None,
     ) -> AnalyzeCapturedFrameUseCase:
         """
         Crea el caso de uso completo para analizar frames capturados.
@@ -191,6 +209,8 @@ class SignalPipelineFactory:
             observation_file_path=observation_file_path,
             strategy_profile=strategy_profile,
             color_profile=color_profile,
+            visual_evidence_directory=visual_evidence_directory,
+            application_version=application_version,
         )
 
         return AnalyzeCapturedFrameUseCase(
@@ -208,6 +228,8 @@ class SignalPipelineFactory:
         color_profile: CandleColorProfile | None = None,
         source: str = "captured_frame_visual_analysis",
         interval_seconds: float = 1.0,
+        visual_evidence_directory: Path | None = None,
+        application_version: str | None = None,
     ) -> FrameAnalysisLoopService:
         """
         Crea el servicio completo de ciclo continuo.
@@ -228,6 +250,8 @@ class SignalPipelineFactory:
                 strategy_profile=strategy_profile,
                 color_profile=color_profile,
                 source=source,
+                visual_evidence_directory=visual_evidence_directory,
+                application_version=application_version,
             )
         )
 
@@ -247,6 +271,8 @@ class SignalPipelineFactory:
         color_profile: CandleColorProfile | None = None,
         source: str = "captured_frame_visual_analysis",
         interval_seconds: float = 1.0,
+        visual_evidence_directory: Path | None = None,
+        application_version: str | None = None,
     ) -> AnalysisRuntimeService:
         """
         Crea el runtime completo de análisis.
@@ -267,6 +293,8 @@ class SignalPipelineFactory:
             color_profile=color_profile,
             source=source,
             interval_seconds=interval_seconds,
+            visual_evidence_directory=visual_evidence_directory,
+            application_version=application_version,
         )
 
         return AnalysisRuntimeService(

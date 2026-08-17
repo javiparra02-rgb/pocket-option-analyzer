@@ -22,6 +22,7 @@ from pocket_option_analyzer.infrastructure.capture.services import (
     FrameFactory,
     RuntimeRoiDebugCapture,
 )
+from pocket_option_analyzer.infrastructure.config import Settings, get_settings
 from pocket_option_analyzer.infrastructure.windows.native import User32
 from pocket_option_analyzer.infrastructure.windows.services import (
     WindowEnumerator,
@@ -76,10 +77,13 @@ class PocketOptionRuntimeFactory:
         chart_region: ChartRegion | None = None,
         interval_seconds: float = 1.0,
         debug_roi_directory: Path | None = None,
+        settings: Settings | None = None,
     ) -> AnalysisRuntimeService:
         """
         Crea el runtime principal para la GUI.
         """
+
+        resolved_settings = settings if settings is not None else get_settings()
 
         resolved_capture_service = (
             capture_service
@@ -105,6 +109,10 @@ class PocketOptionRuntimeFactory:
             strategy_profile=strategy_profile,
             color_profile=resolved_color_profile,
             interval_seconds=interval_seconds,
+            visual_evidence_directory=(
+                resolved_settings.visual_evidence_directory
+            ),
+            application_version=resolved_settings.app_version,
         )
 
     @staticmethod

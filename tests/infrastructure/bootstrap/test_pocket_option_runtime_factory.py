@@ -13,6 +13,10 @@ from pocket_option_analyzer.domain.signals import (
 from pocket_option_analyzer.infrastructure.bootstrap import (
     PocketOptionRuntimeFactory,
 )
+from pocket_option_analyzer.infrastructure.config import Settings
+from pocket_option_analyzer.infrastructure.evidence import (
+    FilesystemVisualEvidenceRecorder,
+)
 from pocket_option_analyzer.vision.models import ChartRegion
 from pocket_option_analyzer.vision.services import (
     ChartRegionExtractor,
@@ -448,6 +452,37 @@ def test_pocket_option_chart_region_extractor_accepts_zero_ratios() -> None:
         image_width=200,
         image_height=100,
     )
+
+
+def test_runtime_factory_keeps_visual_evidence_disabled_by_default() -> None:
+    runtime = PocketOptionRuntimeFactory.create_runtime_service(
+        capture_service=FakeCaptureService(frames=[]),
+        signal_file_path=None,
+        observation_file_path=None,
+        settings=Settings(_env_file=None, visual_evidence_directory=None),
+    )
+
+    pipeline = runtime._loop_service._analysis_use_case._pipeline
+    assert pipeline._visual_evidence_recorder is None
+
+
+def test_runtime_factory_uses_opt_in_visual_evidence_setting(tmp_path) -> None:
+    evidence_directory = tmp_path / "evidence"
+    runtime = PocketOptionRuntimeFactory.create_runtime_service(
+        capture_service=FakeCaptureService(frames=[]),
+        signal_file_path=None,
+        observation_file_path=tmp_path / "strategy_observations.jsonl",
+        settings=Settings(
+            _env_file=None,
+            visual_evidence_directory=evidence_directory,
+            app_version="0.1.0-test",
+        ),
+    )
+
+    pipeline = runtime._loop_service._analysis_use_case._pipeline
+    recorder = pipeline._visual_evidence_recorder
+    assert isinstance(recorder, FilesystemVisualEvidenceRecorder)
+    assert recorder.directory == evidence_directory
 
 
 @pytest.mark.parametrize(

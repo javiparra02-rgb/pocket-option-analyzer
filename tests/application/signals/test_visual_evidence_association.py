@@ -9,6 +9,7 @@ import numpy as np
 from pocket_option_analyzer.application.evidence import (
     VisualEvidenceAssociation,
     VisualEvidencePhase,
+    VisualEvidenceRecorder,
     VisualFrameEvidence,
 )
 from pocket_option_analyzer.application.signals import (
@@ -38,6 +39,9 @@ from pocket_option_analyzer.domain.signals import (
     SignalStrength,
 )
 from pocket_option_analyzer.infrastructure.capture.models import Frame
+from pocket_option_analyzer.infrastructure.evidence import (
+    FilesystemVisualEvidenceRecorder,
+)
 from pocket_option_analyzer.vision.models import (
     CandleDetectionTrace,
     CandleSeries,
@@ -303,7 +307,7 @@ def _pipeline(
     *,
     analysis: _AnalysisPipeline,
     observation_recorder,
-    evidence_recorder: _EvidenceRecorder | None,
+    evidence_recorder: VisualEvidenceRecorder | None,
     signal_writer: _SignalWriter | None = None,
 ) -> VisualSignalRecordingPipeline:
     return VisualSignalRecordingPipeline(
@@ -706,7 +710,7 @@ def test_evidence_failure_does_not_change_resolution_pending_or_writers() -> Non
 
 
 def _run_functional_sequence(
-    evidence_recorder: _EvidenceRecorder | None,
+    evidence_recorder: VisualEvidenceRecorder | None,
 ) -> _StrategyWriter:
     snapshot = _instant()
     writer = _StrategyWriter()
@@ -753,3 +757,76 @@ def test_fake_evidence_recorder_is_functionally_invariant_to_disabled() -> None:
         enabled.resolutions[0].visual_price_movement_classification
         == disabled.resolutions[0].visual_price_movement_classification
     )
+
+
+def test_filesystem_evidence_recorder_is_functionally_invariant_to_disabled(
+    tmp_path,
+) -> None:
+    disabled = _run_functional_sequence(None)
+    enabled = _run_functional_sequence(
+        FilesystemVisualEvidenceRecorder(tmp_path / "evidence")
+    )
+
+    assert enabled.observations == disabled.observations
+    assert enabled.reference_validations == disabled.reference_validations
+    assert enabled.resolutions == disabled.resolutions
+    assert enabled.reference_resolutions == disabled.reference_resolutions
+    assert enabled.resolutions[0].outcome is StrategyObservationOutcome.WIN
+    assert (
+        enabled.resolutions[0].visual_price_comparison
+        == disabled.resolutions[0].visual_price_comparison
+    )
+    assert (
+        enabled.resolutions[0].visual_price_movement_classification
+        == disabled.resolutions[0].visual_price_movement_classification
+    )
+
+
+def test_filesystem_evidence_error_is_fail_soft(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    recorder = FilesystemVisualEvidenceRecorder(tmp_path / "evidence")
+
+    def fail_record_frame(frame_evidence, associations) -> None:
+        raise OSError("filesystem evidence failed")
+
+    monkeypatch.setattr(recorder, "record_frame", fail_record_frame)
+
+    writer = _run_functional_sequence(recorder)
+
+    assert len(writer.observations) == 1
+    assert len(writer.resolutions) == 1
+    assert writer.resolutions[0].outcome is StrategyObservationOutcome.WIN
+    assert len(writer.reference_resolutions) == 1
+
+
+def test_loop_with_filesystem_store_captures_once_per_tick(tmp_path) -> None:
+    image = np.zeros((80, 100, 4), dtype=np.uint8)
+    price_image = np.zeros((20, 100, 4), dtype=np.uint8)
+    frame = Frame(
+        frame_id=81,
+        timestamp=_instant(),
+        image=image,
+        price_observation_image=price_image,
+    )
+    capture = _CaptureOnce(frame)
+    pipeline = _pipeline(
+        analysis=_AnalysisPipeline(
+            observation=_observation(_instant()),
+            reference_result=_reference_result(),
+        ),
+        observation_recorder=_ObservationRecorder(accepted=[True]),
+        evidence_recorder=FilesystemVisualEvidenceRecorder(
+            tmp_path / "evidence"
+        ),
+    )
+    service = FrameAnalysisLoopService(
+        capture_service=capture,
+        analysis_use_case=AnalyzeCapturedFrameUseCase(pipeline=pipeline),
+    )
+
+    service.run_once()
+
+    assert capture.calls == 1
+    assert len(list((tmp_path / "evidence" / "frames").iterdir())) == 1

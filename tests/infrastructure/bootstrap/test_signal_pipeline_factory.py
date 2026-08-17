@@ -19,6 +19,9 @@ from pocket_option_analyzer.domain.signals import (
 from pocket_option_analyzer.infrastructure.bootstrap import (
     SignalPipelineFactory,
 )
+from pocket_option_analyzer.infrastructure.evidence import (
+    FilesystemVisualEvidenceRecorder,
+)
 from pocket_option_analyzer.vision.services import (
     PocketOptionCurrentVisualPriceExtractor,
 )
@@ -385,3 +388,26 @@ def test_factory_injects_current_visual_price_extractor() -> None:
     assert (
         pipeline._current_visual_price_extractor._effective_chart_right_x == 1062
     )
+
+
+def test_visual_evidence_adapter_is_disabled_without_directory(tmp_path) -> None:
+    unused_directory = tmp_path / "must-not-exist"
+    pipeline = SignalPipelineFactory.create_visual_signal_recording_pipeline()
+
+    assert pipeline._visual_evidence_recorder is None
+    assert unused_directory.exists() is False
+
+
+def test_visual_evidence_adapter_is_enabled_only_with_directory(tmp_path) -> None:
+    evidence_directory = tmp_path / "evidence"
+
+    pipeline = SignalPipelineFactory.create_visual_signal_recording_pipeline(
+        observation_file_path=tmp_path / "strategy_observations.jsonl",
+        visual_evidence_directory=evidence_directory,
+        application_version="0.1.0-test",
+    )
+
+    recorder = pipeline._visual_evidence_recorder
+    assert isinstance(recorder, FilesystemVisualEvidenceRecorder)
+    assert recorder.directory == evidence_directory
+    assert (evidence_directory / "session_metadata.json").is_file()
