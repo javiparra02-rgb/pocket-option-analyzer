@@ -601,9 +601,7 @@ def test_analyze_propagates_price_image_and_keeps_strategy_audit() -> None:
     )
 
     assert market_pipeline.received_image is image
-    assert market_pipeline.received_price_observation_image is (
-        price_observation_image
-    )
+    assert market_pipeline.received_price_observation_image is (price_observation_image)
     assert market_pipeline.received_chart_region is chart_region
     assert market_pipeline.received_price_observation_region is price_region
     profile = StrategyProfile.otc_precision_10s()
@@ -732,3 +730,19 @@ def test_build_last_observation_preserves_current_visual_price_identity() -> Non
     assert context.price_observation_region is price_region
     assert context.reference_result is observation.entry_reference_result
     assert context.reference_result.reference is observation.entry_reference
+
+
+def test_analyze_exposes_market_analysis_from_same_frame() -> None:
+    analysis = _market_analysis()
+    pipeline = VisualStrategySignalAnalysisPipeline(
+        market_analysis_pipeline=FakeMarketAnalysisPipeline(result=analysis),
+        indicator_snapshot_builder=FakeVisualIndicatorSnapshotBuilder(result=None),
+        signal_generator=FakeStrategySignalGenerator(
+            result=MarketSignal.neutral(reason="Waiting."),
+        ),
+        profile=StrategyProfile.otc_precision_10s(),
+    )
+
+    pipeline.analyze(image=np.zeros((100, 100, 3), dtype=np.uint8))
+
+    assert pipeline.last_market_analysis is analysis

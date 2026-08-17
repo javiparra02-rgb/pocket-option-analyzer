@@ -293,3 +293,121 @@ def test_injected_mask_builder_receives_bgr_without_mutating_input() -> None:
     assert result.status is CurrentVisualPriceStatus.OK
     assert builder.received is not None and builder.received.shape == (100, 100, 3)
     np.testing.assert_array_equal(frame, original)
+
+
+def test_trace_preserves_ok_candidate_and_effective_configuration() -> None:
+    frame = image(height=800, width=1161)
+    line(frame, 400, start=928, end=1061)
+    extractor = PocketOptionCurrentVisualPriceExtractor(effective_chart_right_x=1062)
+
+    analysis = extractor.extract_with_trace(frame)
+
+    assert analysis.extraction.status is CurrentVisualPriceStatus.OK
+    assert analysis.trace.status is analysis.extraction.status
+    assert analysis.trace.image_width == 1161
+    assert analysis.trace.image_height == 800
+    assert analysis.trace.effective_chart_right_x == 1062
+    assert analysis.trace.effective_chart_right_source == "configured"
+    assert (analysis.trace.band_start, analysis.trace.band_end) == (849, 1062)
+    assert analysis.trace.band_width == 213
+    assert (analysis.trace.safe_top, analysis.trace.safe_bottom) == (40, 40)
+    assert analysis.trace.masked_pixel_count == 134
+    assert len(analysis.trace.candidates) == 1
+    candidate = analysis.trace.candidates[0]
+    assert candidate.candidate_id == "price_candidate_000"
+    assert candidate.selected is True
+    assert candidate.x == analysis.extraction.selected_x == 994.5
+    assert candidate.y == analysis.extraction.selected_y == 400.0
+    assert candidate.row_start == candidate.row_end == 400
+    assert candidate.coverage == 134 / 213
+    assert candidate.span == 134 / 213
+    assert candidate.right_edge_gap == 0
+    assert candidate.score == analysis.extraction.confidence
+
+
+def test_trace_preserves_all_candidates_and_exact_selected_one() -> None:
+    frame = image()
+    line(frame, 40)
+    line(frame, 60)
+
+    analysis = PocketOptionCurrentVisualPriceExtractor().extract_with_trace(frame)
+
+    assert analysis.extraction.status is (
+        CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE
+    )
+    assert len(analysis.trace.candidates) == 2
+    assert [candidate.y for candidate in analysis.trace.candidates] == [40.0, 60.0]
+    assert [candidate.selected for candidate in analysis.trace.candidates] == [
+        True,
+        False,
+    ]
+
+
+def test_no_qualifying_rows_trace_distinguishes_row_rejections() -> None:
+    frame = image()
+    cv2.line(frame, (99, 20), (99, 80), CURRENT_PRICE_BLUE, 1)
+
+    analysis = PocketOptionCurrentVisualPriceExtractor().extract_with_trace(frame)
+
+    assert analysis.extraction.status is (
+        CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
+    )
+    assert analysis.trace.candidates == ()
+    counts = analysis.trace.rejection_counts
+    assert counts.rows_with_mask_pixels == 61
+    assert counts.rows_without_mask_pixels == 39
+    assert counts.rejected_by_coverage == 61
+    assert counts.rejected_by_span == 61
+    assert counts.rejected_by_right_edge_gap == 0
+    assert counts.qualifying_rows == 0
+    assert counts.candidate_groups == 0
+
+
+def test_no_candidate_trace_counts_right_edge_and_group_height_rejections() -> None:
+    class RejectionMaskBuilder:
+        def build(self, frame: np.ndarray) -> np.ndarray:
+            mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+            mask[20, 80:96] = 255
+            mask[40:50, 80:100] = 255
+            return mask
+
+    analysis = PocketOptionCurrentVisualPriceExtractor(
+        mask_builder=RejectionMaskBuilder()
+    ).extract_with_trace(image())
+
+    assert analysis.extraction.status is (
+        CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
+    )
+    counts = analysis.trace.rejection_counts
+    assert counts.rejected_by_right_edge_gap == 1
+    assert counts.qualifying_rows == 10
+    assert counts.candidate_groups == 1
+    assert counts.rejected_by_group_height == 1
+
+
+def test_invalid_image_trace_belongs_to_returned_extraction() -> None:
+    analysis = PocketOptionCurrentVisualPriceExtractor().extract_with_trace(None)  # type: ignore[arg-type]
+
+    assert analysis.extraction.status is CurrentVisualPriceStatus.INVALID_IMAGE
+    assert analysis.trace.status is analysis.extraction.status
+    assert analysis.trace.image_width is None
+    assert analysis.trace.candidates == ()
+
+
+def test_extract_with_trace_builds_mask_once() -> None:
+    class CountingMaskBuilder:
+        calls = 0
+
+        def build(self, frame: np.ndarray) -> np.ndarray:
+            self.calls += 1
+            mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+            mask[50, 80:100] = 255
+            return mask
+
+    builder = CountingMaskBuilder()
+    extractor = PocketOptionCurrentVisualPriceExtractor(mask_builder=builder)
+
+    analysis = extractor.extract_with_trace(image())
+
+    assert analysis.extraction.status is CurrentVisualPriceStatus.OK
+    assert builder.calls == 1

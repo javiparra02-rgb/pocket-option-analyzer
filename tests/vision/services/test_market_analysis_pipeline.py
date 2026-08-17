@@ -1,11 +1,19 @@
 import numpy as np
 
 from pocket_option_analyzer.vision.models import (
+    CandleAnalysisResult,
+    CandleAnchorExclusionReason,
     CandleCandidate,
+    CandleCandidateDecision,
+    CandleCandidateTrace,
     CandleColor,
+    CandleDetectionTrace,
+    CandleDimensionRejectionReason,
     CandleFilterDiagnostics,
+    CandleGeometry,
     CandleSeries,
     CandleType,
+    CandleWidthDecisionReason,
     ChartRegion,
     ClassifiedCandle,
     CurrentVisualPrice,
@@ -13,7 +21,10 @@ from pocket_option_analyzer.vision.models import (
     CurrentVisualPriceStatus,
     TrendDirection,
 )
-from pocket_option_analyzer.vision.services import MarketAnalysisPipeline
+from pocket_option_analyzer.vision.services import (
+    MarketAnalysisPipeline,
+    PocketOptionCurrentVisualPriceExtractor,
+)
 
 
 class FakeCandleAnalysisPipeline:
@@ -236,3 +247,121 @@ def test_market_analysis_preserves_capture_geometry_by_identity() -> None:
 
     assert result.chart_region is chart_region
     assert result.price_observation_region is price_region
+
+
+def test_market_analysis_preserves_current_price_trace_from_same_frame() -> None:
+    image = np.zeros((100, 100, 3), dtype=np.uint8)
+    image[50, 80:100] = (126, 95, 79)
+    pipeline = MarketAnalysisPipeline(
+        candle_analysis_pipeline=FakeCandleAnalysisPipeline(),
+        series_builder=FakeSeriesBuilder(),
+        trend_detector=FakeTrendDetector(),
+        current_visual_price_extractor=PocketOptionCurrentVisualPriceExtractor(),
+    )
+
+    result = pipeline.analyze(image=image)
+
+    assert result.current_visual_price is not None
+    assert result.current_visual_price.status is CurrentVisualPriceStatus.OK
+    trace = result.current_visual_price_detection_trace
+    assert trace is not None
+    assert trace.status is result.current_visual_price.status
+    assert trace.candidates[0].y == result.current_visual_price.selected_y
+    assert trace.candidates[0].selected is True
+
+
+def test_left_final_candle_can_be_latest_after_right_candidate_rejection() -> None:
+    geometry = CandleGeometry(
+        high_y=20,
+        body_top_y=25,
+        body_bottom_y=40,
+        low_y=45,
+    )
+    left = ClassifiedCandle(
+        candidate=CandleCandidate(
+            x=10,
+            y=20,
+            width=10,
+            height=26,
+            area=260,
+            color=CandleColor.GREEN,
+            geometry=geometry,
+        ),
+        candle_type=CandleType.BULLISH,
+    )
+    trace = CandleDetectionTrace(
+        candidates=(
+            CandleCandidateTrace(
+                candidate_id="candidate_000",
+                x=10,
+                y=20,
+                width=10,
+                height=26,
+                area=260,
+                color=CandleColor.GREEN,
+                decisions=(
+                    CandleCandidateDecision.SEGMENTED,
+                    CandleCandidateDecision.DIMENSION_ACCEPTED,
+                    CandleCandidateDecision.WIDTH_ACCEPTED,
+                    CandleCandidateDecision.RETURNED,
+                ),
+                dominant_width=10.0,
+                width_decision_reason=(CandleWidthDecisionReason.WITHIN_DOMINANT_RANGE),
+            ),
+            CandleCandidateTrace(
+                candidate_id="candidate_001",
+                x=90,
+                y=20,
+                width=2,
+                height=5,
+                area=10,
+                color=CandleColor.UNKNOWN,
+                decisions=(
+                    CandleCandidateDecision.SEGMENTED,
+                    CandleCandidateDecision.REJECTED_DIMENSION,
+                ),
+                dimension_rejection_reasons=(
+                    CandleDimensionRejectionReason.AREA_BELOW_MINIMUM,
+                    CandleDimensionRejectionReason.WIDTH_BELOW_MINIMUM,
+                ),
+            ),
+        ),
+        merges=(),
+        returned_candidate_ids=("candidate_000",),
+        dominant_width=10.0,
+        maximum_returned_candidates=80,
+    )
+
+    class TraceableCandleAnalysisPipeline(FakeCandleAnalysisPipeline):
+        def analyze_with_trace(self, image):
+            self.received_image = image
+            return CandleAnalysisResult(
+                candles=(left,),
+                candidate_ids=("candidate_000",),
+                trace=trace,
+            )
+
+    pipeline = MarketAnalysisPipeline(
+        candle_analysis_pipeline=TraceableCandleAnalysisPipeline(),
+        series_builder=FakeSeriesBuilder(),
+        trend_detector=FakeTrendDetector(),
+    )
+
+    result = pipeline.analyze(np.zeros((100, 100, 3), dtype=np.uint8))
+
+    assert result.series.latest is left
+    detection_trace = result.candle_detection_trace
+    assert detection_trace is not None
+    assert detection_trace.final_candles[0].is_latest is True
+    assert detection_trace.final_candles[0].ordinal == 0
+    assert detection_trace.final_candles[0].geometry is geometry
+    assert detection_trace.final_candles[0].high_y == 20
+    assert detection_trace.final_candles[0].body_top_y == 25
+    assert detection_trace.final_candles[0].body_bottom_y == 40
+    assert detection_trace.final_candles[0].low_y == 45
+    assert detection_trace.final_candles[0].anchor_exclusion_reason is (
+        CandleAnchorExclusionReason.LATEST
+    )
+    right_trace = detection_trace.candidates[1]
+    assert right_trace.x > detection_trace.final_candles[0].x
+    assert right_trace.decisions[-1] is CandleCandidateDecision.REJECTED_DIMENSION

@@ -82,3 +82,17 @@ def test_candle_analysis_pipeline_exposes_detection_diagnostics() -> None:
     assert pipeline.last_detection_diagnostics is (
         detection_pipeline.last_filter_diagnostics
     )
+
+
+def test_analyze_with_trace_preserves_public_classification_result() -> None:
+    pipeline = CandleAnalysisPipeline(
+        detection_pipeline=FakeDetectionPipeline(),
+        classification_pipeline=FakeClassificationPipeline(),
+    )
+
+    analysis = pipeline.analyze_with_trace(np.zeros((100, 100, 3), dtype=np.uint8))
+
+    assert len(analysis.candles) == 1
+    assert analysis.candles[0].candle_type is CandleType.BULLISH
+    assert analysis.candidate_ids == ("candidate_000",)
+    assert analysis.trace.returned_candidate_ids == analysis.candidate_ids

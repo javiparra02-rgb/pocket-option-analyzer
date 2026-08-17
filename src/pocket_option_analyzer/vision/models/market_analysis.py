@@ -2,9 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .candle_detection_trace import CandleDetectionTrace
 from .candle_filter_diagnostics import CandleFilterDiagnostics
 from .candle_series import CandleSeries
 from .chart_region import ChartRegion
+from .current_visual_price_detection_trace import (
+    CurrentVisualPriceDetectionTrace,
+)
 from .current_visual_price_extraction import CurrentVisualPriceExtraction
 from .trend_direction import TrendDirection
 
@@ -31,3 +35,7 @@ class MarketAnalysis:
     chart_region: ChartRegion | None = None
 
     price_observation_region: ChartRegion | None = None
+
+    candle_detection_trace: CandleDetectionTrace | None = None
+
+    current_visual_price_detection_trace: CurrentVisualPriceDetectionTrace | None = None

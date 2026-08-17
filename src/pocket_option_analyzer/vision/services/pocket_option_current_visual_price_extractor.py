@@ -9,7 +9,11 @@ import numpy as np
 
 from pocket_option_analyzer.vision.models import (
     CurrentVisualPrice,
+    CurrentVisualPriceAnalysis,
+    CurrentVisualPriceCandidateTrace,
+    CurrentVisualPriceDetectionTrace,
     CurrentVisualPriceExtraction,
+    CurrentVisualPriceRejectionCounts,
     CurrentVisualPriceStatus,
 )
 from pocket_option_analyzer.vision.preprocessing import FrameValidator
@@ -33,6 +37,12 @@ class _Candidate:
     coverage: float
     span: float
     right_edge_gap: int
+
+
+@dataclass(frozen=True, slots=True)
+class _CandidateSearch:
+    candidates: tuple[_Candidate, ...]
+    rejection_counts: CurrentVisualPriceRejectionCounts
 
 
 class PocketOptionCurrentVisualPriceExtractor:
@@ -110,11 +120,34 @@ class PocketOptionCurrentVisualPriceExtractor:
         self._mask_builder = mask_builder or PocketOptionCurrentPriceMaskBuilder()
 
     def extract(self, image: np.ndarray) -> CurrentVisualPriceExtraction:
+        return self.extract_with_trace(image).extraction
+
+    def extract_with_trace(self, image: np.ndarray) -> CurrentVisualPriceAnalysis:
+        """Extrae el precio y registra la evidencia durante la misma pasada."""
+
         if not FrameValidator.validate(image):
-            return CurrentVisualPriceExtraction(
+            extraction = CurrentVisualPriceExtraction(
                 price=None,
                 status=CurrentVisualPriceStatus.INVALID_IMAGE,
                 diagnostic="invalid_image: expected non-empty uint8 BGR/BGRA matrix",
+            )
+            return CurrentVisualPriceAnalysis(
+                extraction=extraction,
+                trace=CurrentVisualPriceDetectionTrace(
+                    status=extraction.status,
+                    image_width=None,
+                    image_height=None,
+                    effective_chart_right_x=None,
+                    effective_chart_right_source=None,
+                    band_start=None,
+                    band_end=None,
+                    band_width=None,
+                    safe_top=None,
+                    safe_bottom=None,
+                    masked_pixel_count=0,
+                    candidates=(),
+                    rejection_counts=CurrentVisualPriceRejectionCounts(),
+                ),
             )
 
         bgr = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR) if image.shape[2] == 4 else image
@@ -139,9 +172,14 @@ class PocketOptionCurrentVisualPriceExtractor:
             )
 
         masked_pixel_count = int(np.count_nonzero(mask))
-        candidates = self._find_candidates(mask, band_start, band_end, band_width)
+        safe_top = max(ceil(height * self._safe_top_ratio), self._min_safe_top_px)
+        safe_bottom = max(
+            ceil(height * self._safe_bottom_ratio), self._min_safe_bottom_px
+        )
+        search = self._search_candidates(mask, band_start, band_end, band_width)
+        candidates = list(search.candidates)
         if not candidates:
-            return CurrentVisualPriceExtraction(
+            extraction = CurrentVisualPriceExtraction(
                 price=None,
                 status=CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE,
                 diagnostic=self._diagnostic(
@@ -152,24 +190,31 @@ class PocketOptionCurrentVisualPriceExtractor:
                     effective_chart_right_x=effective_chart_right_x,
                     effective_chart_right_source=effective_chart_right_source,
                     masked_pixel_count=masked_pixel_count,
-                    safe_top=max(
-                        ceil(height * self._safe_top_ratio), self._min_safe_top_px
-                    ),
-                    safe_bottom=max(
-                        ceil(height * self._safe_bottom_ratio),
-                        self._min_safe_bottom_px,
-                    ),
+                    safe_top=safe_top,
+                    safe_bottom=safe_bottom,
                     selected=None,
                     reason="no_qualifying_rows",
                 ),
             )
+            return self._analysis(
+                extraction=extraction,
+                image_width=width,
+                image_height=height,
+                effective_chart_right_x=effective_chart_right_x,
+                effective_chart_right_source=effective_chart_right_source,
+                band_start=band_start,
+                band_end=band_end,
+                band_width=band_width,
+                safe_top=safe_top,
+                safe_bottom=safe_bottom,
+                masked_pixel_count=masked_pixel_count,
+                candidates=(),
+                selected=None,
+                rejection_counts=search.rejection_counts,
+            )
 
         candidates.sort(key=lambda candidate: (-candidate.score, candidate.y))
         selected = candidates[0]
-        safe_top = max(ceil(height * self._safe_top_ratio), self._min_safe_top_px)
-        safe_bottom = max(
-            ceil(height * self._safe_bottom_ratio), self._min_safe_bottom_px
-        )
         diagnostic = self._diagnostic(
             band_start=band_start,
             band_end=band_end,
@@ -195,56 +240,137 @@ class PocketOptionCurrentVisualPriceExtractor:
         if len(candidates) > 1 and (
             selected.score - candidates[1].score <= self._ambiguity_score_delta
         ):
-            return CurrentVisualPriceExtraction(
+            extraction = CurrentVisualPriceExtraction(
                 status=CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE,
                 **common,
             )
-        if selected.y < safe_top or selected.y > height - 1 - safe_bottom:
-            return CurrentVisualPriceExtraction(
+        elif selected.y < safe_top or selected.y > height - 1 - safe_bottom:
+            extraction = CurrentVisualPriceExtraction(
                 status=CurrentVisualPriceStatus.CANDIDATE_OUTSIDE_SAFE_REGION,
                 **common,
             )
-        if selected.score < self._min_confidence:
-            return CurrentVisualPriceExtraction(
+        elif selected.score < self._min_confidence:
+            extraction = CurrentVisualPriceExtraction(
                 status=CurrentVisualPriceStatus.LOW_CONFIDENCE,
                 **common,
             )
-
-        price = CurrentVisualPrice(
-            roi_y=selected.y,
-            normalized_roi_y=1.0 - selected.y / (height - 1),
-            roi_width=width,
-            roi_height=height,
-            source=self._source,
-            confidence=selected.score,
+        else:
+            price = CurrentVisualPrice(
+                roi_y=selected.y,
+                normalized_roi_y=1.0 - selected.y / (height - 1),
+                roi_width=width,
+                roi_height=height,
+                source=self._source,
+                confidence=selected.score,
+            )
+            extraction = CurrentVisualPriceExtraction(
+                price=price,
+                status=CurrentVisualPriceStatus.OK,
+                candidate_count=len(candidates),
+                selected_x=selected.x,
+                selected_y=selected.y,
+                confidence=selected.score,
+                diagnostic=diagnostic,
+            )
+        return self._analysis(
+            extraction=extraction,
+            image_width=width,
+            image_height=height,
+            effective_chart_right_x=effective_chart_right_x,
+            effective_chart_right_source=effective_chart_right_source,
+            band_start=band_start,
+            band_end=band_end,
+            band_width=band_width,
+            safe_top=safe_top,
+            safe_bottom=safe_bottom,
+            masked_pixel_count=masked_pixel_count,
+            candidates=tuple(candidates),
+            selected=selected,
+            rejection_counts=search.rejection_counts,
         )
-        return CurrentVisualPriceExtraction(
-            price=price,
-            status=CurrentVisualPriceStatus.OK,
-            candidate_count=len(candidates),
-            selected_x=selected.x,
-            selected_y=selected.y,
-            confidence=selected.score,
-            diagnostic=diagnostic,
+
+    @staticmethod
+    def _analysis(
+        *,
+        extraction: CurrentVisualPriceExtraction,
+        image_width: int,
+        image_height: int,
+        effective_chart_right_x: int,
+        effective_chart_right_source: str,
+        band_start: int,
+        band_end: int,
+        band_width: int,
+        safe_top: int,
+        safe_bottom: int,
+        masked_pixel_count: int,
+        candidates: tuple[_Candidate, ...],
+        selected: _Candidate | None,
+        rejection_counts: CurrentVisualPriceRejectionCounts,
+    ) -> CurrentVisualPriceAnalysis:
+        candidate_traces = tuple(
+            CurrentVisualPriceCandidateTrace(
+                candidate_id=f"price_candidate_{index:03d}",
+                x=candidate.x,
+                y=candidate.y,
+                row_start=candidate.row_start,
+                row_end=candidate.row_end,
+                coverage=candidate.coverage,
+                span=candidate.span,
+                right_edge_gap=candidate.right_edge_gap,
+                score=candidate.score,
+                selected=candidate is selected,
+            )
+            for index, candidate in enumerate(candidates)
+        )
+        return CurrentVisualPriceAnalysis(
+            extraction=extraction,
+            trace=CurrentVisualPriceDetectionTrace(
+                status=extraction.status,
+                image_width=image_width,
+                image_height=image_height,
+                effective_chart_right_x=effective_chart_right_x,
+                effective_chart_right_source=effective_chart_right_source,
+                band_start=band_start,
+                band_end=band_end,
+                band_width=band_width,
+                safe_top=safe_top,
+                safe_bottom=safe_bottom,
+                masked_pixel_count=masked_pixel_count,
+                candidates=candidate_traces,
+                rejection_counts=rejection_counts,
+            ),
         )
 
-    def _find_candidates(
+    def _search_candidates(
         self,
         mask: np.ndarray,
         band_start: int,
         band_end: int,
         band_width: int,
-    ) -> list[_Candidate]:
+    ) -> _CandidateSearch:
         band = mask[:, band_start:band_end] != 0
         qualifying: list[tuple[int, np.ndarray, float, float, int]] = []
+        rows_without_mask_pixels = 0
+        rows_with_mask_pixels = 0
+        rejected_by_coverage = 0
+        rejected_by_span = 0
+        rejected_by_right_edge_gap = 0
         for y, row in enumerate(band):
             xs = np.flatnonzero(row)
             if xs.size == 0:
+                rows_without_mask_pixels += 1
                 continue
+            rows_with_mask_pixels += 1
             coverage = float(xs.size / band_width)
             span = float((xs[-1] - xs[0] + 1) / band_width)
             candidate_last_x = band_start + int(xs[-1])
             right_edge_gap = int(band_end - 1 - candidate_last_x)
+            if coverage < self._min_row_coverage_ratio:
+                rejected_by_coverage += 1
+            if span < self._min_horizontal_span_ratio:
+                rejected_by_span += 1
+            if right_edge_gap > self._max_right_edge_gap_px:
+                rejected_by_right_edge_gap += 1
             if (
                 coverage >= self._min_row_coverage_ratio
                 and span >= self._min_horizontal_span_ratio
@@ -260,10 +386,12 @@ class PocketOptionCurrentVisualPriceExtractor:
                 groups.append([row])
 
         candidates: list[_Candidate] = []
+        rejected_by_group_height = 0
         for group in groups:
             row_start = group[0][0]
             row_end = group[-1][0]
             if row_end - row_start + 1 > self._max_candidate_height_px:
+                rejected_by_group_height += 1
                 continue
             weights = np.array([row[1].size for row in group], dtype=np.float64)
             ys = np.array([row[0] for row in group], dtype=np.float64)
@@ -290,7 +418,19 @@ class PocketOptionCurrentVisualPriceExtractor:
                     right_edge_gap=right_edge_gap,
                 )
             )
-        return candidates
+        return _CandidateSearch(
+            candidates=tuple(candidates),
+            rejection_counts=CurrentVisualPriceRejectionCounts(
+                rows_without_mask_pixels=rows_without_mask_pixels,
+                rows_with_mask_pixels=rows_with_mask_pixels,
+                rejected_by_coverage=rejected_by_coverage,
+                rejected_by_span=rejected_by_span,
+                rejected_by_right_edge_gap=rejected_by_right_edge_gap,
+                qualifying_rows=len(qualifying),
+                candidate_groups=len(groups),
+                rejected_by_group_height=rejected_by_group_height,
+            ),
+        )
 
     @staticmethod
     def _diagnostic(

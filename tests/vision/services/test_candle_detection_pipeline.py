@@ -3,6 +3,7 @@ import numpy as np
 
 from pocket_option_analyzer.vision.models import (
     CandleCandidate,
+    CandleCandidateDecision,
     CandleColor,
     CandleFilterDiagnostics,
     CandleGeometry,
@@ -284,3 +285,77 @@ def test_detection_pipeline_exposes_filter_diagnostics() -> None:
     )
 
     assert pipeline.last_filter_diagnostics is (candle_filter.last_diagnostics)
+
+
+def test_detect_with_trace_uses_same_pass_and_preserves_enrichment() -> None:
+    geometry = CandleGeometry(
+        high_y=10,
+        body_top_y=15,
+        body_bottom_y=25,
+        low_y=29,
+    )
+    pipeline = CandleDetectionPipeline(
+        mask_builder=FakeMaskBuilder(),
+        segmenter=FakeSegmenter(),
+        candle_filter=CandleFilter(min_area=40),
+        color_detector=FakeColorDetector(),
+        geometry_extractor=FakeGeometryExtractor(geometry),
+    )
+
+    result = pipeline.detect_with_trace(np.zeros((100, 100, 3), dtype=np.uint8))
+
+    assert len(result.candidates) == 1
+    assert result.candidates[0].color is CandleColor.WHITE
+    assert result.candidates[0].geometry is geometry
+    assert result.candidate_ids == ("candidate_000",)
+    candidate_trace = result.trace.candidates[0]
+    assert candidate_trace.candidate_id == "candidate_000"
+    assert candidate_trace.color is CandleColor.WHITE
+    assert candidate_trace.decisions == (
+        CandleCandidateDecision.SEGMENTED,
+        CandleCandidateDecision.DIMENSION_ACCEPTED,
+        CandleCandidateDecision.WIDTH_ACCEPTED,
+        CandleCandidateDecision.RETURNED,
+    )
+
+
+def test_detect_public_return_remains_a_list() -> None:
+    pipeline = CandleDetectionPipeline(
+        mask_builder=FakeMaskBuilder(),
+        segmenter=FakeSegmenter(),
+        candle_filter=CandleFilter(min_area=40),
+    )
+
+    result = pipeline.detect(np.zeros((100, 100), dtype=np.uint8))
+
+    assert isinstance(result, list)
+    assert len(result) == 1
+
+
+def test_detect_with_trace_does_not_repeat_mask_or_segmentation() -> None:
+    class CountingMaskBuilder(FakeMaskBuilder):
+        calls = 0
+
+        def build(self, image):
+            self.calls += 1
+            return super().build(image)
+
+    class CountingSegmenter(FakeSegmenter):
+        calls = 0
+
+        def segment(self, mask):
+            self.calls += 1
+            return super().segment(mask)
+
+    mask_builder = CountingMaskBuilder()
+    segmenter = CountingSegmenter()
+    pipeline = CandleDetectionPipeline(
+        mask_builder=mask_builder,
+        segmenter=segmenter,
+        candle_filter=CandleFilter(min_area=40),
+    )
+
+    pipeline.detect_with_trace(np.zeros((100, 100), dtype=np.uint8))
+
+    assert mask_builder.calls == 1
+    assert segmenter.calls == 1

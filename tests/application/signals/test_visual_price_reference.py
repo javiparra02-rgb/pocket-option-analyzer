@@ -5,11 +5,17 @@ from pocket_option_analyzer.application.strategy import (
     VisualPriceReferenceStatus,
 )
 from pocket_option_analyzer.vision.models import (
+    CandleAnchorExclusionReason,
     CandleCandidate,
+    CandleCandidateDecision,
+    CandleCandidateTrace,
+    CandleDetectionTrace,
     CandleGeometry,
     CandleSeries,
     CandleType,
+    CandleWidthDecisionReason,
     ClassifiedCandle,
+    FinalCandleTrace,
     MarketAnalysis,
     TrendDirection,
 )
@@ -278,3 +284,95 @@ def test_reference_is_stable_under_uniform_translation_and_scale() -> None:
 
     assert transformed.value == original.value
     assert transformed.anchor_shape == original.anchor_shape
+
+
+def test_reference_roles_observe_exact_latest_anchors_and_non_eligible() -> None:
+    candles = (
+        _candle(10, CandleType.BULLISH, (100, 120, 140, 160)),
+        _candle(20, CandleType.UNKNOWN, (120, 130, 150, 180)),
+        _candle(30, CandleType.BEARISH, (180, 200, 220, 240)),
+        _candle(40, CandleType.BULLISH, (145, 150, 170, 190)),
+    )
+    candidate_ids = tuple(f"candidate_{index:03d}" for index in range(len(candles)))
+    trace = CandleDetectionTrace(
+        candidates=tuple(
+            CandleCandidateTrace(
+                candidate_id=candidate_id,
+                x=candle.candidate.x,
+                y=candle.candidate.y,
+                width=candle.candidate.width,
+                height=candle.candidate.height,
+                area=candle.candidate.area,
+                color=candle.candidate.color,
+                decisions=(
+                    CandleCandidateDecision.SEGMENTED,
+                    CandleCandidateDecision.DIMENSION_ACCEPTED,
+                    CandleCandidateDecision.WIDTH_ACCEPTED,
+                    CandleCandidateDecision.RETURNED,
+                ),
+                dominant_width=8.0,
+                width_decision_reason=(CandleWidthDecisionReason.WITHIN_DOMINANT_RANGE),
+            )
+            for candidate_id, candle in zip(candidate_ids, candles, strict=True)
+        ),
+        merges=(),
+        returned_candidate_ids=candidate_ids,
+        dominant_width=8.0,
+        maximum_returned_candidates=80,
+        final_candles=tuple(
+            FinalCandleTrace(
+                candidate_id=candidate_id,
+                source_candidate_ids=(candidate_id,),
+                ordinal=index,
+                x=candle.candidate.x,
+                y=candle.candidate.y,
+                width=candle.candidate.width,
+                height=candle.candidate.height,
+                area=candle.candidate.area,
+                color=candle.candidate.color,
+                candle_type=candle.candle_type,
+                geometry=candle.candidate.geometry,
+                is_latest=index == len(candles) - 1,
+                anchor_exclusion_reason=(
+                    CandleAnchorExclusionReason.LATEST
+                    if index == len(candles) - 1
+                    else CandleAnchorExclusionReason.NOT_EVALUATED
+                ),
+            )
+            for index, (candidate_id, candle) in enumerate(
+                zip(candidate_ids, candles, strict=True)
+            )
+        ),
+    )
+    market_analysis = MarketAnalysis(
+        series=CandleSeries(candles),
+        trend=TrendDirection.SIDEWAYS,
+        candle_detection_trace=trace,
+    )
+
+    reference_analysis = VisualStrategySignalAnalysisPipeline._price_reference_analysis(
+        market_analysis
+    )
+    enriched = VisualStrategySignalAnalysisPipeline._with_reference_roles(
+        market_analysis=market_analysis,
+        reference_analysis=reference_analysis,
+    )
+
+    assert reference_analysis.result == (
+        VisualStrategySignalAnalysisPipeline._price_reference_result(market_analysis)
+    )
+    final_candles = enriched.candle_detection_trace
+    assert final_candles is not None
+    roles = final_candles.final_candles
+    assert roles[0].is_anchor is True
+    assert roles[0].anchor_index == 0
+    assert roles[1].is_latest is False
+    assert roles[1].is_anchor is False
+    assert roles[1].anchor_exclusion_reason is (
+        CandleAnchorExclusionReason.UNKNOWN_CANDLE_TYPE
+    )
+    assert roles[2].is_anchor is True
+    assert roles[2].anchor_index == 1
+    assert roles[3].is_latest is True
+    assert roles[3].is_anchor is False
+    assert roles[3].anchor_exclusion_reason is CandleAnchorExclusionReason.LATEST
