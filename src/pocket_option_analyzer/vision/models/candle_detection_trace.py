@@ -7,6 +7,7 @@ from math import isfinite
 from .candle_candidate import CandleCandidate
 from .candle_color import CandleColor
 from .candle_geometry import CandleGeometry
+from .candle_series_membership import CandleSeriesMembershipTrace
 from .candle_type import CandleType
 from .classified_candle import ClassifiedCandle
 
@@ -240,6 +241,7 @@ class CandleDetectionTrace:
     maximum_returned_candidates: int
     filter_configuration: CandleFilterConfigurationTrace | None = None
     final_candles: tuple[FinalCandleTrace, ...] = ()
+    series_membership: CandleSeriesMembershipTrace | None = None
 
     def __post_init__(self) -> None:
         if self.maximum_returned_candidates < 1:
@@ -266,6 +268,13 @@ class CandleDetectionTrace:
         if any(candle.candidate_id not in known_ids for candle in self.final_candles):
             raise ValueError(
                 "Toda candle final debe proceder de un candidato conocido."
+            )
+        if self.series_membership is not None and (
+            set(self.series_membership.evaluated_candidate_ids)
+            != set(self.returned_candidate_ids)
+        ):
+            raise ValueError(
+                "La pertenencia debe evaluar exactamente los candidatos retornados."
             )
         if any(
             source_id not in known_ids

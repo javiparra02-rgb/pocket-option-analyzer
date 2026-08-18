@@ -12,6 +12,7 @@ from .candle_filter import CandleFilter
 from .candle_metrics_calculator import CandleMetricsCalculator
 from .candle_segmenter import CandleSegmenter
 from .candle_series_builder import CandleSeriesBuilder
+from .candle_series_membership_resolver import CandleSeriesMembershipResolver
 from .chart_locator import ChartLocator
 from .chart_region_extractor import ChartRegionExtractor
 from .current_visual_price_extractor import CurrentVisualPriceExtractor
@@ -52,6 +53,7 @@ __all__ = [
     "CandleMetricsCalculator",
     "CandleSegmenter",
     "CandleSeriesBuilder",
+    "CandleSeriesMembershipResolver",
     "ChartLocator",
     "ChartRegionExtractor",
     "CurrentVisualPriceExtractor",

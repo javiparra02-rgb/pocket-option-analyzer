@@ -22,6 +22,15 @@ from .candle_detection_trace import (
 from .candle_filter_diagnostics import CandleFilterDiagnostics
 from .candle_metrics import CandleMetrics
 from .candle_series import CandleSeries
+from .candle_series_membership import (
+    CandleSeriesMembershipExclusion,
+    CandleSeriesMembershipExclusionReason,
+    CandleSeriesMembershipGapTrace,
+    CandleSeriesMembershipResult,
+    CandleSeriesMembershipRunTrace,
+    CandleSeriesMembershipStatus,
+    CandleSeriesMembershipTrace,
+)
 from .candle_type import CandleType
 from .chart_region import ChartRegion
 from .classified_candle import ClassifiedCandle
@@ -58,6 +67,13 @@ __all__ = [
     "FinalCandleTrace",
     "CandleMetrics",
     "CandleSeries",
+    "CandleSeriesMembershipExclusion",
+    "CandleSeriesMembershipExclusionReason",
+    "CandleSeriesMembershipGapTrace",
+    "CandleSeriesMembershipResult",
+    "CandleSeriesMembershipRunTrace",
+    "CandleSeriesMembershipStatus",
+    "CandleSeriesMembershipTrace",
     "CandleType",
     "ChartRegion",
     "ClassifiedCandle",

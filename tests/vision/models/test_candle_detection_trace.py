@@ -9,6 +9,11 @@ from pocket_option_analyzer.vision.models import (
     CandleColor,
     CandleDetectionTrace,
     CandleMergeTrace,
+    CandleSeriesMembershipExclusion,
+    CandleSeriesMembershipExclusionReason,
+    CandleSeriesMembershipRunTrace,
+    CandleSeriesMembershipStatus,
+    CandleSeriesMembershipTrace,
     CandleWidthDecisionReason,
 )
 
@@ -32,6 +37,35 @@ def _candidate_trace(
         ),
         dominant_width=8.0,
         width_decision_reason=CandleWidthDecisionReason.WITHIN_DOMINANT_RANGE,
+    )
+
+
+def _membership_trace(
+    candidate_id: str = "candidate_000",
+) -> CandleSeriesMembershipTrace:
+    return CandleSeriesMembershipTrace(
+        status=CandleSeriesMembershipStatus.INSUFFICIENT_SUPPORT,
+        evaluated_candidate_ids=(candidate_id,),
+        member_candidate_ids=(),
+        excluded_candidates=(
+            CandleSeriesMembershipExclusion(
+                candidate_id=candidate_id,
+                reason=CandleSeriesMembershipExclusionReason.HORIZONTAL_OUTLIER,
+                diagnostic="candidate_isolated_from_supported_lattice",
+            ),
+        ),
+        evaluated_gaps=(),
+        estimated_pitch_px=None,
+        candidate_runs=(
+            CandleSeriesMembershipRunTrace(
+                run_id="run_000",
+                candidate_ids=(candidate_id,),
+                selected=False,
+            ),
+        ),
+        selected_run_support=0,
+        latest_candidate_id=None,
+        diagnostic="insufficient_pitch_support",
     )
 
 
@@ -69,4 +103,35 @@ def test_detection_trace_rejects_unknown_returned_candidate() -> None:
             returned_candidate_ids=("candidate_999",),
             dominant_width=8.0,
             maximum_returned_candidates=80,
+        )
+
+
+def test_detection_trace_accepts_optional_series_membership_additively() -> None:
+    membership = _membership_trace()
+
+    trace = CandleDetectionTrace(
+        candidates=(_candidate_trace(),),
+        merges=(),
+        returned_candidate_ids=("candidate_000",),
+        dominant_width=8.0,
+        maximum_returned_candidates=80,
+        series_membership=membership,
+    )
+
+    assert trace.series_membership is membership
+    assert trace.final_candles == ()
+    assert get_type_hints(CandleDetectionTrace)["series_membership"] == (
+        CandleSeriesMembershipTrace | None
+    )
+
+
+def test_detection_trace_rejects_membership_for_different_candidates() -> None:
+    with pytest.raises(ValueError, match="exactamente"):
+        CandleDetectionTrace(
+            candidates=(_candidate_trace(),),
+            merges=(),
+            returned_candidate_ids=("candidate_000",),
+            dominant_width=8.0,
+            maximum_returned_candidates=80,
+            series_membership=_membership_trace("candidate_999"),
         )
