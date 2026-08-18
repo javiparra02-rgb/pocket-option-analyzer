@@ -12,6 +12,10 @@ from pocket_option_analyzer.vision.models import (
     CandleFilterDiagnostics,
     CandleGeometry,
     CandleSeries,
+    CandleSeriesMembershipResult,
+    CandleSeriesMembershipRunTrace,
+    CandleSeriesMembershipStatus,
+    CandleSeriesMembershipTrace,
     CandleType,
     CandleWidthDecisionReason,
     ChartRegion,
@@ -64,6 +68,59 @@ class FakeSeriesBuilder:
         )
 
 
+class FakeMembershipResolver:
+    def __init__(self) -> None:
+        self.received_candles: tuple[ClassifiedCandle, ...] | None = None
+        self.received_candidate_ids: tuple[str, ...] | None = None
+        self.received_dominant_width: float | None = None
+
+    def resolve(self, candles, candidate_ids, dominant_width):
+        candles = tuple(candles)
+        candidate_ids = tuple(candidate_ids)
+        self.received_candles = candles
+        self.received_candidate_ids = candidate_ids
+        self.received_dominant_width = dominant_width
+        if not candidate_ids:
+            return CandleSeriesMembershipResult(
+                candles=(),
+                candidate_ids=(),
+                trace=CandleSeriesMembershipTrace(
+                    status=CandleSeriesMembershipStatus.INSUFFICIENT_SUPPORT,
+                    evaluated_candidate_ids=(),
+                    member_candidate_ids=(),
+                    excluded_candidates=(),
+                    evaluated_gaps=(),
+                    estimated_pitch_px=None,
+                    candidate_runs=(),
+                    selected_run_support=0,
+                    latest_candidate_id=None,
+                    diagnostic="test_empty_input",
+                ),
+            )
+        return CandleSeriesMembershipResult(
+            candles=candles,
+            candidate_ids=candidate_ids,
+            trace=CandleSeriesMembershipTrace(
+                status=CandleSeriesMembershipStatus.AVAILABLE,
+                evaluated_candidate_ids=candidate_ids,
+                member_candidate_ids=candidate_ids,
+                excluded_candidates=(),
+                evaluated_gaps=(),
+                estimated_pitch_px=None,
+                candidate_runs=(
+                    CandleSeriesMembershipRunTrace(
+                        run_id="run_000",
+                        candidate_ids=candidate_ids,
+                        selected=True,
+                    ),
+                ),
+                selected_run_support=len(candidate_ids),
+                latest_candidate_id=candidate_ids[-1],
+                diagnostic="test_all_candidates_available",
+            ),
+        )
+
+
 class FakeTrendDetector:
     def detect(self, series):
         return TrendDirection.BULLISH
@@ -90,6 +147,7 @@ def test_analyze_returns_market_analysis() -> None:
     pipeline = MarketAnalysisPipeline(
         candle_analysis_pipeline=FakeCandleAnalysisPipeline(),
         series_builder=FakeSeriesBuilder(),
+        membership_resolver=FakeMembershipResolver(),
         trend_detector=FakeTrendDetector(),
     )
 
@@ -111,6 +169,7 @@ def test_market_analysis_preserves_detection_diagnostics() -> None:
     pipeline = MarketAnalysisPipeline(
         candle_analysis_pipeline=candle_pipeline,
         series_builder=FakeSeriesBuilder(),
+        membership_resolver=FakeMembershipResolver(),
         trend_detector=FakeTrendDetector(),
     )
 
@@ -128,6 +187,7 @@ def test_market_analysis_has_no_current_visual_price_without_extractor() -> None
     pipeline = MarketAnalysisPipeline(
         candle_analysis_pipeline=FakeCandleAnalysisPipeline(),
         series_builder=FakeSeriesBuilder(),
+        membership_resolver=FakeMembershipResolver(),
         trend_detector=FakeTrendDetector(),
     )
 
@@ -172,6 +232,7 @@ def test_market_analysis_preserves_current_visual_price_extraction() -> None:
     pipeline = MarketAnalysisPipeline(
         candle_analysis_pipeline=FakeCandleAnalysisPipeline(),
         series_builder=FakeSeriesBuilder(),
+        membership_resolver=FakeMembershipResolver(),
         trend_detector=FakeTrendDetector(),
         current_visual_price_extractor=extractor,
     )
@@ -195,6 +256,7 @@ def test_analyze_routes_each_image_to_its_exclusive_consumer() -> None:
     pipeline = MarketAnalysisPipeline(
         candle_analysis_pipeline=candle_pipeline,
         series_builder=FakeSeriesBuilder(),
+        membership_resolver=FakeMembershipResolver(),
         trend_detector=FakeTrendDetector(),
         current_visual_price_extractor=extractor,
     )
@@ -220,6 +282,7 @@ def test_analyze_uses_main_image_for_visual_price_when_second_image_is_none() ->
     pipeline = MarketAnalysisPipeline(
         candle_analysis_pipeline=candle_pipeline,
         series_builder=FakeSeriesBuilder(),
+        membership_resolver=FakeMembershipResolver(),
         trend_detector=FakeTrendDetector(),
         current_visual_price_extractor=extractor,
     )
@@ -236,6 +299,7 @@ def test_market_analysis_preserves_capture_geometry_by_identity() -> None:
     pipeline = MarketAnalysisPipeline(
         candle_analysis_pipeline=FakeCandleAnalysisPipeline(),
         series_builder=FakeSeriesBuilder(),
+        membership_resolver=FakeMembershipResolver(),
         trend_detector=FakeTrendDetector(),
     )
 
@@ -255,6 +319,7 @@ def test_market_analysis_preserves_current_price_trace_from_same_frame() -> None
     pipeline = MarketAnalysisPipeline(
         candle_analysis_pipeline=FakeCandleAnalysisPipeline(),
         series_builder=FakeSeriesBuilder(),
+        membership_resolver=FakeMembershipResolver(),
         trend_detector=FakeTrendDetector(),
         current_visual_price_extractor=PocketOptionCurrentVisualPriceExtractor(),
     )
@@ -344,6 +409,7 @@ def test_left_final_candle_can_be_latest_after_right_candidate_rejection() -> No
     pipeline = MarketAnalysisPipeline(
         candle_analysis_pipeline=TraceableCandleAnalysisPipeline(),
         series_builder=FakeSeriesBuilder(),
+        membership_resolver=FakeMembershipResolver(),
         trend_detector=FakeTrendDetector(),
     )
 

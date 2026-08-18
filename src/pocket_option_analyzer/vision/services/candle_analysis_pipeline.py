@@ -71,6 +71,17 @@ class CandleAnalysisPipeline:
         classified = tuple(
             self._classification_pipeline.classify(list(detection.candidates))
         )
+        if len(classified) != len(detection.candidates) or any(
+            classified_candle.candidate is not detected_candidate
+            for classified_candle, detected_candidate in zip(
+                classified,
+                detection.candidates,
+                strict=True,
+            )
+        ):
+            raise ValueError(
+                "La clasificación debe preservar orden e identidad de candidatos."
+            )
         return CandleAnalysisResult(
             candles=classified,
             candidate_ids=detection.candidate_ids,

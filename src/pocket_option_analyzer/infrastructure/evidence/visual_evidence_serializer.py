@@ -10,6 +10,7 @@ from pocket_option_analyzer.vision.models import (
     CandleFilterConfigurationTrace,
     CandleFilterDiagnostics,
     CandleMergeTrace,
+    CandleSeriesMembershipTrace,
     ChartRegion,
     CurrentVisualPriceDetectionTrace,
     CurrentVisualPriceExtraction,
@@ -116,6 +117,9 @@ class VisualEvidenceSerializer:
             "filter_configuration": cls._filter_configuration_to_dict(
                 trace.filter_configuration,
             ),
+            "series_membership": cls._series_membership_to_dict(
+                trace.series_membership,
+            ),
             "final_candles": list(final_candles),
             "latest": next(
                 (candle for candle in final_candles if candle["is_latest"]),
@@ -129,6 +133,61 @@ class VisualEvidenceSerializer:
                 ),
                 key=lambda candle: candle["anchor_index"],
             ),
+        }
+
+    @staticmethod
+    def _series_membership_to_dict(
+        membership: CandleSeriesMembershipTrace | None,
+    ) -> dict[str, Any] | None:
+        if membership is None:
+            return None
+        return {
+            "status": membership.status.value,
+            "evaluated_candidate_ids": list(
+                membership.evaluated_candidate_ids,
+            ),
+            "member_candidate_ids": list(membership.member_candidate_ids),
+            "excluded_candidates": [
+                {
+                    "candidate_id": exclusion.candidate_id,
+                    "reason": exclusion.reason.value,
+                    "horizontal_gap_px": exclusion.horizontal_gap_px,
+                    "vertical_gap_px": exclusion.vertical_gap_px,
+                    "diagnostic": exclusion.diagnostic,
+                }
+                for exclusion in membership.excluded_candidates
+            ],
+            "evaluated_gaps": [
+                {
+                    "left_candidate_id": gap.left_candidate_id,
+                    "right_candidate_id": gap.right_candidate_id,
+                    "horizontal_gap_px": gap.horizontal_gap_px,
+                    "estimated_slot_count": gap.estimated_slot_count,
+                    "horizontal_consistent": gap.horizontal_consistent,
+                    "vertical_gap_px": gap.vertical_gap_px,
+                    "vertical_continuity_limit_px": (
+                        gap.vertical_continuity_limit_px
+                    ),
+                    "vertical_consistent": gap.vertical_consistent,
+                }
+                for gap in membership.evaluated_gaps
+            ],
+            "estimated_pitch_px": membership.estimated_pitch_px,
+            "candidate_runs": [
+                {
+                    "run_id": run.run_id,
+                    "candidate_ids": list(run.candidate_ids),
+                    "support": run.support,
+                    "selected": run.selected,
+                    "separated_by_vertical_discontinuity": (
+                        run.separated_by_vertical_discontinuity
+                    ),
+                }
+                for run in membership.candidate_runs
+            ],
+            "selected_run_support": membership.selected_run_support,
+            "latest_candidate_id": membership.latest_candidate_id,
+            "diagnostic": membership.diagnostic,
         }
 
     @staticmethod

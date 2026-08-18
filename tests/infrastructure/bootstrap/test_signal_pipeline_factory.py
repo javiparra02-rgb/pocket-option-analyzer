@@ -23,6 +23,7 @@ from pocket_option_analyzer.infrastructure.evidence import (
     FilesystemVisualEvidenceRecorder,
 )
 from pocket_option_analyzer.vision.services import (
+    CandleSeriesMembershipResolver,
     PocketOptionCurrentVisualPriceExtractor,
 )
 
@@ -387,6 +388,15 @@ def test_factory_injects_current_visual_price_extractor() -> None:
     )
     assert (
         pipeline._current_visual_price_extractor._effective_chart_right_x == 1062
+    )
+
+
+def test_factory_injects_candle_series_membership_resolver() -> None:
+    pipeline = SignalPipelineFactory._create_market_analysis_pipeline()
+
+    assert isinstance(
+        pipeline._membership_resolver,
+        CandleSeriesMembershipResolver,
     )
 
 

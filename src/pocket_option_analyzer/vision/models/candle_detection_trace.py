@@ -173,7 +173,7 @@ class CandleMergeTrace:
 
 @dataclass(frozen=True, slots=True)
 class FinalCandleTrace:
-    """Candle final clasificada y su rol en la referencia visual."""
+    """Candle clasificada pre-membership y su rol en la referencia visual."""
 
     candidate_id: str
     source_candidate_ids: tuple[str, ...]
@@ -232,7 +232,11 @@ class FinalCandleTrace:
 
 @dataclass(frozen=True, slots=True)
 class CandleDetectionTrace:
-    """Evidencia estructurada completa de una pasada de detección."""
+    """Evidencia estructurada completa de una pasada de detección.
+
+    ``final_candles`` conserva todos los candidatos clasificados tras los filtros
+    geométricos. ``series_membership`` documenta la subselección productiva.
+    """
 
     candidates: tuple[CandleCandidateTrace, ...]
     merges: tuple[CandleMergeTrace, ...]

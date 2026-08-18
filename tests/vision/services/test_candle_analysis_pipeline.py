@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from pocket_option_analyzer.vision.models import (
     CandleCandidate,
@@ -96,3 +97,30 @@ def test_analyze_with_trace_preserves_public_classification_result() -> None:
     assert analysis.candles[0].candle_type is CandleType.BULLISH
     assert analysis.candidate_ids == ("candidate_000",)
     assert analysis.trace.returned_candidate_ids == analysis.candidate_ids
+
+
+def test_analyze_with_trace_rejects_classification_identity_misalignment() -> None:
+    class MisalignedClassificationPipeline:
+        def classify(self, candles):
+            source = candles[0]
+            return [
+                ClassifiedCandle(
+                    candidate=CandleCandidate(
+                        x=source.x,
+                        y=source.y,
+                        width=source.width,
+                        height=source.height,
+                        area=source.area,
+                        color=source.color,
+                    ),
+                    candle_type=CandleType.BULLISH,
+                )
+            ]
+
+    pipeline = CandleAnalysisPipeline(
+        detection_pipeline=FakeDetectionPipeline(),
+        classification_pipeline=MisalignedClassificationPipeline(),
+    )
+
+    with pytest.raises(ValueError, match="identidad"):
+        pipeline.analyze_with_trace(np.zeros((100, 100, 3), dtype=np.uint8))

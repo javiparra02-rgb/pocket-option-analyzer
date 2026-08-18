@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import get_type_hints
@@ -35,6 +36,12 @@ from pocket_option_analyzer.vision.models import (
     CandleGeometry,
     CandleMergeTrace,
     CandleSeries,
+    CandleSeriesMembershipExclusion,
+    CandleSeriesMembershipExclusionReason,
+    CandleSeriesMembershipGapTrace,
+    CandleSeriesMembershipRunTrace,
+    CandleSeriesMembershipStatus,
+    CandleSeriesMembershipTrace,
     CandleType,
     ChartRegion,
     ClassifiedCandle,
@@ -227,6 +234,49 @@ def _price_trace() -> CurrentVisualPriceDetectionTrace:
     )
 
 
+def _membership_trace() -> CandleSeriesMembershipTrace:
+    return CandleSeriesMembershipTrace(
+        status=CandleSeriesMembershipStatus.AVAILABLE,
+        evaluated_candidate_ids=("c1", "m1"),
+        member_candidate_ids=("c1",),
+        excluded_candidates=(
+            CandleSeriesMembershipExclusion(
+                candidate_id="m1",
+                reason=(
+                    CandleSeriesMembershipExclusionReason.HORIZONTAL_OUTLIER
+                ),
+                horizontal_gap_px=10.0,
+                diagnostic="candidate_isolated_from_supported_lattice",
+            ),
+        ),
+        evaluated_gaps=(
+            CandleSeriesMembershipGapTrace(
+                left_candidate_id="c1",
+                right_candidate_id="m1",
+                horizontal_gap_px=10.0,
+                estimated_slot_count=2,
+                horizontal_consistent=False,
+            ),
+        ),
+        estimated_pitch_px=5.0,
+        candidate_runs=(
+            CandleSeriesMembershipRunTrace(
+                run_id="run_000",
+                candidate_ids=("c1",),
+                selected=True,
+            ),
+            CandleSeriesMembershipRunTrace(
+                run_id="run_001",
+                candidate_ids=("m1",),
+                selected=False,
+            ),
+        ),
+        selected_run_support=1,
+        latest_candidate_id="c1",
+        diagnostic="dominant_supported_run_selected",
+    )
+
+
 def _series() -> CandleSeries:
     return CandleSeries(
         candles=(
@@ -292,9 +342,10 @@ def _evidence(
     price_image: np.ndarray | None = None,
     frame_id: int = 123,
     timestamp: datetime = FRAME_TIMESTAMP,
+    candle_trace_override: CandleDetectionTrace | None = None,
 ) -> VisualFrameEvidence:
     chart_image = image if image is not None else _image()
-    candle_trace = _candle_trace()
+    candle_trace = candle_trace_override or _candle_trace()
     price_trace = _price_trace()
     extraction = CurrentVisualPriceExtraction(
         price=None,
@@ -639,6 +690,39 @@ def test_candle_trace_preserves_candidate_lifecycle(tmp_path: Path) -> None:
     assert trace["dominant_width"] == 5.0
     assert "merged" in trace["candidates"][1]["decisions"]
     assert trace["returned_candidate_ids"] == ["c1", "m1"]
+    assert trace["series_membership"] is None
+
+
+def test_frame_metadata_persists_effective_series_membership(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "evidence"
+    candle_trace = replace(
+        _candle_trace(),
+        series_membership=_membership_trace(),
+    )
+    _store(directory).record_frame(
+        _evidence(candle_trace_override=candle_trace),
+        (_entry(),),
+    )
+    membership = _read_json(_frame_directory(directory) / "frame.json")[
+        "analysis"
+    ]["candle_detection_trace"]["series_membership"]
+
+    assert membership["status"] == "available"
+    assert membership["member_candidate_ids"] == ["c1"]
+    assert membership["excluded_candidates"] == [
+        {
+            "candidate_id": "m1",
+            "reason": "horizontal_outlier",
+            "horizontal_gap_px": 10.0,
+            "vertical_gap_px": None,
+            "diagnostic": "candidate_isolated_from_supported_lattice",
+        }
+    ]
+    assert membership["estimated_pitch_px"] == 5.0
+    assert membership["candidate_runs"][0]["support"] == 1
+    assert membership["latest_candidate_id"] == "c1"
 
 
 def test_latest_and_anchor_roles_use_explicit_candle_coordinates(

@@ -8,8 +8,9 @@ from pocket_option_analyzer.vision.models import (
     CandleAnalysisResult,
     CandleAnchorExclusionReason,
     CandleDetectionTrace,
+    CandleSeriesMembershipStatus,
+    CandleSeriesMembershipTrace,
     ChartRegion,
-    ClassifiedCandle,
     FinalCandleTrace,
     MarketAnalysis,
 )
@@ -18,6 +19,9 @@ from pocket_option_analyzer.vision.services.candle_analysis_pipeline import (
 )
 from pocket_option_analyzer.vision.services.candle_series_builder import (
     CandleSeriesBuilder,
+)
+from pocket_option_analyzer.vision.services.candle_series_membership_resolver import (
+    CandleSeriesMembershipResolver,
 )
 from pocket_option_analyzer.vision.services.current_visual_price_extractor import (
     CurrentVisualPriceExtractor,
@@ -36,11 +40,13 @@ class MarketAnalysisPipeline:
         self,
         candle_analysis_pipeline: CandleAnalysisPipeline,
         series_builder: CandleSeriesBuilder,
+        membership_resolver: CandleSeriesMembershipResolver,
         trend_detector: TrendDetector,
         current_visual_price_extractor: CurrentVisualPriceExtractor | None = None,
     ) -> None:
         self._candle_analysis_pipeline = candle_analysis_pipeline
         self._series_builder = series_builder
+        self._membership_resolver = membership_resolver
         self._trend_detector = trend_detector
         self._current_visual_price_extractor = current_visual_price_extractor
 
@@ -56,10 +62,33 @@ class MarketAnalysisPipeline:
         """
 
         candle_analysis = self._analyze_candles(image)
-        classified_candles = (
-            list(candle_analysis.candles)
+        classified_candles = tuple(
+            candle_analysis.candles
             if candle_analysis is not None
             else self._candle_analysis_pipeline.analyze(image)
+        )
+        candidate_ids = (
+            candle_analysis.candidate_ids
+            if candle_analysis is not None
+            else tuple(
+                f"candidate_{index:03d}"
+                for index in range(len(classified_candles))
+            )
+        )
+        dominant_width = (
+            candle_analysis.trace.dominant_width
+            if candle_analysis is not None
+            else (
+                self._candle_analysis_pipeline.last_detection_diagnostics.dominant_width
+                if self._candle_analysis_pipeline.last_detection_diagnostics
+                is not None
+                else None
+            )
+        )
+        membership = self._membership_resolver.resolve(
+            candles=classified_candles,
+            candidate_ids=candidate_ids,
+            dominant_width=dominant_width,
         )
 
         current_visual_price = None
@@ -85,10 +114,18 @@ class MarketAnalysisPipeline:
                     visual_price_image
                 )
 
-        series = self._series_builder.build(classified_candles)
+        trusted_candles = (
+            membership.candles
+            if membership.trace.status is CandleSeriesMembershipStatus.AVAILABLE
+            else ()
+        )
+        series = self._series_builder.build(trusted_candles)
 
         candle_detection_trace = (
-            self._finalize_candle_trace(candle_analysis, series.candles)
+            self._finalize_candle_trace(
+                candle_analysis,
+                membership.trace,
+            )
             if candle_analysis is not None
             else None
         )
@@ -124,8 +161,18 @@ class MarketAnalysisPipeline:
     @staticmethod
     def _finalize_candle_trace(
         analysis: CandleAnalysisResult,
-        ordered_candles: tuple[ClassifiedCandle, ...],
+        membership: CandleSeriesMembershipTrace,
     ) -> CandleDetectionTrace:
+        ordered_candles = tuple(
+            sorted(
+                zip(
+                    analysis.candles,
+                    analysis.candidate_ids,
+                    strict=True,
+                ),
+                key=lambda item: (item[0].candidate.x, item[1]),
+            )
+        )
         candidate_ids_by_identity = {
             id(candle.candidate): candidate_id
             for candle, candidate_id in zip(
@@ -137,13 +184,14 @@ class MarketAnalysisPipeline:
         candidate_traces = {
             candidate.candidate_id: candidate for candidate in analysis.trace.candidates
         }
-        latest = ordered_candles[-1] if ordered_candles else None
         final_candles = []
-        for ordinal, candle in enumerate(ordered_candles):
+        for ordinal, (candle, aligned_candidate_id) in enumerate(ordered_candles):
             candidate = candle.candidate
             candidate_id = candidate_ids_by_identity[id(candidate)]
+            if candidate_id != aligned_candidate_id:
+                raise ValueError("La identidad de candle y candidate_id se desalineó.")
             candidate_trace = candidate_traces[candidate_id]
-            is_latest = candle is latest
+            is_latest = candidate_id == membership.latest_candidate_id
             final_candles.append(
                 FinalCandleTrace(
                     candidate_id=candidate_id,
@@ -170,4 +218,5 @@ class MarketAnalysisPipeline:
         return replace(
             analysis.trace,
             final_candles=tuple(final_candles),
+            series_membership=membership,
         )

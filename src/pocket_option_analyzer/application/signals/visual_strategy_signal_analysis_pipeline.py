@@ -526,12 +526,49 @@ class VisualStrategySignalAnalysisPipeline:
             if anchors is not None
             else {}
         )
+        if trace.series_membership is not None:
+            member_ids = trace.series_membership.member_candidate_ids
+            if len(member_ids) != len(market_analysis.series.candles):
+                raise ValueError(
+                    "La serie productiva debe coincidir con los IDs miembros."
+                )
+            candles_by_candidate_id = dict(
+                zip(
+                    member_ids,
+                    market_analysis.series.candles,
+                    strict=True,
+                )
+            )
+            candle_trace_pairs = tuple(
+                (
+                    candles_by_candidate_id.get(final_trace.candidate_id),
+                    final_trace,
+                )
+                for final_trace in trace.final_candles
+            )
+        else:
+            candle_trace_pairs = tuple(
+                zip(
+                    market_analysis.series.candles,
+                    trace.final_candles,
+                    strict=True,
+                )
+            )
         updated_candles = []
-        for candle, final_trace in zip(
-            market_analysis.series.candles,
-            trace.final_candles,
-            strict=True,
-        ):
+        for candle, final_trace in candle_trace_pairs:
+            if candle is None:
+                updated_candles.append(
+                    replace(
+                        final_trace,
+                        is_latest=False,
+                        is_anchor=False,
+                        anchor_index=None,
+                        anchor_exclusion_reason=(
+                            CandleAnchorExclusionReason.NOT_EVALUATED
+                        ),
+                    )
+                )
+                continue
             is_latest = candle is reference_analysis.latest
             anchor_index = anchor_indices.get(id(candle))
             is_anchor = anchor_index is not None
