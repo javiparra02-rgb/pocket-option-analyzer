@@ -21,8 +21,15 @@ from .candle_detection_trace import (
 )
 from .candle_filter_diagnostics import CandleFilterDiagnostics
 from .candle_metrics import CandleMetrics
+from .candle_overlay_evidence import (
+    CandleOverlayEvidence,
+    CandleOverlayEvidenceStatus,
+    CandleOverlayEvidenceTrace,
+)
 from .candle_series import CandleSeries
 from .candle_series_membership import (
+    CandleSeriesExtensionDecision,
+    CandleSeriesExtensionTrace,
     CandleSeriesMembershipExclusion,
     CandleSeriesMembershipExclusionReason,
     CandleSeriesMembershipGapTrace,
@@ -66,7 +73,12 @@ __all__ = [
     "CandleWidthDecisionReason",
     "FinalCandleTrace",
     "CandleMetrics",
+    "CandleOverlayEvidence",
+    "CandleOverlayEvidenceStatus",
+    "CandleOverlayEvidenceTrace",
     "CandleSeries",
+    "CandleSeriesExtensionDecision",
+    "CandleSeriesExtensionTrace",
     "CandleSeriesMembershipExclusion",
     "CandleSeriesMembershipExclusionReason",
     "CandleSeriesMembershipGapTrace",

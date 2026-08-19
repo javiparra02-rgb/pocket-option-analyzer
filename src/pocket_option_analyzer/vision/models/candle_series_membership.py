@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from math import isfinite
 
+from .candle_overlay_evidence import CandleOverlayEvidenceStatus
 from .classified_candle import ClassifiedCandle
 
 
@@ -21,6 +22,15 @@ class CandleSeriesMembershipExclusionReason(StrEnum):
     HORIZONTAL_OUTLIER = "horizontal_outlier"
     VERTICAL_DISCONTINUITY = "vertical_discontinuity"
     NOT_SELECTED_CLUSTER = "not_selected_cluster"
+    EXPIRY_OVERLAY = "expiry_overlay"
+
+
+class CandleSeriesExtensionDecision(StrEnum):
+    """Decisión tomada para una extensión contra un core congelado."""
+
+    ACCEPTED = "accepted"
+    EXCLUDED_VERTICAL_DISCONTINUITY = "excluded_vertical_discontinuity"
+    EXCLUDED_EXPIRY_OVERLAY = "excluded_expiry_overlay"
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +116,62 @@ class CandleSeriesMembershipRunTrace:
 
 
 @dataclass(frozen=True, slots=True)
+class CandleSeriesExtensionTrace:
+    """Evaluación de una extensión sin incluirla en sus estadísticas."""
+
+    candidate_id: str
+    core_candidate_ids: tuple[str, ...]
+    frozen_pitch_px: float
+    frozen_vertical_median_gap_px: float
+    frozen_vertical_mad_px: float
+    frozen_body_height_scale_px: float
+    frozen_robust_allowance_px: float
+    frozen_body_allowance_px: float
+    frozen_vertical_continuity_limit_px: float
+    candidate_vertical_gap_px: float | None
+    overlay_evidence_status: CandleOverlayEvidenceStatus
+    decision: CandleSeriesExtensionDecision
+    exclusion_reason: CandleSeriesMembershipExclusionReason | None = None
+
+    def __post_init__(self) -> None:
+        if not self.candidate_id:
+            raise ValueError("candidate_id no puede estar vacío.")
+        if not self.core_candidate_ids or any(
+            not candidate_id for candidate_id in self.core_candidate_ids
+        ):
+            raise ValueError("Una extensión requiere un core no vacío.")
+        if self.candidate_id in self.core_candidate_ids:
+            raise ValueError("La extensión no puede participar en su propio core.")
+        if len(self.core_candidate_ids) != len(set(self.core_candidate_ids)):
+            raise ValueError("Los IDs del core no pueden repetirse.")
+        for value in (
+            self.frozen_pitch_px,
+            self.frozen_vertical_median_gap_px,
+            self.frozen_vertical_mad_px,
+            self.frozen_body_height_scale_px,
+            self.frozen_robust_allowance_px,
+            self.frozen_body_allowance_px,
+            self.frozen_vertical_continuity_limit_px,
+        ):
+            if not isfinite(value) or value < 0:
+                raise ValueError(
+                    "Las estadísticas congeladas deben ser finitas y no negativas."
+                )
+        if self.frozen_pitch_px <= 0:
+            raise ValueError("frozen_pitch_px debe ser positivo.")
+        if self.candidate_vertical_gap_px is not None and (
+            not isfinite(self.candidate_vertical_gap_px)
+            or self.candidate_vertical_gap_px < 0
+        ):
+            raise ValueError("candidate_vertical_gap_px debe ser válido.")
+        is_accepted = self.decision is CandleSeriesExtensionDecision.ACCEPTED
+        if is_accepted != (self.exclusion_reason is None):
+            raise ValueError(
+                "La razón de exclusión debe coincidir con la decisión."
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class CandleSeriesMembershipTrace:
     """Evidencia completa de una resolución aislada de pertenencia."""
 
@@ -119,6 +185,7 @@ class CandleSeriesMembershipTrace:
     selected_run_support: int
     latest_candidate_id: str | None
     diagnostic: str
+    extension_decisions: tuple[CandleSeriesExtensionTrace, ...] = ()
 
     def __post_init__(self) -> None:
         evaluated_ids = self.evaluated_candidate_ids
@@ -144,6 +211,19 @@ class CandleSeriesMembershipTrace:
             raise ValueError("selected_run_support no puede ser negativo.")
         if not self.diagnostic:
             raise ValueError("diagnostic no puede estar vacío.")
+        extension_ids = tuple(
+            extension.candidate_id for extension in self.extension_decisions
+        )
+        if len(extension_ids) != len(set(extension_ids)):
+            raise ValueError("Una extensión no puede evaluarse más de una vez.")
+        if any(candidate_id not in evaluated_ids for candidate_id in extension_ids):
+            raise ValueError("Toda extensión debe ser un candidato evaluado.")
+        if any(
+            core_id not in evaluated_ids
+            for extension in self.extension_decisions
+            for core_id in extension.core_candidate_ids
+        ):
+            raise ValueError("Todo miembro del core debe ser un candidato evaluado.")
 
         run_ids = tuple(run.run_id for run in self.candidate_runs)
         if len(run_ids) != len(set(run_ids)):

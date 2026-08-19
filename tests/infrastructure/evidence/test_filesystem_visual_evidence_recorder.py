@@ -35,7 +35,12 @@ from pocket_option_analyzer.vision.models import (
     CandleFilterConfigurationTrace,
     CandleGeometry,
     CandleMergeTrace,
+    CandleOverlayEvidence,
+    CandleOverlayEvidenceStatus,
+    CandleOverlayEvidenceTrace,
     CandleSeries,
+    CandleSeriesExtensionDecision,
+    CandleSeriesExtensionTrace,
     CandleSeriesMembershipExclusion,
     CandleSeriesMembershipExclusionReason,
     CandleSeriesMembershipGapTrace,
@@ -274,6 +279,71 @@ def _membership_trace() -> CandleSeriesMembershipTrace:
         selected_run_support=1,
         latest_candidate_id="c1",
         diagnostic="dominant_supported_run_selected",
+    )
+
+
+def _overlay_trace() -> CandleOverlayEvidenceTrace:
+    return CandleOverlayEvidenceTrace(
+        evaluated_candidate_ids=("c1", "m1"),
+        evidence=(
+            CandleOverlayEvidence(
+                candidate_id="c1",
+                status=CandleOverlayEvidenceStatus.NO_EVIDENCE,
+                vertical_line_support_ratio=0.0,
+                contact_gap_ratio=0.0,
+                horizontal_alignment_ratio=0.0,
+                cap_height_to_width_ratio=2.0,
+                wickless=False,
+                diagnostic="expiry_overlay_structure_not_detected",
+            ),
+            CandleOverlayEvidence(
+                candidate_id="m1",
+                status=CandleOverlayEvidenceStatus.EXPIRY_OVERLAY,
+                vertical_line_support_ratio=0.95,
+                contact_gap_ratio=0.0,
+                horizontal_alignment_ratio=0.05,
+                cap_height_to_width_ratio=0.6,
+                wickless=True,
+                diagnostic="cap_attached_to_long_vertical_line",
+            ),
+        ),
+    )
+
+
+def _overlay_membership_trace() -> CandleSeriesMembershipTrace:
+    return replace(
+        _membership_trace(),
+        excluded_candidates=(
+            CandleSeriesMembershipExclusion(
+                candidate_id="m1",
+                reason=CandleSeriesMembershipExclusionReason.EXPIRY_OVERLAY,
+                vertical_gap_px=153.0,
+                diagnostic="candidate_matches_expiry_cap_on_line",
+            ),
+        ),
+        extension_decisions=(
+            CandleSeriesExtensionTrace(
+                candidate_id="m1",
+                core_candidate_ids=("c1",),
+                frozen_pitch_px=25.5,
+                frozen_vertical_median_gap_px=9.0,
+                frozen_vertical_mad_px=9.0,
+                frozen_body_height_scale_px=84.0,
+                frozen_robust_allowance_px=63.0,
+                frozen_body_allowance_px=168.0,
+                frozen_vertical_continuity_limit_px=168.0,
+                candidate_vertical_gap_px=153.0,
+                overlay_evidence_status=(
+                    CandleOverlayEvidenceStatus.EXPIRY_OVERLAY
+                ),
+                decision=(
+                    CandleSeriesExtensionDecision.EXCLUDED_EXPIRY_OVERLAY
+                ),
+                exclusion_reason=(
+                    CandleSeriesMembershipExclusionReason.EXPIRY_OVERLAY
+                ),
+            ),
+        ),
     )
 
 
@@ -691,6 +761,7 @@ def test_candle_trace_preserves_candidate_lifecycle(tmp_path: Path) -> None:
     assert "merged" in trace["candidates"][1]["decisions"]
     assert trace["returned_candidate_ids"] == ["c1", "m1"]
     assert trace["series_membership"] is None
+    assert trace["overlay_evidence"] is None
 
 
 def test_frame_metadata_persists_effective_series_membership(
@@ -723,6 +794,43 @@ def test_frame_metadata_persists_effective_series_membership(
     assert membership["estimated_pitch_px"] == 5.0
     assert membership["candidate_runs"][0]["support"] == 1
     assert membership["latest_candidate_id"] == "c1"
+
+
+def test_frame_metadata_persists_overlay_and_frozen_extension_evidence(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "evidence"
+    candle_trace = replace(
+        _candle_trace(),
+        overlay_evidence=_overlay_trace(),
+        series_membership=_overlay_membership_trace(),
+    )
+    _store(directory).record_frame(
+        _evidence(candle_trace_override=candle_trace),
+        (_entry(),),
+    )
+    trace = _read_json(_frame_directory(directory) / "frame.json")[
+        "analysis"
+    ]["candle_detection_trace"]
+
+    overlay = trace["overlay_evidence"]
+    assert overlay["evaluated_candidate_ids"] == ["c1", "m1"]
+    assert overlay["evidence"][1]["status"] == "expiry_overlay"
+    assert overlay["evidence"][1]["vertical_line_support_ratio"] == 0.95
+    extension = trace["series_membership"]["extension_decisions"][0]
+    assert extension["candidate_id"] == "m1"
+    assert extension["core_candidate_ids"] == ["c1"]
+    assert extension["core_support"] == 1
+    assert extension["frozen_vertical_median_gap_px"] == 9.0
+    assert extension["frozen_vertical_mad_px"] == 9.0
+    assert extension["frozen_body_height_scale_px"] == 84.0
+    assert extension["frozen_robust_allowance_px"] == 63.0
+    assert extension["frozen_body_allowance_px"] == 168.0
+    assert extension["frozen_vertical_continuity_limit_px"] == 168.0
+    assert extension["candidate_vertical_gap_px"] == 153.0
+    assert extension["overlay_evidence_status"] == "expiry_overlay"
+    assert extension["decision"] == "excluded_expiry_overlay"
+    assert extension["exclusion_reason"] == "expiry_overlay"
 
 
 def test_latest_and_anchor_roles_use_explicit_candle_coordinates(

@@ -17,6 +17,7 @@ from pocket_option_analyzer.vision.models import (
     CandleDetectionTrace,
     CandleFilterDiagnostics,
     CandleGeometry,
+    CandleOverlayEvidenceStatus,
     CandleSeries,
     CandleSeriesMembershipExclusionReason,
     CandleSeriesMembershipStatus,
@@ -28,6 +29,7 @@ from pocket_option_analyzer.vision.models import (
 from pocket_option_analyzer.vision.services import (
     CandleSeriesMembershipResolver,
     MarketAnalysisPipeline,
+    PocketOptionExpiryOverlayEvidenceResolver,
     TrendDetector,
 )
 
@@ -96,6 +98,36 @@ def _available_input() -> tuple[tuple[ClassifiedCandle, ...], tuple[str, ...]]:
     flag = _candle(x=72, open_y=20, close_y=10)
     price_text = _candle(x=180, open_y=104, close_y=100)
     return real_candles + (flag, price_text), real_ids + ("flag", "price_text")
+
+
+def _expiry_overlay_input() -> tuple[
+    tuple[ClassifiedCandle, ...],
+    tuple[str, ...],
+    np.ndarray,
+]:
+    real_candles, real_ids = _series(6)
+    overlay_geometry = CandleGeometry(
+        high_y=10,
+        body_top_y=10,
+        body_bottom_y=21,
+        low_y=21,
+    )
+    overlay = ClassifiedCandle(
+        candidate=CandleCandidate(
+            x=66,
+            y=10,
+            width=20,
+            height=12,
+            area=240,
+            color=CandleColor.WHITE,
+            geometry=overlay_geometry,
+        ),
+        candle_type=CandleType.BULLISH,
+    )
+    image = np.zeros((240, 120, 3), dtype=np.uint8)
+    image[10:22, 66:86] = 255
+    image[22:, 66:68] = 255
+    return real_candles + (overlay,), real_ids + ("candidate_083",), image
 
 
 def _trace(
@@ -179,15 +211,24 @@ class _CapturingMembershipResolver:
         self.received_candles: tuple[ClassifiedCandle, ...] | None = None
         self.received_candidate_ids: tuple[str, ...] | None = None
         self.received_dominant_width: float | None = None
+        self.received_overlay_evidence = None
 
-    def resolve(self, candles, candidate_ids, dominant_width):
+    def resolve(
+        self,
+        candles,
+        candidate_ids,
+        dominant_width,
+        overlay_evidence,
+    ):
         self.received_candles = tuple(candles)
         self.received_candidate_ids = tuple(candidate_ids)
         self.received_dominant_width = dominant_width
+        self.received_overlay_evidence = overlay_evidence
         return self.delegate.resolve(
             candles=self.received_candles,
             candidate_ids=self.received_candidate_ids,
             dominant_width=dominant_width,
+            overlay_evidence=overlay_evidence,
         )
 
 
@@ -207,6 +248,9 @@ def _pipeline(
             ),
             series_builder=resolved_builder,
             membership_resolver=(resolver or _CapturingMembershipResolver()),
+            overlay_evidence_resolver=(
+                PocketOptionExpiryOverlayEvidenceResolver()
+            ),
             trend_detector=TrendDetector(),
         ),
         resolved_builder,
@@ -308,6 +352,69 @@ def test_membership_exclusions_keep_structured_reasons() -> None:
     )
 
 
+def test_expiry_overlay_remains_traceable_but_not_productive_or_anchor() -> None:
+    candles, candidate_ids, image = _expiry_overlay_input()
+    pipeline, _ = _pipeline(candles, candidate_ids)
+
+    analysis = pipeline.analyze(image)
+    trace = analysis.candle_detection_trace
+    assert trace is not None
+    assert trace.overlay_evidence is not None
+    evidence = trace.overlay_evidence.by_candidate_id()["candidate_083"]
+    assert evidence.status is CandleOverlayEvidenceStatus.EXPIRY_OVERLAY
+    assert "candidate_083" in trace.returned_candidate_ids
+    assert "candidate_083" in tuple(
+        item.candidate_id for item in trace.final_candles
+    )
+    assert trace.series_membership is not None
+    real_latest_id = candidate_ids[-2]
+    assert trace.series_membership.latest_candidate_id == real_latest_id
+    exclusions = {
+        item.candidate_id: item.reason
+        for item in trace.series_membership.excluded_candidates
+    }
+    assert exclusions["candidate_083"] is (
+        CandleSeriesMembershipExclusionReason.EXPIRY_OVERLAY
+    )
+
+    reference_analysis = (
+        VisualStrategySignalAnalysisPipeline._price_reference_analysis(analysis)
+    )
+    enriched = VisualStrategySignalAnalysisPipeline._with_reference_roles(
+        market_analysis=analysis,
+        reference_analysis=reference_analysis,
+    )
+    assert enriched.candle_detection_trace is not None
+    roles = {
+        item.candidate_id: item
+        for item in enriched.candle_detection_trace.final_candles
+    }
+    assert roles["candidate_083"].is_latest is False
+    assert roles["candidate_083"].is_anchor is False
+    assert roles[real_latest_id].is_latest is True
+    assert roles[real_latest_id].is_anchor is False
+
+
+def test_frame_172_price_text_remains_horizontal_outlier() -> None:
+    candles, candidate_ids = _series(6)
+    price_text = _candle(x=1047, open_y=104, close_y=100, width=20)
+    all_ids = candidate_ids + ("candidate_002",)
+    pipeline, _ = _pipeline(candles + (price_text,), all_ids)
+
+    analysis = pipeline.analyze(np.zeros((800, 1100, 3), dtype=np.uint8))
+    membership = analysis.candle_detection_trace.series_membership
+    assert membership is not None
+    exclusion = next(
+        item
+        for item in membership.excluded_candidates
+        if item.candidate_id == "candidate_002"
+    )
+
+    assert exclusion.reason is (
+        CandleSeriesMembershipExclusionReason.HORIZONTAL_OUTLIER
+    )
+
+
 def test_pre_membership_final_candles_and_lifecycle_remain_intact() -> None:
     candles, candidate_ids = _available_input()
     source_pipeline = _TraceableAnalysisPipeline(candles, candidate_ids)
@@ -315,6 +422,7 @@ def test_pre_membership_final_candles_and_lifecycle_remain_intact() -> None:
         candle_analysis_pipeline=source_pipeline,
         series_builder=_RecordingSeriesBuilder(),
         membership_resolver=_CapturingMembershipResolver(),
+        overlay_evidence_resolver=PocketOptionExpiryOverlayEvidenceResolver(),
         trend_detector=TrendDetector(),
     )
 

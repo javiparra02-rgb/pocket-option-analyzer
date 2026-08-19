@@ -8,6 +8,7 @@ from pocket_option_analyzer.vision.models import (
     CandleAnalysisResult,
     CandleAnchorExclusionReason,
     CandleDetectionTrace,
+    CandleOverlayEvidenceTrace,
     CandleSeriesMembershipStatus,
     CandleSeriesMembershipTrace,
     ChartRegion,
@@ -30,6 +31,10 @@ from pocket_option_analyzer.vision.services.trend_detector import (
     TrendDetector,
 )
 
+from .pocket_option_expiry_overlay_evidence_resolver import (
+    PocketOptionExpiryOverlayEvidenceResolver,
+)
+
 
 class MarketAnalysisPipeline:
     """
@@ -41,12 +46,14 @@ class MarketAnalysisPipeline:
         candle_analysis_pipeline: CandleAnalysisPipeline,
         series_builder: CandleSeriesBuilder,
         membership_resolver: CandleSeriesMembershipResolver,
+        overlay_evidence_resolver: PocketOptionExpiryOverlayEvidenceResolver,
         trend_detector: TrendDetector,
         current_visual_price_extractor: CurrentVisualPriceExtractor | None = None,
     ) -> None:
         self._candle_analysis_pipeline = candle_analysis_pipeline
         self._series_builder = series_builder
         self._membership_resolver = membership_resolver
+        self._overlay_evidence_resolver = overlay_evidence_resolver
         self._trend_detector = trend_detector
         self._current_visual_price_extractor = current_visual_price_extractor
 
@@ -85,10 +92,16 @@ class MarketAnalysisPipeline:
                 else None
             )
         )
+        overlay_evidence = self._overlay_evidence_resolver.resolve(
+            image=image,
+            candles=classified_candles,
+            candidate_ids=candidate_ids,
+        )
         membership = self._membership_resolver.resolve(
             candles=classified_candles,
             candidate_ids=candidate_ids,
             dominant_width=dominant_width,
+            overlay_evidence=overlay_evidence,
         )
 
         current_visual_price = None
@@ -125,6 +138,7 @@ class MarketAnalysisPipeline:
             self._finalize_candle_trace(
                 candle_analysis,
                 membership.trace,
+                overlay_evidence,
             )
             if candle_analysis is not None
             else None
@@ -162,6 +176,7 @@ class MarketAnalysisPipeline:
     def _finalize_candle_trace(
         analysis: CandleAnalysisResult,
         membership: CandleSeriesMembershipTrace,
+        overlay_evidence: CandleOverlayEvidenceTrace,
     ) -> CandleDetectionTrace:
         ordered_candles = tuple(
             sorted(
@@ -218,5 +233,6 @@ class MarketAnalysisPipeline:
         return replace(
             analysis.trace,
             final_candles=tuple(final_candles),
+            overlay_evidence=overlay_evidence,
             series_membership=membership,
         )

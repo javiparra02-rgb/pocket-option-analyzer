@@ -28,6 +28,7 @@ from pocket_option_analyzer.vision.models import (
 from pocket_option_analyzer.vision.services import (
     MarketAnalysisPipeline,
     PocketOptionCurrentVisualPriceExtractor,
+    PocketOptionExpiryOverlayEvidenceResolver,
 )
 
 
@@ -74,7 +75,13 @@ class FakeMembershipResolver:
         self.received_candidate_ids: tuple[str, ...] | None = None
         self.received_dominant_width: float | None = None
 
-    def resolve(self, candles, candidate_ids, dominant_width):
+    def resolve(
+        self,
+        candles,
+        candidate_ids,
+        dominant_width,
+        overlay_evidence,
+    ):
         candles = tuple(candles)
         candidate_ids = tuple(candidate_ids)
         self.received_candles = candles
@@ -148,6 +155,7 @@ def test_analyze_returns_market_analysis() -> None:
         candle_analysis_pipeline=FakeCandleAnalysisPipeline(),
         series_builder=FakeSeriesBuilder(),
         membership_resolver=FakeMembershipResolver(),
+        overlay_evidence_resolver=PocketOptionExpiryOverlayEvidenceResolver(),
         trend_detector=FakeTrendDetector(),
     )
 
@@ -170,6 +178,7 @@ def test_market_analysis_preserves_detection_diagnostics() -> None:
         candle_analysis_pipeline=candle_pipeline,
         series_builder=FakeSeriesBuilder(),
         membership_resolver=FakeMembershipResolver(),
+        overlay_evidence_resolver=PocketOptionExpiryOverlayEvidenceResolver(),
         trend_detector=FakeTrendDetector(),
     )
 
@@ -188,6 +197,7 @@ def test_market_analysis_has_no_current_visual_price_without_extractor() -> None
         candle_analysis_pipeline=FakeCandleAnalysisPipeline(),
         series_builder=FakeSeriesBuilder(),
         membership_resolver=FakeMembershipResolver(),
+        overlay_evidence_resolver=PocketOptionExpiryOverlayEvidenceResolver(),
         trend_detector=FakeTrendDetector(),
     )
 
@@ -233,6 +243,7 @@ def test_market_analysis_preserves_current_visual_price_extraction() -> None:
         candle_analysis_pipeline=FakeCandleAnalysisPipeline(),
         series_builder=FakeSeriesBuilder(),
         membership_resolver=FakeMembershipResolver(),
+        overlay_evidence_resolver=PocketOptionExpiryOverlayEvidenceResolver(),
         trend_detector=FakeTrendDetector(),
         current_visual_price_extractor=extractor,
     )
@@ -257,6 +268,7 @@ def test_analyze_routes_each_image_to_its_exclusive_consumer() -> None:
         candle_analysis_pipeline=candle_pipeline,
         series_builder=FakeSeriesBuilder(),
         membership_resolver=FakeMembershipResolver(),
+        overlay_evidence_resolver=PocketOptionExpiryOverlayEvidenceResolver(),
         trend_detector=FakeTrendDetector(),
         current_visual_price_extractor=extractor,
     )
@@ -283,6 +295,7 @@ def test_analyze_uses_main_image_for_visual_price_when_second_image_is_none() ->
         candle_analysis_pipeline=candle_pipeline,
         series_builder=FakeSeriesBuilder(),
         membership_resolver=FakeMembershipResolver(),
+        overlay_evidence_resolver=PocketOptionExpiryOverlayEvidenceResolver(),
         trend_detector=FakeTrendDetector(),
         current_visual_price_extractor=extractor,
     )
@@ -300,6 +313,7 @@ def test_market_analysis_preserves_capture_geometry_by_identity() -> None:
         candle_analysis_pipeline=FakeCandleAnalysisPipeline(),
         series_builder=FakeSeriesBuilder(),
         membership_resolver=FakeMembershipResolver(),
+        overlay_evidence_resolver=PocketOptionExpiryOverlayEvidenceResolver(),
         trend_detector=FakeTrendDetector(),
     )
 
@@ -320,6 +334,7 @@ def test_market_analysis_preserves_current_price_trace_from_same_frame() -> None
         candle_analysis_pipeline=FakeCandleAnalysisPipeline(),
         series_builder=FakeSeriesBuilder(),
         membership_resolver=FakeMembershipResolver(),
+        overlay_evidence_resolver=PocketOptionExpiryOverlayEvidenceResolver(),
         trend_detector=FakeTrendDetector(),
         current_visual_price_extractor=PocketOptionCurrentVisualPriceExtractor(),
     )
@@ -410,6 +425,7 @@ def test_left_final_candle_can_be_latest_after_right_candidate_rejection() -> No
         candle_analysis_pipeline=TraceableCandleAnalysisPipeline(),
         series_builder=FakeSeriesBuilder(),
         membership_resolver=FakeMembershipResolver(),
+        overlay_evidence_resolver=PocketOptionExpiryOverlayEvidenceResolver(),
         trend_detector=FakeTrendDetector(),
     )
 

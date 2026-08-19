@@ -33,6 +33,9 @@ from .pocket_option_current_price_mask_builder import (
 from .pocket_option_current_visual_price_extractor import (
     PocketOptionCurrentVisualPriceExtractor,
 )
+from .pocket_option_expiry_overlay_evidence_resolver import (
+    PocketOptionExpiryOverlayEvidenceResolver,
+)
 from .pocket_option_price_observation_region_extractor import (
     PocketOptionPriceObservationRegionExtractor,
 )
@@ -65,6 +68,7 @@ __all__ = [
     "FixedChartRegionExtractor",
     "MarketAnalysisPipeline",
     "PocketOptionCandleMaskBuilder",
+    "PocketOptionExpiryOverlayEvidenceResolver",
     "PocketOptionCurrentPriceMaskBuilder",
     "PocketOptionChartRegionExtractor",
     "PocketOptionCurrentVisualPriceExtractor",

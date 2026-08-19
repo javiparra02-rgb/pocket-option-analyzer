@@ -7,6 +7,7 @@ from math import isfinite
 from .candle_candidate import CandleCandidate
 from .candle_color import CandleColor
 from .candle_geometry import CandleGeometry
+from .candle_overlay_evidence import CandleOverlayEvidenceTrace
 from .candle_series_membership import CandleSeriesMembershipTrace
 from .candle_type import CandleType
 from .classified_candle import ClassifiedCandle
@@ -246,6 +247,7 @@ class CandleDetectionTrace:
     filter_configuration: CandleFilterConfigurationTrace | None = None
     final_candles: tuple[FinalCandleTrace, ...] = ()
     series_membership: CandleSeriesMembershipTrace | None = None
+    overlay_evidence: CandleOverlayEvidenceTrace | None = None
 
     def __post_init__(self) -> None:
         if self.maximum_returned_candidates < 1:
@@ -279,6 +281,13 @@ class CandleDetectionTrace:
         ):
             raise ValueError(
                 "La pertenencia debe evaluar exactamente los candidatos retornados."
+            )
+        if self.overlay_evidence is not None and (
+            self.overlay_evidence.evaluated_candidate_ids
+            != self.returned_candidate_ids
+        ):
+            raise ValueError(
+                "La evidencia de overlay debe conservar el orden retornado."
             )
         if any(
             source_id not in known_ids

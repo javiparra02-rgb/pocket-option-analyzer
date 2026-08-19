@@ -5,7 +5,14 @@ from math import isfinite
 from statistics import median
 from typing import ClassVar
 
+from pocket_option_analyzer.vision.models.candle_overlay_evidence import (
+    CandleOverlayEvidence,
+    CandleOverlayEvidenceStatus,
+    CandleOverlayEvidenceTrace,
+)
 from pocket_option_analyzer.vision.models.candle_series_membership import (
+    CandleSeriesExtensionDecision,
+    CandleSeriesExtensionTrace,
     CandleSeriesMembershipExclusion,
     CandleSeriesMembershipExclusionReason,
     CandleSeriesMembershipGapTrace,
@@ -44,6 +51,16 @@ class _GapEvaluation:
     vertical_consistent: bool | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class _FrozenVerticalStatistics:
+    median_gap_px: float
+    mad_px: float
+    body_height_scale_px: float
+    robust_allowance_px: float
+    body_allowance_px: float
+    continuity_limit_px: float
+
+
 class CandleSeriesMembershipResolver:
     """Resuelve una hipótesis de serie sin modificar el pipeline productivo.
 
@@ -80,11 +97,22 @@ class CandleSeriesMembershipResolver:
         candles: tuple[ClassifiedCandle, ...],
         candidate_ids: tuple[str, ...],
         dominant_width: float | None,
+        overlay_evidence: CandleOverlayEvidenceTrace | None = None,
     ) -> CandleSeriesMembershipResult:
         """Selecciona un run dominante y conserva evidencia de cada exclusión."""
 
-        self._validate_inputs(candles, candidate_ids, dominant_width)
+        self._validate_inputs(
+            candles,
+            candidate_ids,
+            dominant_width,
+            overlay_evidence,
+        )
         ordered = self._order_candidates(candles, candidate_ids)
+        overlay_evidence_by_id = (
+            overlay_evidence.by_candidate_id()
+            if overlay_evidence is not None
+            else {}
+        )
         estimated_pitch = self._estimate_pitch(ordered, dominant_width)
 
         if estimated_pitch is None:
@@ -97,16 +125,20 @@ class CandleSeriesMembershipResolver:
                 status=CandleSeriesMembershipStatus.INSUFFICIENT_SUPPORT,
                 selected_run_index=None,
                 diagnostic="insufficient_pitch_support",
+                extension_decisions=(),
+                overlay_evidence_by_id=overlay_evidence_by_id,
             )
 
         horizontal_runs, gap_evaluations = self._build_horizontal_runs(
             ordered,
             estimated_pitch,
         )
-        runs, gap_evaluations = self._apply_vertical_cohesion(
+        runs, gap_evaluations, extension_decisions = self._apply_vertical_cohesion(
             ordered,
             horizontal_runs,
             gap_evaluations,
+            estimated_pitch,
+            overlay_evidence_by_id,
         )
         status, selected_run_index, diagnostic = self._select_dominant_run(runs)
         return self._build_result(
@@ -117,6 +149,8 @@ class CandleSeriesMembershipResolver:
             status=status,
             selected_run_index=selected_run_index,
             diagnostic=diagnostic,
+            extension_decisions=extension_decisions,
+            overlay_evidence_by_id=overlay_evidence_by_id,
         )
 
     @staticmethod
@@ -124,6 +158,7 @@ class CandleSeriesMembershipResolver:
         candles: tuple[ClassifiedCandle, ...],
         candidate_ids: tuple[str, ...],
         dominant_width: float | None,
+        overlay_evidence: CandleOverlayEvidenceTrace | None,
     ) -> None:
         if len(candles) != len(candidate_ids):
             raise ValueError("candles y candidate_ids deben estar alineados.")
@@ -137,6 +172,12 @@ class CandleSeriesMembershipResolver:
             raise ValueError("dominant_width debe ser finito y positivo.")
         if any(candle.candidate.width <= 0 for candle in candles):
             raise ValueError("Todos los candidatos deben tener ancho positivo.")
+        if overlay_evidence is not None and (
+            overlay_evidence.evaluated_candidate_ids != candidate_ids
+        ):
+            raise ValueError(
+                "overlay_evidence debe estar alineada con candidate_ids."
+            )
 
     @staticmethod
     def _order_candidates(
@@ -228,58 +269,138 @@ class CandleSeriesMembershipResolver:
         ordered: tuple[_OrderedCandidate, ...],
         horizontal_runs: tuple[_CandidateRun, ...],
         gap_evaluations: tuple[_GapEvaluation, ...],
-    ) -> tuple[tuple[_CandidateRun, ...], tuple[_GapEvaluation, ...]]:
+        estimated_pitch: float,
+        overlay_evidence_by_id: dict[str, CandleOverlayEvidence],
+    ) -> tuple[
+        tuple[_CandidateRun, ...],
+        tuple[_GapEvaluation, ...],
+        tuple[CandleSeriesExtensionTrace, ...],
+    ]:
         updated_gaps = list(gap_evaluations)
         refined_runs: list[_CandidateRun] = []
+        extension_decisions: list[CandleSeriesExtensionTrace] = []
         for horizontal_run in horizontal_runs:
-            indices = horizontal_run.indices
-            vertical_gaps = tuple(
-                self._vertical_gap(
-                    ordered[left_index].candle,
-                    ordered[right_index].candle,
-                )
-                for left_index, right_index in zip(
-                    indices,
-                    indices[1:],
-                    strict=False,
-                )
-            )
-            observable_gaps = tuple(
-                gap for gap in vertical_gaps if gap is not None
-            )
-            if len(observable_gaps) < self.MINIMUM_VERTICAL_SAMPLE_COUNT:
-                refined_runs.append(horizontal_run)
-                continue
-
-            continuity_limit = self._vertical_continuity_limit(
-                ordered,
-                indices,
-                observable_gaps,
-            )
-            current_indices = [indices[0]]
+            current_indices: list[int] = []
+            detached_overlay_runs: list[_CandidateRun] = []
             current_separated = horizontal_run.separated_by_vertical_discontinuity
             current_boundary_gap = horizontal_run.boundary_vertical_gap_px
-            for left_index, right_index, vertical_gap in zip(
-                indices,
-                indices[1:],
-                vertical_gaps,
-                strict=False,
-            ):
-                gap_position = left_index
-                if vertical_gap is not None:
-                    existing = updated_gaps[gap_position]
-                    updated_gaps[gap_position] = _GapEvaluation(
-                        left_index=existing.left_index,
-                        right_index=existing.right_index,
-                        horizontal_gap_px=existing.horizontal_gap_px,
-                        estimated_slot_count=existing.estimated_slot_count,
-                        horizontal_consistent=existing.horizontal_consistent,
-                        vertical_gap_px=vertical_gap,
-                        vertical_continuity_limit_px=continuity_limit,
-                        vertical_consistent=vertical_gap <= continuity_limit,
+            for candidate_index in horizontal_run.indices:
+                evidence = overlay_evidence_by_id.get(
+                    ordered[candidate_index].candidate_id
+                )
+                is_expiry_overlay = (
+                    evidence is not None
+                    and evidence.status
+                    is CandleOverlayEvidenceStatus.EXPIRY_OVERLAY
+                )
+                if not current_indices:
+                    if is_expiry_overlay:
+                        detached_overlay_runs.append(
+                            _CandidateRun((candidate_index,))
+                        )
+                    else:
+                        current_indices = [candidate_index]
+                    continue
+
+                left_index = current_indices[-1]
+                vertical_gap = self._vertical_gap(
+                    ordered[left_index].candle,
+                    ordered[candidate_index].candle,
+                )
+                statistics = self._frozen_vertical_statistics(
+                    ordered,
+                    tuple(current_indices),
+                )
+                if is_expiry_overlay:
+                    if statistics is not None:
+                        self._update_gap_evaluation(
+                            updated_gaps,
+                            left_index=left_index,
+                            right_index=candidate_index,
+                            vertical_gap=vertical_gap,
+                            continuity_limit=statistics.continuity_limit_px,
+                        )
+                        extension_decisions.append(
+                            self._extension_trace(
+                                ordered=ordered,
+                                candidate_index=candidate_index,
+                                core_indices=tuple(current_indices),
+                                estimated_pitch=estimated_pitch,
+                                statistics=statistics,
+                                vertical_gap=vertical_gap,
+                                overlay_status=evidence.status,
+                                decision=(
+                                    CandleSeriesExtensionDecision.EXCLUDED_EXPIRY_OVERLAY
+                                ),
+                                exclusion_reason=(
+                                    CandleSeriesMembershipExclusionReason.EXPIRY_OVERLAY
+                                ),
+                            )
+                        )
+                    detached_overlay_runs.append(
+                        _CandidateRun((candidate_index,))
                     )
-                if vertical_gap is None or vertical_gap <= continuity_limit:
-                    current_indices.append(right_index)
+                    continue
+
+                if statistics is None:
+                    # El seed confiable mínimo coincide con el soporte mínimo
+                    # ya aprobado: cuatro miembros horizontales aportan tres
+                    # gaps observables. Ninguna extensión posterior participa
+                    # en las estadísticas usadas para evaluarse a sí misma.
+                    current_indices.append(candidate_index)
+                    seed_statistics = self._frozen_vertical_statistics(
+                        ordered,
+                        tuple(current_indices),
+                    )
+                    if seed_statistics is not None:
+                        self._record_seed_gaps(
+                            updated_gaps,
+                            ordered=ordered,
+                            indices=tuple(current_indices),
+                            statistics=seed_statistics,
+                        )
+                    continue
+
+                is_consistent = (
+                    vertical_gap is None
+                    or vertical_gap <= statistics.continuity_limit_px
+                )
+                self._update_gap_evaluation(
+                    updated_gaps,
+                    left_index=left_index,
+                    right_index=candidate_index,
+                    vertical_gap=vertical_gap,
+                    continuity_limit=statistics.continuity_limit_px,
+                )
+                decision = (
+                    CandleSeriesExtensionDecision.ACCEPTED
+                    if is_consistent
+                    else CandleSeriesExtensionDecision.EXCLUDED_VERTICAL_DISCONTINUITY
+                )
+                exclusion_reason = (
+                    None
+                    if is_consistent
+                    else CandleSeriesMembershipExclusionReason.VERTICAL_DISCONTINUITY
+                )
+                extension_decisions.append(
+                    self._extension_trace(
+                        ordered=ordered,
+                        candidate_index=candidate_index,
+                        core_indices=tuple(current_indices),
+                        estimated_pitch=estimated_pitch,
+                        statistics=statistics,
+                        vertical_gap=vertical_gap,
+                        overlay_status=(
+                            evidence.status
+                            if evidence is not None
+                            else CandleOverlayEvidenceStatus.NOT_EVALUABLE
+                        ),
+                        decision=decision,
+                        exclusion_reason=exclusion_reason,
+                    )
+                )
+                if is_consistent:
+                    current_indices.append(candidate_index)
                     continue
 
                 refined_runs.append(
@@ -289,25 +410,47 @@ class CandleSeriesMembershipResolver:
                         boundary_vertical_gap_px=current_boundary_gap,
                     )
                 )
-                current_indices = [right_index]
+                current_indices = [candidate_index]
                 current_separated = True
                 current_boundary_gap = vertical_gap
 
-            refined_runs.append(
-                _CandidateRun(
-                    indices=tuple(current_indices),
-                    separated_by_vertical_discontinuity=current_separated,
-                    boundary_vertical_gap_px=current_boundary_gap,
+            if current_indices:
+                refined_runs.append(
+                    _CandidateRun(
+                        indices=tuple(current_indices),
+                        separated_by_vertical_discontinuity=current_separated,
+                        boundary_vertical_gap_px=current_boundary_gap,
+                    )
                 )
-            )
-        return tuple(refined_runs), tuple(updated_gaps)
+            refined_runs.extend(detached_overlay_runs)
+        return (
+            tuple(refined_runs),
+            tuple(updated_gaps),
+            tuple(extension_decisions),
+        )
 
-    def _vertical_continuity_limit(
+    def _frozen_vertical_statistics(
         self,
         ordered: tuple[_OrderedCandidate, ...],
         indices: tuple[int, ...],
-        observable_gaps: tuple[float, ...],
-    ) -> float:
+    ) -> _FrozenVerticalStatistics | None:
+        observable_gaps = tuple(
+            gap
+            for left_index, right_index in zip(
+                indices,
+                indices[1:],
+                strict=False,
+            )
+            if (
+                gap := self._vertical_gap(
+                    ordered[left_index].candle,
+                    ordered[right_index].candle,
+                )
+            )
+            is not None
+        )
+        if len(observable_gaps) < self.MINIMUM_VERTICAL_SAMPLE_COUNT:
+            return None
         median_gap = float(median(observable_gaps))
         median_absolute_deviation = float(
             median(abs(gap - median_gap) for gap in observable_gaps)
@@ -319,16 +462,118 @@ class CandleSeriesMembershipResolver:
             and ordered[index].candle.candle_type
             in (CandleType.BULLISH, CandleType.BEARISH)
         )
+        body_height_scale = (
+            float(median(body_heights)) if body_heights else 0.0
+        )
         body_allowance = (
-            float(median(body_heights)) * self.VERTICAL_BODY_ALLOWANCE_RATIO
-            if body_heights
-            else 0.0
+            body_height_scale * self.VERTICAL_BODY_ALLOWANCE_RATIO
         )
         robust_allowance = (
             median_gap
             + self.VERTICAL_MAD_MULTIPLIER * median_absolute_deviation
         )
-        return max(body_allowance, robust_allowance)
+        # Se conserva la protección histórica de cuerpos grandes porque el
+        # replay de autoescala contiene aperturas legítimas por encima de la
+        # envolvente MAD. La diferencia es que ahora también procede solo del
+        # core congelado; el cuerpo de la extensión no puede inflarla.
+        return _FrozenVerticalStatistics(
+            median_gap_px=median_gap,
+            mad_px=median_absolute_deviation,
+            body_height_scale_px=body_height_scale,
+            robust_allowance_px=robust_allowance,
+            body_allowance_px=body_allowance,
+            continuity_limit_px=max(body_allowance, robust_allowance),
+        )
+
+    def _record_seed_gaps(
+        self,
+        updated_gaps: list[_GapEvaluation],
+        *,
+        ordered: tuple[_OrderedCandidate, ...],
+        indices: tuple[int, ...],
+        statistics: _FrozenVerticalStatistics,
+    ) -> None:
+        for left_index, right_index in zip(
+            indices,
+            indices[1:],
+            strict=False,
+        ):
+            self._update_gap_evaluation(
+                updated_gaps,
+                left_index=left_index,
+                right_index=right_index,
+                vertical_gap=self._vertical_gap(
+                    ordered[left_index].candle,
+                    ordered[right_index].candle,
+                ),
+                continuity_limit=statistics.continuity_limit_px,
+            )
+
+    @staticmethod
+    def _update_gap_evaluation(
+        updated_gaps: list[_GapEvaluation],
+        *,
+        left_index: int,
+        right_index: int,
+        vertical_gap: float | None,
+        continuity_limit: float,
+    ) -> None:
+        if vertical_gap is None:
+            return
+        gap_position = next(
+            (
+                index
+                for index, gap in enumerate(updated_gaps)
+                if gap.left_index == left_index and gap.right_index == right_index
+            ),
+            None,
+        )
+        if gap_position is None:
+            return
+        existing = updated_gaps[gap_position]
+        updated_gaps[gap_position] = _GapEvaluation(
+            left_index=existing.left_index,
+            right_index=existing.right_index,
+            horizontal_gap_px=existing.horizontal_gap_px,
+            estimated_slot_count=existing.estimated_slot_count,
+            horizontal_consistent=existing.horizontal_consistent,
+            vertical_gap_px=vertical_gap,
+            vertical_continuity_limit_px=continuity_limit,
+            vertical_consistent=vertical_gap <= continuity_limit,
+        )
+
+    @staticmethod
+    def _extension_trace(
+        *,
+        ordered: tuple[_OrderedCandidate, ...],
+        candidate_index: int,
+        core_indices: tuple[int, ...],
+        estimated_pitch: float,
+        statistics: _FrozenVerticalStatistics,
+        vertical_gap: float | None,
+        overlay_status: CandleOverlayEvidenceStatus,
+        decision: CandleSeriesExtensionDecision,
+        exclusion_reason: CandleSeriesMembershipExclusionReason | None,
+    ) -> CandleSeriesExtensionTrace:
+        return CandleSeriesExtensionTrace(
+            candidate_id=ordered[candidate_index].candidate_id,
+            core_candidate_ids=tuple(
+                ordered[index].candidate_id for index in core_indices
+            ),
+            frozen_pitch_px=estimated_pitch,
+            frozen_vertical_median_gap_px=statistics.median_gap_px,
+            frozen_vertical_mad_px=statistics.mad_px,
+            frozen_body_height_scale_px=statistics.body_height_scale_px,
+            frozen_robust_allowance_px=statistics.robust_allowance_px,
+            frozen_body_allowance_px=statistics.body_allowance_px,
+            frozen_vertical_continuity_limit_px=(
+                statistics.continuity_limit_px
+            ),
+            candidate_vertical_gap_px=vertical_gap,
+            overlay_evidence_status=overlay_status,
+            decision=decision,
+            exclusion_reason=exclusion_reason,
+        )
 
     @staticmethod
     def _vertical_gap(
@@ -396,6 +641,8 @@ class CandleSeriesMembershipResolver:
         status: CandleSeriesMembershipStatus,
         selected_run_index: int | None,
         diagnostic: str,
+        extension_decisions: tuple[CandleSeriesExtensionTrace, ...],
+        overlay_evidence_by_id: dict[str, CandleOverlayEvidence],
     ) -> CandleSeriesMembershipResult:
         selected_indices = (
             runs[selected_run_index].indices if selected_run_index is not None else ()
@@ -418,6 +665,7 @@ class CandleSeriesMembershipResolver:
             ordered,
             runs,
             selected_run_index,
+            overlay_evidence_by_id,
         )
         gap_traces = tuple(
             CandleSeriesMembershipGapTrace(
@@ -443,6 +691,7 @@ class CandleSeriesMembershipResolver:
             selected_run_support=len(selected_indices),
             latest_candidate_id=member_ids[-1] if member_ids else None,
             diagnostic=diagnostic,
+            extension_decisions=extension_decisions,
         )
         return CandleSeriesMembershipResult(
             candles=tuple(ordered[index].candle for index in selected_indices),
@@ -455,6 +704,7 @@ class CandleSeriesMembershipResolver:
         ordered: tuple[_OrderedCandidate, ...],
         runs: tuple[_CandidateRun, ...],
         selected_run_index: int | None,
+        overlay_evidence_by_id: dict[str, CandleOverlayEvidence],
     ) -> tuple[CandleSeriesMembershipExclusion, ...]:
         selected_indices = (
             runs[selected_run_index].indices if selected_run_index is not None else ()
@@ -464,7 +714,18 @@ class CandleSeriesMembershipResolver:
         for run_index, run in enumerate(runs):
             if run_index == selected_run_index:
                 continue
-            if run.separated_by_vertical_discontinuity:
+            if any(
+                overlay_evidence_by_id.get(ordered[index].candidate_id)
+                is not None
+                and overlay_evidence_by_id[
+                    ordered[index].candidate_id
+                ].status
+                is CandleOverlayEvidenceStatus.EXPIRY_OVERLAY
+                for index in run.indices
+            ):
+                reason = CandleSeriesMembershipExclusionReason.EXPIRY_OVERLAY
+                reason_diagnostic = "candidate_matches_expiry_cap_on_line"
+            elif run.separated_by_vertical_discontinuity:
                 reason = CandleSeriesMembershipExclusionReason.VERTICAL_DISCONTINUITY
                 reason_diagnostic = "run_split_by_open_close_discontinuity"
             elif len(run.indices) == 1:

@@ -25,6 +25,7 @@ from pocket_option_analyzer.infrastructure.evidence import (
 from pocket_option_analyzer.vision.services import (
     CandleSeriesMembershipResolver,
     PocketOptionCurrentVisualPriceExtractor,
+    PocketOptionExpiryOverlayEvidenceResolver,
 )
 
 
@@ -397,6 +398,15 @@ def test_factory_injects_candle_series_membership_resolver() -> None:
     assert isinstance(
         pipeline._membership_resolver,
         CandleSeriesMembershipResolver,
+    )
+
+
+def test_factory_injects_expiry_overlay_evidence_resolver() -> None:
+    pipeline = SignalPipelineFactory._create_market_analysis_pipeline()
+
+    assert isinstance(
+        pipeline._overlay_evidence_resolver,
+        PocketOptionExpiryOverlayEvidenceResolver,
     )
 
 

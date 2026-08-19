@@ -9,6 +9,11 @@ from pocket_option_analyzer.vision.models import (
     CandleCandidate,
     CandleColor,
     CandleGeometry,
+    CandleOverlayEvidence,
+    CandleOverlayEvidenceStatus,
+    CandleOverlayEvidenceTrace,
+    CandleSeriesExtensionDecision,
+    CandleSeriesExtensionTrace,
     CandleSeriesMembershipExclusion,
     CandleSeriesMembershipExclusionReason,
     CandleSeriesMembershipGapTrace,
@@ -249,11 +254,91 @@ def _resolve(
     candles: tuple[ClassifiedCandle, ...],
     candidate_ids: tuple[str, ...],
     dominant_width: float | None = 8.0,
+    overlay_evidence: CandleOverlayEvidenceTrace | None = None,
 ) -> CandleSeriesMembershipResult:
     return CandleSeriesMembershipResolver().resolve(
         candles,
         candidate_ids,
         dominant_width,
+        overlay_evidence,
+    )
+
+
+def _overlay_trace(
+    candidate_ids: tuple[str, ...],
+    *,
+    expiry_overlay_ids: frozenset[str] = frozenset(),
+) -> CandleOverlayEvidenceTrace:
+    return CandleOverlayEvidenceTrace(
+        evaluated_candidate_ids=candidate_ids,
+        evidence=tuple(
+            CandleOverlayEvidence(
+                candidate_id=candidate_id,
+                status=(
+                    CandleOverlayEvidenceStatus.EXPIRY_OVERLAY
+                    if candidate_id in expiry_overlay_ids
+                    else CandleOverlayEvidenceStatus.NO_EVIDENCE
+                ),
+                vertical_line_support_ratio=(
+                    0.90 if candidate_id in expiry_overlay_ids else 0.0
+                ),
+                contact_gap_ratio=0.0,
+                horizontal_alignment_ratio=0.0,
+                cap_height_to_width_ratio=0.6,
+                wickless=True,
+                diagnostic=(
+                    "cap_attached_to_long_vertical_line"
+                    if candidate_id in expiry_overlay_ids
+                    else "expiry_overlay_structure_not_detected"
+                ),
+            )
+            for candidate_id in candidate_ids
+        ),
+    )
+
+
+def _frame_63_reduced_fixture() -> _DerivedFixture:
+    # Reducción estructural del frame 63: cinco miembros con bodies de 84 px,
+    # gaps open→close [18, 0, 18, 0], y el cap final separado 153 px.
+    rows = (
+        (591, 22, 90, 92, 175, 177, CandleType.BEARISH),
+        (617, 22, 72, 74, 157, 159, CandleType.BULLISH),
+        (642, 22, 72, 74, 157, 159, CandleType.BEARISH),
+        (668, 22, 90, 92, 175, 177, CandleType.BULLISH),
+        (695, 22, 90, 92, 175, 177, CandleType.BEARISH),
+        (723, 20, 11, 11, 22, 22, CandleType.BULLISH),
+    )
+    candidate_ids = tuple(
+        f"candidate_{value:03d}" for value in (29, 30, 31, 32, 33, 83)
+    )
+    return _DerivedFixture(
+        source="P0.4b session 03",
+        frame_key="frame_00000063_20260818T184142634884Z",
+        derived_fields=(
+            "candidate_id",
+            "x",
+            "width",
+            "high_y",
+            "body_top_y",
+            "body_bottom_y",
+            "low_y",
+            "candle_type",
+        ),
+        candles=tuple(
+            _trace_candle(
+                x=row[0],
+                width=row[1],
+                high_y=row[2],
+                body_top_y=row[3],
+                body_bottom_y=row[4],
+                low_y=row[5],
+                candle_type=row[6],
+            )
+            for row in rows
+        ),
+        candidate_ids=candidate_ids,
+        real_latest_candidate_id="candidate_033",
+        flag_candidate_id="candidate_083",
     )
 
 
@@ -372,6 +457,73 @@ def test_session_02_flag_and_text_fixture_excludes_both_contaminants() -> None:
     )
 
 
+def test_frame_63_overlay_is_excluded_and_real_candle_remains_latest() -> None:
+    fixture = _frame_63_reduced_fixture()
+    evidence = _overlay_trace(
+        fixture.candidate_ids,
+        expiry_overlay_ids=frozenset((fixture.flag_candidate_id,)),
+    )
+
+    result = _resolve(
+        fixture.candles,
+        fixture.candidate_ids,
+        dominant_width=22.0,
+        overlay_evidence=evidence,
+    )
+
+    assert result.trace.status is CandleSeriesMembershipStatus.AVAILABLE
+    assert result.trace.latest_candidate_id == fixture.real_latest_candidate_id
+    assert fixture.flag_candidate_id not in result.candidate_ids
+    assert _exclusion_map(result)[fixture.flag_candidate_id].reason is (
+        CandleSeriesMembershipExclusionReason.EXPIRY_OVERLAY
+    )
+
+
+def test_frame_63_extension_uses_only_frozen_core_statistics() -> None:
+    fixture = _frame_63_reduced_fixture()
+    evidence = _overlay_trace(
+        fixture.candidate_ids,
+        expiry_overlay_ids=frozenset((fixture.flag_candidate_id,)),
+    )
+
+    result = _resolve(
+        fixture.candles,
+        fixture.candidate_ids,
+        dominant_width=22.0,
+        overlay_evidence=evidence,
+    )
+    extension = next(
+        item
+        for item in result.trace.extension_decisions
+        if item.candidate_id == fixture.flag_candidate_id
+    )
+
+    assert extension.candidate_id not in extension.core_candidate_ids
+    assert extension.core_candidate_ids == fixture.candidate_ids[:-1]
+    assert extension.frozen_vertical_median_gap_px == pytest.approx(9.0)
+    assert extension.frozen_vertical_mad_px == pytest.approx(9.0)
+    assert extension.frozen_body_height_scale_px == pytest.approx(84.0)
+    assert extension.frozen_robust_allowance_px == pytest.approx(63.0)
+    assert extension.frozen_body_allowance_px == pytest.approx(168.0)
+    assert extension.frozen_vertical_continuity_limit_px == pytest.approx(168.0)
+    assert extension.candidate_vertical_gap_px == pytest.approx(153.0)
+    assert extension.decision is (
+        CandleSeriesExtensionDecision.EXCLUDED_EXPIRY_OVERLAY
+    )
+
+
+def test_overlay_evidence_must_align_with_candidate_ids() -> None:
+    candles, candidate_ids = _series()
+    reversed_evidence = _overlay_trace(tuple(reversed(candidate_ids)))
+
+    with pytest.raises(ValueError, match="alineada"):
+        _resolve(
+            candles,
+            candidate_ids,
+            overlay_evidence=reversed_evidence,
+        )
+
+
 @pytest.mark.parametrize(
     ("count", "expected_type"),
     ((5, CandleType.BULLISH), (6, CandleType.BEARISH)),
@@ -444,6 +596,119 @@ def test_reasonable_breakout_gap_is_not_automatically_discarded() -> None:
 
     assert result.trace.status is CandleSeriesMembershipStatus.AVAILABLE
     assert result.candidate_ids == ids
+
+
+def test_large_breakout_close_is_accepted_when_open_is_continuous() -> None:
+    candles, ids = _series(5, start_y=180)
+    previous_geometry = candles[-1].candidate.geometry
+    assert previous_geometry is not None
+    _, previous_close = CandleSeriesMembershipResolver._open_close_y(candles[-1])
+    breakout = _candle(
+        x=candles[-1].candidate.x + 12,
+        open_y=previous_close,
+        close_y=5,
+        upper_wick=0,
+        lower_wick=0,
+    )
+
+    result = _resolve(candles + (breakout,), ids + ("breakout",))
+
+    assert result.trace.status is CandleSeriesMembershipStatus.AVAILABLE
+    assert result.candidate_ids[-1] == "breakout"
+
+
+def test_small_wickless_candle_without_overlay_evidence_is_accepted() -> None:
+    candles, ids = _series(5)
+    _, previous_close = CandleSeriesMembershipResolver._open_close_y(candles[-1])
+    small = _candle(
+        x=candles[-1].candidate.x + 12,
+        open_y=previous_close,
+        close_y=previous_close - 2,
+        width=8,
+        upper_wick=0,
+        lower_wick=0,
+    )
+    all_ids = ids + ("small",)
+
+    result = _resolve(
+        candles + (small,),
+        all_ids,
+        overlay_evidence=_overlay_trace(all_ids),
+    )
+
+    assert result.trace.status is CandleSeriesMembershipStatus.AVAILABLE
+    assert "small" in result.candidate_ids
+
+
+def test_sequential_extensions_update_core_only_after_acceptance() -> None:
+    candles, ids = _series(7)
+
+    result = _resolve(candles, ids)
+    extensions = result.trace.extension_decisions
+
+    assert tuple(item.candidate_id for item in extensions) == ids[4:]
+    for previous, current in zip(extensions, extensions[1:], strict=False):
+        assert previous.decision is CandleSeriesExtensionDecision.ACCEPTED
+        assert previous.candidate_id in current.core_candidate_ids
+        assert current.candidate_id not in current.core_candidate_ids
+
+
+def test_extension_after_expiry_overlay_continues_from_unchanged_core() -> None:
+    candles, ids = _series(7)
+    evidence = _overlay_trace(
+        ids,
+        expiry_overlay_ids=frozenset((ids[5],)),
+    )
+
+    result = _resolve(candles, ids, overlay_evidence=evidence)
+
+    assert result.trace.status is CandleSeriesMembershipStatus.AVAILABLE
+    assert ids[5] not in result.candidate_ids
+    assert result.candidate_ids == ids[:5] + (ids[6],)
+    assert result.trace.latest_candidate_id == ids[6]
+    final_extension = next(
+        item
+        for item in result.trace.extension_decisions
+        if item.candidate_id == ids[6]
+    )
+    assert ids[5] not in final_extension.core_candidate_ids
+    assert final_extension.decision is CandleSeriesExtensionDecision.ACCEPTED
+
+
+@pytest.mark.parametrize(
+    ("x_scale", "x_shift", "y_scale", "y_shift"),
+    ((1, 173, 1, 241), (2, 0, 2, 0), (3, 71, 3, 29)),
+)
+def test_frame_63_overlay_decision_is_translation_and_scale_invariant(
+    x_scale: int,
+    x_shift: int,
+    y_scale: int,
+    y_shift: int,
+) -> None:
+    fixture = _frame_63_reduced_fixture()
+    transformed = _transform(
+        fixture.candles,
+        x_scale=x_scale,
+        x_shift=x_shift,
+        y_scale=y_scale,
+        y_shift=y_shift,
+    )
+    evidence = _overlay_trace(
+        fixture.candidate_ids,
+        expiry_overlay_ids=frozenset((fixture.flag_candidate_id,)),
+    )
+
+    result = _resolve(
+        transformed,
+        fixture.candidate_ids,
+        dominant_width=22.0 * x_scale,
+        overlay_evidence=evidence,
+    )
+
+    assert result.trace.latest_candidate_id == fixture.real_latest_candidate_id
+    assert _exclusion_map(result)[fixture.flag_candidate_id].reason is (
+        CandleSeriesMembershipExclusionReason.EXPIRY_OVERLAY
+    )
 
 
 def test_pitch_estimation_tolerates_small_jitter() -> None:
@@ -729,6 +994,7 @@ def test_public_contracts_are_immutable_and_runtime_typed() -> None:
         CandleSeriesMembershipExclusion,
         CandleSeriesMembershipGapTrace,
         CandleSeriesMembershipRunTrace,
+        CandleSeriesExtensionTrace,
         CandleSeriesMembershipTrace,
         CandleSeriesMembershipResult,
     )

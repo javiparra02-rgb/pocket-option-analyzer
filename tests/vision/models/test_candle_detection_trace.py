@@ -9,6 +9,9 @@ from pocket_option_analyzer.vision.models import (
     CandleColor,
     CandleDetectionTrace,
     CandleMergeTrace,
+    CandleOverlayEvidence,
+    CandleOverlayEvidenceStatus,
+    CandleOverlayEvidenceTrace,
     CandleSeriesMembershipExclusion,
     CandleSeriesMembershipExclusionReason,
     CandleSeriesMembershipRunTrace,
@@ -69,6 +72,26 @@ def _membership_trace(
     )
 
 
+def _overlay_trace(
+    candidate_id: str = "candidate_000",
+) -> CandleOverlayEvidenceTrace:
+    return CandleOverlayEvidenceTrace(
+        evaluated_candidate_ids=(candidate_id,),
+        evidence=(
+            CandleOverlayEvidence(
+                candidate_id=candidate_id,
+                status=CandleOverlayEvidenceStatus.NO_EVIDENCE,
+                vertical_line_support_ratio=0.0,
+                contact_gap_ratio=0.0,
+                horizontal_alignment_ratio=0.0,
+                cap_height_to_width_ratio=1.0,
+                wickless=False,
+                diagnostic="expiry_overlay_structure_not_detected",
+            ),
+        ),
+    )
+
+
 def test_candle_detection_trace_is_immutable_and_runtime_typed() -> None:
     trace = CandleDetectionTrace(
         candidates=(_candidate_trace(),),
@@ -123,6 +146,36 @@ def test_detection_trace_accepts_optional_series_membership_additively() -> None
     assert get_type_hints(CandleDetectionTrace)["series_membership"] == (
         CandleSeriesMembershipTrace | None
     )
+
+
+def test_detection_trace_accepts_aligned_overlay_evidence_additively() -> None:
+    overlay = _overlay_trace()
+
+    trace = CandleDetectionTrace(
+        candidates=(_candidate_trace(),),
+        merges=(),
+        returned_candidate_ids=("candidate_000",),
+        dominant_width=8.0,
+        maximum_returned_candidates=80,
+        overlay_evidence=overlay,
+    )
+
+    assert trace.overlay_evidence is overlay
+    assert get_type_hints(CandleDetectionTrace)["overlay_evidence"] == (
+        CandleOverlayEvidenceTrace | None
+    )
+
+
+def test_detection_trace_rejects_overlay_for_different_candidates() -> None:
+    with pytest.raises(ValueError, match="orden retornado"):
+        CandleDetectionTrace(
+            candidates=(_candidate_trace(),),
+            merges=(),
+            returned_candidate_ids=("candidate_000",),
+            dominant_width=8.0,
+            maximum_returned_candidates=80,
+            overlay_evidence=_overlay_trace("candidate_999"),
+        )
 
 
 def test_detection_trace_rejects_membership_for_different_candidates() -> None:

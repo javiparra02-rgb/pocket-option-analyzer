@@ -10,6 +10,7 @@ from pocket_option_analyzer.vision.models import (
     CandleFilterConfigurationTrace,
     CandleFilterDiagnostics,
     CandleMergeTrace,
+    CandleOverlayEvidenceTrace,
     CandleSeriesMembershipTrace,
     ChartRegion,
     CurrentVisualPriceDetectionTrace,
@@ -120,6 +121,9 @@ class VisualEvidenceSerializer:
             "series_membership": cls._series_membership_to_dict(
                 trace.series_membership,
             ),
+            "overlay_evidence": cls._overlay_evidence_to_dict(
+                trace.overlay_evidence,
+            ),
             "final_candles": list(final_candles),
             "latest": next(
                 (candle for candle in final_candles if candle["is_latest"]),
@@ -188,6 +192,72 @@ class VisualEvidenceSerializer:
             "selected_run_support": membership.selected_run_support,
             "latest_candidate_id": membership.latest_candidate_id,
             "diagnostic": membership.diagnostic,
+            "extension_decisions": [
+                {
+                    "candidate_id": extension.candidate_id,
+                    "core_candidate_ids": list(extension.core_candidate_ids),
+                    "core_support": len(extension.core_candidate_ids),
+                    "frozen_pitch_px": extension.frozen_pitch_px,
+                    "frozen_vertical_median_gap_px": (
+                        extension.frozen_vertical_median_gap_px
+                    ),
+                    "frozen_vertical_mad_px": extension.frozen_vertical_mad_px,
+                    "frozen_body_height_scale_px": (
+                        extension.frozen_body_height_scale_px
+                    ),
+                    "frozen_robust_allowance_px": (
+                        extension.frozen_robust_allowance_px
+                    ),
+                    "frozen_body_allowance_px": (
+                        extension.frozen_body_allowance_px
+                    ),
+                    "frozen_vertical_continuity_limit_px": (
+                        extension.frozen_vertical_continuity_limit_px
+                    ),
+                    "candidate_vertical_gap_px": (
+                        extension.candidate_vertical_gap_px
+                    ),
+                    "overlay_evidence_status": (
+                        extension.overlay_evidence_status.value
+                    ),
+                    "decision": extension.decision.value,
+                    "exclusion_reason": (
+                        extension.exclusion_reason.value
+                        if extension.exclusion_reason is not None
+                        else None
+                    ),
+                }
+                for extension in membership.extension_decisions
+            ],
+        }
+
+    @staticmethod
+    def _overlay_evidence_to_dict(
+        trace: CandleOverlayEvidenceTrace | None,
+    ) -> dict[str, Any] | None:
+        if trace is None:
+            return None
+        return {
+            "evaluated_candidate_ids": list(trace.evaluated_candidate_ids),
+            "evidence": [
+                {
+                    "candidate_id": evidence.candidate_id,
+                    "status": evidence.status.value,
+                    "vertical_line_support_ratio": (
+                        evidence.vertical_line_support_ratio
+                    ),
+                    "contact_gap_ratio": evidence.contact_gap_ratio,
+                    "horizontal_alignment_ratio": (
+                        evidence.horizontal_alignment_ratio
+                    ),
+                    "cap_height_to_width_ratio": (
+                        evidence.cap_height_to_width_ratio
+                    ),
+                    "wickless": evidence.wickless,
+                    "diagnostic": evidence.diagnostic,
+                }
+                for evidence in trace.evidence
+            ],
         }
 
     @staticmethod
