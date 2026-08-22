@@ -46,7 +46,10 @@ from .current_visual_price_detection_trace import (
     CurrentVisualPriceAnalysis,
     CurrentVisualPriceCandidateTrace,
     CurrentVisualPriceDetectionTrace,
+    CurrentVisualPriceLabelSupportTrace,
     CurrentVisualPriceRejectionCounts,
+    CurrentVisualPriceRowEvaluationTrace,
+    CurrentVisualPriceRowRejectionReason,
 )
 from .current_visual_price_extraction import (
     CurrentVisualPriceExtraction,
@@ -95,7 +98,10 @@ __all__ = [
     "CurrentVisualPriceAnalysis",
     "CurrentVisualPriceCandidateTrace",
     "CurrentVisualPriceDetectionTrace",
+    "CurrentVisualPriceLabelSupportTrace",
     "CurrentVisualPriceRejectionCounts",
+    "CurrentVisualPriceRowEvaluationTrace",
+    "CurrentVisualPriceRowRejectionReason",
     "MarketAnalysis",
     "TrendDirection",
     "CandleGeometry",

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -11,6 +12,9 @@ from pocket_option_analyzer.application.signals import (
     VisualStrategySignalAnalysisPipeline,
 )
 from pocket_option_analyzer.application.strategy import (
+    CurrentVisualPriceComparator,
+    CurrentVisualPriceComparisonContext,
+    CurrentVisualPriceComparisonStatus,
     VisualPriceReference,
     VisualPriceReferenceResult,
     VisualPriceReferenceStatus,
@@ -25,6 +29,7 @@ from pocket_option_analyzer.vision.models import (
     CandleSeriesExtensionDecision,
     CandleSeriesMembershipExclusionReason,
     CandleSeriesMembershipStatus,
+    ChartRegion,
     CurrentVisualPriceStatus,
     MarketAnalysis,
 )
@@ -45,6 +50,7 @@ class _ReplayResult:
     oracle: _FrameOracle
     analysis: MarketAnalysis
     reference_result: VisualPriceReferenceResult
+    persisted_current_visual_price: dict[str, object]
 
 
 # Oracle de regresión derivado de la revisión visual de P0.4b session 03.
@@ -250,7 +256,23 @@ def _replay_session() -> tuple[_ReplayResult, ...]:
         image = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
         if image is None:
             pytest.skip(f"Unable to read local replay image: {image_path}")
-        analysis = pipeline.analyze(image)
+        region = ChartRegion(
+            x=0,
+            y=0,
+            width=int(image.shape[1]),
+            height=int(image.shape[0]),
+        )
+        analysis = pipeline.analyze(
+            image,
+            price_observation_image=image,
+            chart_region=region,
+            price_observation_region=region,
+        )
+        frame_metadata = json.loads(
+            (session_directory / "frames" / oracle.frame_key / "frame.json").read_text(
+                encoding="utf-8"
+            )
+        )
         results.append(
             _ReplayResult(
                 oracle=oracle,
@@ -260,6 +282,9 @@ def _replay_session() -> tuple[_ReplayResult, ...]:
                         analysis
                     )
                 ),
+                persisted_current_visual_price=frame_metadata["analysis"][
+                    "current_visual_price"
+                ],
             )
         )
     return tuple(results)
@@ -409,11 +434,90 @@ def test_session_03_autoscale_pair_remains_comparable_under_point_zero_two() -> 
     assert maximum_difference < 0.02
 
 
-def test_session_03_184130_entry_price_failure_remains_out_of_scope() -> None:
-    entry, exit_result = _snapshot_pair("2026-08-18T18:41:30+00:00")
-
-    assert entry.analysis.current_visual_price is not None
-    assert entry.analysis.current_visual_price.status is (
-        CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
+def test_session_03_detects_all_twenty_visible_current_price_markers() -> None:
+    marker_results = tuple(
+        result for result in _replay_session() if result.oracle.frame_id != 200
     )
-    assert exit_result.reference_result.status is VisualPriceReferenceStatus.OK
+
+    assert len(marker_results) == 20
+    assert all(
+        result.analysis.current_visual_price is not None
+        and result.analysis.current_visual_price.status is CurrentVisualPriceStatus.OK
+        for result in marker_results
+    )
+
+
+def test_session_03_frame_53_current_price_is_recovered_at_visual_row() -> None:
+    result = _result(53)
+    extraction = result.analysis.current_visual_price
+
+    assert result.persisted_current_visual_price["status"] == (
+        "no_visual_price_candidate"
+    )
+    assert extraction is not None
+    assert extraction.status is CurrentVisualPriceStatus.OK
+    assert extraction.price is not None
+    assert extraction.price.roi_y == pytest.approx(336.0, abs=1.0)
+    trace = result.analysis.current_visual_price_detection_trace
+    assert trace is not None
+    row = next(row for row in trace.row_evaluations if row.qualified)
+    assert row.row_y == 336
+    assert row.longest_run_pixels == 173
+    assert row.right_edge_gap == 7
+    assert row.pass_edge is False
+    assert row.line_evidence is True
+    assert row.label_support is True
+
+
+def test_session_03_frame_200_remains_without_current_price_candidate() -> None:
+    result = _result(200)
+    extraction = result.analysis.current_visual_price
+
+    assert extraction is not None
+    assert extraction.status is (CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE)
+    trace = result.analysis.current_visual_price_detection_trace
+    assert trace is not None
+    assert trace.row_evaluations == ()
+    assert trace.rejection_counts.rows_without_mask_pixels == 788
+    assert trace.decision_diagnostic == "no_pixels_in_band"
+
+
+def test_session_03_preserves_roi_y_for_previously_available_frames() -> None:
+    compared = 0
+    for result in _replay_session():
+        persisted = result.persisted_current_visual_price
+        if persisted["status"] != "ok":
+            continue
+        current = result.analysis.current_visual_price
+        assert current is not None and current.price is not None
+        persisted_price = persisted["price"]
+        assert isinstance(persisted_price, dict)
+        assert current.price.roi_y == pytest.approx(persisted_price["roi_y"])
+        compared += 1
+
+    assert compared == 19
+
+
+def test_session_03_184130_visual_price_comparison_becomes_available() -> None:
+    entry, exit_result = _snapshot_pair("2026-08-18T18:41:30+00:00")
+    entry_context = CurrentVisualPriceComparisonContext(
+        current_visual_price=entry.analysis.current_visual_price,
+        chart_region=entry.analysis.chart_region,
+        price_observation_region=entry.analysis.price_observation_region,
+        reference_result=entry.reference_result,
+    )
+    exit_context = CurrentVisualPriceComparisonContext(
+        current_visual_price=exit_result.analysis.current_visual_price,
+        chart_region=exit_result.analysis.chart_region,
+        price_observation_region=exit_result.analysis.price_observation_region,
+        reference_result=exit_result.reference_result,
+    )
+    comparison = CurrentVisualPriceComparator().compare(
+        entry_context,
+        exit_context,
+    )
+
+    assert comparison.status is CurrentVisualPriceComparisonStatus.AVAILABLE
+    assert comparison.delta is not None
+    assert comparison.entry_anchor_span_px == pytest.approx(648.0)
+    assert comparison.exit_anchor_span_px == pytest.approx(648.0)

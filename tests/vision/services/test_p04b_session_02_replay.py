@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,6 +21,8 @@ from pocket_option_analyzer.infrastructure.bootstrap import SignalPipelineFactor
 from pocket_option_analyzer.vision.models import (
     CandleColorProfile,
     CandleSeriesMembershipStatus,
+    ChartRegion,
+    CurrentVisualPriceStatus,
     MarketAnalysis,
 )
 
@@ -42,6 +45,7 @@ class _ReplayResult:
     analysis: MarketAnalysis
     reference_status: VisualPriceReferenceStatus
     reference: VisualPriceReference | None
+    persisted_current_visual_price: dict[str, object]
 
 
 # Oracle exclusivo de regresión, derivado de frame.json de P0.4b session 02.
@@ -178,9 +182,25 @@ def _replay_session() -> tuple[_ReplayResult, ...]:
         image = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
         if image is None:
             pytest.skip(f"Unable to read local replay image: {image_path}")
-        analysis = pipeline.analyze(image)
-        reference_result = (
-            VisualStrategySignalAnalysisPipeline._price_reference_result(analysis)
+        region = ChartRegion(
+            x=0,
+            y=0,
+            width=int(image.shape[1]),
+            height=int(image.shape[0]),
+        )
+        analysis = pipeline.analyze(
+            image,
+            price_observation_image=image,
+            chart_region=region,
+            price_observation_region=region,
+        )
+        frame_metadata = json.loads(
+            (session_directory / "frames" / oracle.frame_key / "frame.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        reference_result = VisualStrategySignalAnalysisPipeline._price_reference_result(
+            analysis
         )
         results.append(
             _ReplayResult(
@@ -188,6 +208,9 @@ def _replay_session() -> tuple[_ReplayResult, ...]:
                 analysis=analysis,
                 reference_status=reference_result.status,
                 reference=reference_result.reference,
+                persisted_current_visual_price=frame_metadata["analysis"][
+                    "current_visual_price"
+                ],
             )
         )
     return tuple(results)
@@ -270,3 +293,49 @@ def test_session_02_231530_pair_has_only_closed_candle_anchors() -> None:
     assert entry.reference is not None
     assert exit_result.reference is not None
     assert references_are_comparable(entry.reference, exit_result.reference)
+
+
+def test_session_02_detects_current_price_in_all_ten_frames() -> None:
+    results = _replay_session()
+
+    assert len(results) == 10
+    assert all(
+        result.analysis.current_visual_price is not None
+        and result.analysis.current_visual_price.status is CurrentVisualPriceStatus.OK
+        for result in results
+    )
+
+
+def test_session_02_recovers_three_historical_false_negatives() -> None:
+    by_frame_id = {result.oracle.frame_id: result for result in _replay_session()}
+
+    for frame_id in (1, 58, 114):
+        result = by_frame_id[frame_id]
+        assert result.persisted_current_visual_price["status"] == (
+            "no_visual_price_candidate"
+        )
+        extraction = result.analysis.current_visual_price
+        assert extraction is not None
+        assert extraction.status is CurrentVisualPriceStatus.OK
+        trace = result.analysis.current_visual_price_detection_trace
+        assert trace is not None
+        row = next(row for row in trace.row_evaluations if row.qualified)
+        assert row.line_evidence is True
+        assert row.label_support is True
+        assert row.longest_run_pixels == 170
+
+
+def test_session_02_preserves_roi_y_for_previously_available_frames() -> None:
+    compared = 0
+    for result in _replay_session():
+        persisted = result.persisted_current_visual_price
+        if persisted["status"] != "ok":
+            continue
+        current = result.analysis.current_visual_price
+        assert current is not None and current.price is not None
+        persisted_price = persisted["price"]
+        assert isinstance(persisted_price, dict)
+        assert abs(current.price.roi_y - persisted_price["roi_y"]) <= 0.5
+        compared += 1
+
+    assert compared == 7

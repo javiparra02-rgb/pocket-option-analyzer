@@ -426,6 +426,7 @@ class VisualEvidenceSerializer:
             "safe_top": trace.safe_top,
             "safe_bottom": trace.safe_bottom,
             "masked_pixel_count": trace.masked_pixel_count,
+            "decision_diagnostic": trace.decision_diagnostic,
             "rejection_counts": {
                 "rows_without_mask_pixels": counts.rows_without_mask_pixels,
                 "rows_with_mask_pixels": counts.rows_with_mask_pixels,
@@ -437,7 +438,58 @@ class VisualEvidenceSerializer:
                 "qualifying_rows": counts.qualifying_rows,
                 "candidate_groups": counts.candidate_groups,
                 "rejected_by_group_height": counts.rejected_by_group_height,
+                "line_evidence_rows": counts.line_evidence_rows,
+                "rejected_by_label_support": counts.rejected_by_label_support,
             },
+            "row_evaluations": [
+                {
+                    "row_y": row.row_y,
+                    "masked_pixels": row.masked_pixels,
+                    "coverage": row.coverage,
+                    "span": row.span,
+                    "left_x": row.left_x,
+                    "right_x": row.right_x,
+                    "right_edge_gap": row.right_edge_gap,
+                    "longest_run_pixels": row.longest_run_pixels,
+                    "longest_run_ratio": row.longest_run_ratio,
+                    "longest_run_start_x": row.longest_run_start_x,
+                    "longest_run_end_x": row.longest_run_end_x,
+                    "component_count": row.component_count,
+                    "line_run_pixels": row.line_run_pixels,
+                    "line_run_span_pixels": row.line_run_span_pixels,
+                    "line_run_span_ratio": row.line_run_span_ratio,
+                    "line_run_start_x": row.line_run_start_x,
+                    "line_run_end_x": row.line_run_end_x,
+                    "line_run_continuity": row.line_run_continuity,
+                    "pass_coverage": row.pass_coverage,
+                    "pass_span": row.pass_span,
+                    "pass_edge": row.pass_edge,
+                    "line_evidence": row.line_evidence,
+                    "label_support": row.label_support,
+                    "qualified": row.qualified,
+                    "rejection_reasons": [
+                        reason.value for reason in row.rejection_reasons
+                    ],
+                    "label_support_trace": (
+                        {
+                            "window_start_y": label.window_start_y,
+                            "window_end_y": label.window_end_y,
+                            "zone_start_x": label.zone_start_x,
+                            "zone_end_x": label.zone_end_x,
+                            "support_pixels": label.support_pixels,
+                            "support_row_count": label.support_row_count,
+                            "evaluated_row_count": label.evaluated_row_count,
+                            "support_row_ratio": label.support_row_ratio,
+                            "support_density": label.support_density,
+                            "supported": label.supported,
+                            "diagnostic": label.diagnostic,
+                        }
+                        if (label := row.label_support_trace) is not None
+                        else None
+                    ),
+                }
+                for row in trace.row_evaluations
+            ],
             "candidates": [
                 {
                     "candidate_id": candidate.candidate_id,

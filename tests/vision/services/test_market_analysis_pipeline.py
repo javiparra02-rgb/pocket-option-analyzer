@@ -330,6 +330,8 @@ def test_market_analysis_preserves_capture_geometry_by_identity() -> None:
 def test_market_analysis_preserves_current_price_trace_from_same_frame() -> None:
     image = np.zeros((100, 100, 3), dtype=np.uint8)
     image[50, 80:100] = (126, 95, 79)
+    image[47:50, 95:100] = (126, 95, 79)
+    image[51:54, 95:100] = (126, 95, 79)
     pipeline = MarketAnalysisPipeline(
         candle_analysis_pipeline=FakeCandleAnalysisPipeline(),
         series_builder=FakeSeriesBuilder(),

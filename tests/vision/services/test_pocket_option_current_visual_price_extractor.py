@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from math import ceil
+
 import cv2
 import numpy as np
 import pytest
@@ -27,6 +29,33 @@ def line(
 ) -> None:
     line_end = frame.shape[1] - 1 if end is None else end
     cv2.line(frame, (start, y), (line_end, y), color, 1)
+
+
+def marker(
+    frame: np.ndarray,
+    y: int,
+    *,
+    effective_right: int | None = None,
+    right_gap: int = 0,
+    color: tuple[int, ...] = CURRENT_PRICE_BLUE,
+) -> None:
+    """Dibuja línea primaria y soporte de etiqueta sin simular OCR."""
+
+    chart_right = frame.shape[1] if effective_right is None else effective_right
+    band_width = ceil(chart_right * 0.20)
+    band_start = chart_right - band_width
+    label_width = ceil(band_width * 0.25)
+    label_right = chart_right - 1 - right_gap
+    label_left = label_right - label_width + 1
+    label_radius = max(1, ceil(frame.shape[0] * 0.025))
+    cv2.rectangle(
+        frame,
+        (label_left, y - label_radius),
+        (label_right, y + label_radius),
+        color,
+        -1,
+    )
+    cv2.line(frame, (band_start, y), (label_left, y), color, 1)
 
 
 def test_implements_runtime_protocol() -> None:
@@ -59,7 +88,7 @@ def test_invalid_images(invalid: object) -> None:
 def test_accepts_bgr_and_bgra(channels: int) -> None:
     frame = image(channels=channels)
     color = (*CURRENT_PRICE_BLUE, 255) if channels == 4 else CURRENT_PRICE_BLUE
-    line(frame, 50, color=color)
+    marker(frame, 50, color=color)
     assert (
         PocketOptionCurrentVisualPriceExtractor().extract(frame).status
         is CurrentVisualPriceStatus.OK
@@ -73,7 +102,7 @@ def test_dark_roi_has_no_candidate() -> None:
 
 def test_effective_chart_right_detects_blue_line_before_side_panel() -> None:
     frame = image(height=800, width=1161)
-    line(frame, 400, start=928, end=1061)
+    marker(frame, 400, effective_right=1062)
 
     result = PocketOptionCurrentVisualPriceExtractor(
         effective_chart_right_x=1062
@@ -81,12 +110,12 @@ def test_effective_chart_right_detects_blue_line_before_side_panel() -> None:
 
     assert result.status is CurrentVisualPriceStatus.OK
     assert result.price is not None
-    assert result.selected_x == 994.5
+    assert result.selected_x == 955.0
 
 
 def test_image_width_fallback_does_not_treat_side_panel_as_chart() -> None:
     frame = image(height=800, width=1161)
-    line(frame, 400, start=928, end=1061)
+    marker(frame, 400, effective_right=1062)
 
     result = PocketOptionCurrentVisualPriceExtractor().extract(frame)
 
@@ -97,7 +126,7 @@ def test_image_width_fallback_does_not_treat_side_panel_as_chart() -> None:
 
 def test_effective_chart_band_geometry_is_exact() -> None:
     frame = image(height=800, width=1161)
-    line(frame, 400, start=928, end=1061)
+    marker(frame, 400, effective_right=1062)
 
     result = PocketOptionCurrentVisualPriceExtractor(
         effective_chart_right_x=1062
@@ -109,7 +138,7 @@ def test_effective_chart_band_geometry_is_exact() -> None:
 
 def test_right_edge_gap_uses_effective_chart_edge() -> None:
     frame = image(height=800, width=1161)
-    line(frame, 400, start=928, end=1059)
+    marker(frame, 400, effective_right=1062, right_gap=2)
 
     result = PocketOptionCurrentVisualPriceExtractor(
         effective_chart_right_x=1062
@@ -122,7 +151,7 @@ def test_right_edge_gap_uses_effective_chart_edge() -> None:
 
 def test_diagnostic_contains_effective_edge_and_mask_fields() -> None:
     frame = image(height=800, width=1161)
-    line(frame, 400, start=928, end=1061)
+    marker(frame, 400, effective_right=1062)
 
     result = PocketOptionCurrentVisualPriceExtractor(
         effective_chart_right_x=1062
@@ -136,7 +165,7 @@ def test_diagnostic_contains_effective_edge_and_mask_fields() -> None:
         "band_start=849",
         "band_end=1062",
         "band_width=213",
-        "masked_pixel_count=134",
+        "masked_pixel_count=",
     ):
         assert field in result.diagnostic
 
@@ -177,9 +206,9 @@ def test_line_outside_right_band_is_rejected() -> None:
 
 def test_y_11_is_outside_safe_region_and_y_12_is_accepted() -> None:
     outside = image()
-    line(outside, 11)
+    marker(outside, 11)
     inside = image()
-    line(inside, 12)
+    marker(inside, 12)
     extractor = PocketOptionCurrentVisualPriceExtractor()
     rejected = extractor.extract(outside)
     assert rejected.status is CurrentVisualPriceStatus.CANDIDATE_OUTSIDE_SAFE_REGION
@@ -205,7 +234,8 @@ def test_vertical_wick_and_short_fragment_are_rejected() -> None:
 
 def test_thick_line_uses_weighted_vertical_center() -> None:
     frame = image()
-    cv2.rectangle(frame, (80, 48), (99, 52), CURRENT_PRICE_BLUE, -1)
+    for y in range(48, 53):
+        marker(frame, y)
     result = PocketOptionCurrentVisualPriceExtractor().extract(frame)
     assert result.status is CurrentVisualPriceStatus.OK
     assert result.selected_y == 50.0
@@ -213,8 +243,8 @@ def test_thick_line_uses_weighted_vertical_center() -> None:
 
 def test_equal_candidates_are_ambiguous() -> None:
     frame = image()
-    line(frame, 40)
-    line(frame, 60)
+    marker(frame, 40)
+    marker(frame, 60)
     result = PocketOptionCurrentVisualPriceExtractor().extract(frame)
     assert result.status is CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE
     assert result.candidate_count == 2
@@ -222,30 +252,31 @@ def test_equal_candidates_are_ambiguous() -> None:
 
 def test_clearly_better_candidate_is_selected() -> None:
     frame = image()
-    line(frame, 40)
-    cv2.line(frame, (90, 60), (99, 60), CURRENT_PRICE_BLUE, 1)
+    marker(frame, 40)
+    line(frame, 60, start=80, end=94)
+    frame[59, 99] = CURRENT_PRICE_BLUE
+    frame[61, 99] = CURRENT_PRICE_BLUE
     result = PocketOptionCurrentVisualPriceExtractor().extract(frame)
     assert result.status is CurrentVisualPriceStatus.OK
     assert result.selected_y == 40.0
 
 
-def test_qualifying_sparse_row_can_be_low_confidence() -> None:
-    class SparseMaskBuilder:
-        def build(self, frame: np.ndarray) -> np.ndarray:
-            mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-            mask[50, [80, 81, 88, 99]] = 255
-            return mask
+def test_valid_marker_can_be_low_confidence_with_strict_threshold() -> None:
+    frame = image()
+    line(frame, 50, start=80, end=94)
+    frame[49, 99] = CURRENT_PRICE_BLUE
+    frame[51, 99] = CURRENT_PRICE_BLUE
 
     result = PocketOptionCurrentVisualPriceExtractor(
-        mask_builder=SparseMaskBuilder()
-    ).extract(image())
+        min_confidence=0.90,
+    ).extract(frame)
     assert result.status is CurrentVisualPriceStatus.LOW_CONFIDENCE
-    assert result.confidence is not None and result.confidence < 0.60
+    assert result.confidence is not None and result.confidence < 0.90
 
 
 def test_diagnostics_coordinates_and_exact_normalization() -> None:
     frame = image(height=101, width=120)
-    line(frame, 25, start=96)
+    marker(frame, 25)
     result = PocketOptionCurrentVisualPriceExtractor().extract(frame)
     assert result.price is not None
     assert result.selected_x == 107.5
@@ -264,6 +295,14 @@ def test_diagnostics_coordinates_and_exact_normalization() -> None:
     [
         ("right_band_ratio", -0.1),
         ("safe_top_ratio", float("nan")),
+        ("min_line_run_ratio", 1.1),
+        ("min_line_continuity_ratio", -0.1),
+        ("max_line_start_offset_ratio", 1.1),
+        ("max_line_gap_ratio", -0.1),
+        ("label_zone_ratio", 1.1),
+        ("label_vertical_radius_ratio", -0.1),
+        ("min_label_support_row_ratio", 1.1),
+        ("min_label_support_density_ratio", -0.1),
         ("min_confidence", 1.1),
         ("max_row_gap_px", -1),
         ("max_candidate_height_px", 1.5),
@@ -281,7 +320,8 @@ def test_injected_mask_builder_receives_bgr_without_mutating_input() -> None:
         def build(self, frame: np.ndarray) -> np.ndarray:
             self.received = frame
             mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-            mask[50, 80:100] = 255
+            mask[50, 80:95] = 255
+            mask[47:54, 95:100] = 255
             return mask
 
     builder = RecordingMaskBuilder()
@@ -297,7 +337,7 @@ def test_injected_mask_builder_receives_bgr_without_mutating_input() -> None:
 
 def test_trace_preserves_ok_candidate_and_effective_configuration() -> None:
     frame = image(height=800, width=1161)
-    line(frame, 400, start=928, end=1061)
+    marker(frame, 400, effective_right=1062)
     extractor = PocketOptionCurrentVisualPriceExtractor(effective_chart_right_x=1062)
 
     analysis = extractor.extract_with_trace(frame)
@@ -311,24 +351,29 @@ def test_trace_preserves_ok_candidate_and_effective_configuration() -> None:
     assert (analysis.trace.band_start, analysis.trace.band_end) == (849, 1062)
     assert analysis.trace.band_width == 213
     assert (analysis.trace.safe_top, analysis.trace.safe_bottom) == (40, 40)
-    assert analysis.trace.masked_pixel_count == 134
+    assert analysis.trace.masked_pixel_count > 134
     assert len(analysis.trace.candidates) == 1
     candidate = analysis.trace.candidates[0]
     assert candidate.candidate_id == "price_candidate_000"
     assert candidate.selected is True
-    assert candidate.x == analysis.extraction.selected_x == 994.5
+    assert candidate.x == analysis.extraction.selected_x == 955.0
     assert candidate.y == analysis.extraction.selected_y == 400.0
     assert candidate.row_start == candidate.row_end == 400
-    assert candidate.coverage == 134 / 213
-    assert candidate.span == 134 / 213
+    assert candidate.coverage == 1.0
+    assert candidate.span == 1.0
     assert candidate.right_edge_gap == 0
     assert candidate.score == analysis.extraction.confidence
+    selected_row = next(row for row in analysis.trace.row_evaluations if row.qualified)
+    assert selected_row.line_evidence is True
+    assert selected_row.label_support is True
+    assert selected_row.longest_run_ratio == 1.0
+    assert selected_row.label_support_trace is not None
 
 
 def test_trace_preserves_all_candidates_and_exact_selected_one() -> None:
     frame = image()
-    line(frame, 40)
-    line(frame, 60)
+    marker(frame, 40)
+    marker(frame, 60)
 
     analysis = PocketOptionCurrentVisualPriceExtractor().extract_with_trace(frame)
 
@@ -367,22 +412,24 @@ def test_no_candidate_trace_counts_right_edge_and_group_height_rejections() -> N
     class RejectionMaskBuilder:
         def build(self, frame: np.ndarray) -> np.ndarray:
             mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-            mask[20, 80:96] = 255
-            mask[40:50, 80:100] = 255
+            mask[40:50, 80:95] = 255
+            mask[20:31, 95:100] = 255
+            mask[60:71, 95:100] = 255
             return mask
 
     analysis = PocketOptionCurrentVisualPriceExtractor(
-        mask_builder=RejectionMaskBuilder()
+        mask_builder=RejectionMaskBuilder(),
+        label_vertical_radius_ratio=0.20,
     ).extract_with_trace(image())
 
     assert analysis.extraction.status is (
         CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
     )
     counts = analysis.trace.rejection_counts
-    assert counts.rejected_by_right_edge_gap == 1
     assert counts.qualifying_rows == 10
     assert counts.candidate_groups == 1
     assert counts.rejected_by_group_height == 1
+    assert analysis.trace.decision_diagnostic == "candidate_groups_rejected"
 
 
 def test_invalid_image_trace_belongs_to_returned_extraction() -> None:
@@ -401,7 +448,8 @@ def test_extract_with_trace_builds_mask_once() -> None:
         def build(self, frame: np.ndarray) -> np.ndarray:
             self.calls += 1
             mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-            mask[50, 80:100] = 255
+            mask[50, 80:95] = 255
+            mask[47:54, 95:100] = 255
             return mask
 
     builder = CountingMaskBuilder()

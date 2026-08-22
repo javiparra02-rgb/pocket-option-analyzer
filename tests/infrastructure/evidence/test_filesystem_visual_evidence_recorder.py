@@ -52,7 +52,10 @@ from pocket_option_analyzer.vision.models import (
     ClassifiedCandle,
     CurrentVisualPriceDetectionTrace,
     CurrentVisualPriceExtraction,
+    CurrentVisualPriceLabelSupportTrace,
     CurrentVisualPriceRejectionCounts,
+    CurrentVisualPriceRowEvaluationTrace,
+    CurrentVisualPriceRowRejectionReason,
     CurrentVisualPriceStatus,
     FinalCandleTrace,
     MarketAnalysis,
@@ -239,6 +242,73 @@ def _price_trace() -> CurrentVisualPriceDetectionTrace:
     )
 
 
+def _line_without_label_trace() -> CurrentVisualPriceDetectionTrace:
+    label = CurrentVisualPriceLabelSupportTrace(
+        window_start_y=7,
+        window_end_y=14,
+        zone_start_x=95,
+        zone_end_x=100,
+        support_pixels=0,
+        support_row_count=0,
+        evaluated_row_count=6,
+        support_row_ratio=0.0,
+        support_density=0.0,
+        supported=False,
+        diagnostic="no_right_side_support",
+    )
+    row = CurrentVisualPriceRowEvaluationTrace(
+        row_y=10,
+        masked_pixels=15,
+        coverage=0.75,
+        span=0.75,
+        left_x=80,
+        right_x=94,
+        right_edge_gap=5,
+        longest_run_pixels=15,
+        longest_run_ratio=0.75,
+        longest_run_start_x=80,
+        longest_run_end_x=94,
+        component_count=1,
+        line_run_pixels=15,
+        line_run_span_pixels=15,
+        line_run_span_ratio=0.75,
+        line_run_start_x=80,
+        line_run_end_x=94,
+        line_run_continuity=1.0,
+        pass_coverage=True,
+        pass_span=True,
+        pass_edge=False,
+        line_evidence=True,
+        label_support=False,
+        qualified=False,
+        rejection_reasons=(CurrentVisualPriceRowRejectionReason.LABEL_SUPPORT_MISSING,),
+        label_support_trace=label,
+    )
+    return CurrentVisualPriceDetectionTrace(
+        status=CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE,
+        image_width=100,
+        image_height=20,
+        effective_chart_right_x=100,
+        effective_chart_right_source="configured",
+        band_start=80,
+        band_end=100,
+        band_width=20,
+        safe_top=2,
+        safe_bottom=2,
+        masked_pixel_count=15,
+        candidates=(),
+        rejection_counts=CurrentVisualPriceRejectionCounts(
+            rows_without_mask_pixels=19,
+            rows_with_mask_pixels=1,
+            rejected_by_right_edge_gap=1,
+            line_evidence_rows=1,
+            rejected_by_label_support=1,
+        ),
+        row_evaluations=(row,),
+        decision_diagnostic="line_rows_without_label_support",
+    )
+
+
 def _membership_trace() -> CandleSeriesMembershipTrace:
     return CandleSeriesMembershipTrace(
         status=CandleSeriesMembershipStatus.AVAILABLE,
@@ -413,10 +483,11 @@ def _evidence(
     frame_id: int = 123,
     timestamp: datetime = FRAME_TIMESTAMP,
     candle_trace_override: CandleDetectionTrace | None = None,
+    price_trace_override: CurrentVisualPriceDetectionTrace | None = None,
 ) -> VisualFrameEvidence:
     chart_image = image if image is not None else _image()
     candle_trace = candle_trace_override or _candle_trace()
-    price_trace = _price_trace()
+    price_trace = price_trace_override or _price_trace()
     extraction = CurrentVisualPriceExtraction(
         price=None,
         status=CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE,
@@ -886,6 +957,44 @@ def test_current_visual_price_trace_preserves_no_qualifying_rows(
     assert trace["effective_chart_right_source"] == "configured"
     assert trace["rejection_counts"]["rows_without_mask_pixels"] == 20
     assert trace["rejection_counts"]["qualifying_rows"] == 0
+    assert trace["row_evaluations"] == []
+
+
+def test_current_visual_price_trace_persists_two_stage_row_evidence(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "evidence"
+    evidence = _evidence(price_trace_override=_line_without_label_trace())
+
+    _store(directory).record_frame(evidence, (_entry(),))
+
+    trace = _read_json(_frame_directory(directory) / "frame.json")["analysis"][
+        "current_visual_price_detection_trace"
+    ]
+    assert trace["decision_diagnostic"] == "line_rows_without_label_support"
+    assert trace["rejection_counts"]["line_evidence_rows"] == 1
+    assert trace["rejection_counts"]["rejected_by_label_support"] == 1
+    assert len(trace["row_evaluations"]) == 1
+    row = trace["row_evaluations"][0]
+    assert row["row_y"] == 10
+    assert row["longest_run_pixels"] == 15
+    assert row["line_run_continuity"] == 1.0
+    assert row["line_evidence"] is True
+    assert row["label_support"] is False
+    assert row["rejection_reasons"] == ["label_support_missing"]
+    assert row["label_support_trace"] == {
+        "diagnostic": "no_right_side_support",
+        "evaluated_row_count": 6,
+        "support_density": 0.0,
+        "support_pixels": 0,
+        "support_row_count": 0,
+        "support_row_ratio": 0.0,
+        "supported": False,
+        "window_end_y": 14,
+        "window_start_y": 7,
+        "zone_end_x": 100,
+        "zone_start_x": 95,
+    }
 
 
 def test_same_frame_repeat_does_not_reencode(tmp_path: Path) -> None:
