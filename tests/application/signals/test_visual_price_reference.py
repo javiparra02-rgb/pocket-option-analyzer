@@ -1,7 +1,10 @@
+import pytest
+
 from pocket_option_analyzer.application.signals.visual_strategy_signal_analysis_pipeline import (  # noqa: E501
     VisualStrategySignalAnalysisPipeline,
 )
 from pocket_option_analyzer.application.strategy import (
+    VisualPriceReference,
     VisualPriceReferenceStatus,
 )
 from pocket_option_analyzer.vision.models import (
@@ -163,37 +166,70 @@ def test_reference_reports_zero_anchor_range() -> None:
     assert result.anchor_bottom_roi_y == 100
 
 
-def test_reference_reports_close_outside_anchor_range() -> None:
+def test_reference_returns_ok_for_upper_breakout_without_clamping() -> None:
     result = _reference_result(
         (
             _candle(
                 10,
                 CandleType.BULLISH,
-                (490, 510, 530, 550),
+                (526, 550, 570, 600),
             ),
             _candle(
                 20,
                 CandleType.BEARISH,
-                (650, 670, 700, 750),
+                (650, 670, 710, 782),
             ),
             _candle(
                 30,
                 CandleType.BULLISH,
-                (5, 11, 20, 25),
+                (500, 514, 520, 530),
             ),
         )
     )
 
-    assert result.reference is None
-    assert result.status is VisualPriceReferenceStatus.CLOSE_OUTSIDE_ANCHOR_RANGE
-
+    assert result.status is VisualPriceReferenceStatus.OK
+    assert result.reference is not None
+    assert result.is_available
     assert result.anchor_count == 2
-    assert result.close_roi_y == 11
-    assert result.anchor_top_roi_y == 490
-    assert result.anchor_bottom_roi_y == 750
-
-    assert result.raw_normalized_close is not None
+    assert result.close_roi_y == 514
+    assert result.anchor_top_roi_y == 526
+    assert result.anchor_bottom_roi_y == 782
+    assert result.raw_normalized_close == pytest.approx(1.046875)
     assert result.raw_normalized_close > 1.0
+    assert result.reference.value == pytest.approx(1.046875)
+    assert result.reference.normalized_close == pytest.approx(1.046875)
+
+
+def test_reference_returns_ok_for_lower_breakout_without_clamping() -> None:
+    result = _reference_result(
+        (
+            _candle(10, CandleType.BULLISH, (100, 120, 140, 160)),
+            _candle(20, CandleType.BEARISH, (180, 200, 220, 240)),
+            _candle(30, CandleType.BEARISH, (230, 240, 250, 260)),
+        )
+    )
+
+    assert result.status is VisualPriceReferenceStatus.OK
+    assert result.reference is not None
+    assert result.is_available
+    assert result.raw_normalized_close == pytest.approx(-10.0 / 140.0)
+    assert result.raw_normalized_close < 0.0
+    assert result.reference.value == pytest.approx(-10.0 / 140.0)
+    assert result.reference.normalized_close == pytest.approx(-10.0 / 140.0)
+
+
+@pytest.mark.parametrize("value", (100.0, -100.0))
+def test_reference_preserves_extreme_finite_affine_values(value: float) -> None:
+    reference = VisualPriceReference(value)
+
+    assert reference.value == value
+    assert reference.normalized_close == value
+
+
+@pytest.mark.parametrize("value", (float("nan"), float("inf"), float("-inf")))
+def test_reference_rejects_non_finite_affine_values(value: float) -> None:
+    with pytest.raises(ValueError, match="value debe ser finito"):
+        VisualPriceReference(value)
 
 
 def test_reference_returns_ok_for_valid_geometry() -> None:

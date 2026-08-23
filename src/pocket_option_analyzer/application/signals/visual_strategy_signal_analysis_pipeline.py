@@ -329,8 +329,8 @@ class VisualStrategySignalAnalysisPipeline:
         exacto cuando no puede producir una referencia fiable.
 
         Este método no relaja ninguna condición de comparabilidad.
-        Los casos que anteriormente devolvían None siguen teniendo
-        reference=None.
+        La referencia conserva la coordenada afín completa, incluidos
+        breakouts fuera del rango cerrado de las anclas.
         """
 
         return VisualStrategySignalAnalysisPipeline._price_reference_analysis(
@@ -445,24 +445,6 @@ class VisualStrategySignalAnalysisPipeline:
             )
 
         raw_normalized_close = (chart_bottom_roi_y - close_roi_y) / chart_range_roi_px
-
-        if not chart_top_roi_y <= close_roi_y <= chart_bottom_roi_y:
-            return _VisualPriceReferenceAnalysis(
-                result=VisualPriceReferenceResult(
-                    reference=None,
-                    status=(VisualPriceReferenceStatus.CLOSE_OUTSIDE_ANCHOR_RANGE),
-                    anchor_count=len(anchor_candles),
-                    latest_candle_type=latest.candle_type.value,
-                    latest_candidate_x=latest_candidate.x,
-                    latest_candidate_y=latest_candidate.y,
-                    close_roi_y=close_roi_y,
-                    anchor_top_roi_y=chart_top_roi_y,
-                    anchor_bottom_roi_y=chart_bottom_roi_y,
-                    raw_normalized_close=raw_normalized_close,
-                ),
-                latest=latest,
-                anchors=anchor_candles,
-            )
 
         def normalize(
             roi_y: int,

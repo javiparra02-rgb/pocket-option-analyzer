@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
+from math import isfinite
 
 from pocket_option_analyzer.domain.signals import SignalDirection
 from pocket_option_analyzer.vision.models import CurrentVisualPriceExtraction
@@ -22,11 +23,15 @@ class StrategyObservationOutcome(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class VisualPriceReference:
-    """ROI-local close normalized against stable closed-candle anchors."""
+    """Finite affine close coordinate against stable closed-candle anchors."""
 
     value: float
     anchor_shape: tuple[tuple[str, float, float, float, float], ...] = ()
     source: str = "roi_local_close_normalized_by_closed_candle_range"
+
+    def __post_init__(self) -> None:
+        if not isfinite(self.value):
+            raise ValueError("value debe ser finito.")
 
     @property
     def normalized_close(self) -> float:

@@ -69,6 +69,39 @@ def _exit_context(
     )
 
 
+@pytest.mark.parametrize("value", (1.0540983606557377, -0.04))
+def test_writer_preserves_unclamped_affine_reference_schema(
+    tmp_path,
+    value: float,
+) -> None:
+    instant = datetime(2026, 8, 23, 1, 42, tzinfo=UTC)
+    path = tmp_path / "observations.jsonl"
+    anchors = (("bullish", 1.0, 0.8, 0.6, 0.0),)
+    reference = VisualPriceReference(value=value, anchor_shape=anchors)
+
+    JsonlStrategyObservationWriter(path).write_reference_validation(
+        VisualReferenceValidation(
+            snapshot_id=instant.isoformat(),
+            observed_at=instant,
+            resolve_at=instant + timedelta(seconds=10),
+            entry_reference=reference,
+        )
+    )
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    serialized = payload["entry_reference"]
+    assert set(serialized) == {
+        "value",
+        "normalized_close",
+        "anchor_shape",
+        "source",
+    }
+    assert serialized["value"] == value
+    assert serialized["normalized_close"] == value
+    assert serialized["anchor_shape"] == [list(anchor) for anchor in anchors]
+    assert serialized["source"] == reference.source
+
+
 def test_writer_serializes_structured_audit_and_indicators(tmp_path) -> None:
     instant = datetime(2026, 8, 9, 12, 0, tzinfo=UTC)
     reference = VisualPriceReference(
