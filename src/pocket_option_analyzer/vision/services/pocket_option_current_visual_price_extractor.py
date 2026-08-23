@@ -319,12 +319,6 @@ class PocketOptionCurrentVisualPriceExtractor:
                 status=CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE,
                 **common,
             )
-        elif selected.y < safe_top or selected.y > height - 1 - safe_bottom:
-            decision_diagnostic = "candidate_outside_safe_region"
-            extraction = CurrentVisualPriceExtraction(
-                status=CurrentVisualPriceStatus.CANDIDATE_OUTSIDE_SAFE_REGION,
-                **common,
-            )
         elif selected.score < self._min_confidence:
             decision_diagnostic = "candidate_low_confidence"
             extraction = CurrentVisualPriceExtraction(

@@ -1,0 +1,256 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from functools import lru_cache
+from pathlib import Path
+
+import cv2
+import pytest
+
+from pocket_option_analyzer.application.signals import (
+    VisualStrategySignalAnalysisPipeline,
+)
+from pocket_option_analyzer.application.strategy import (
+    CurrentVisualPriceComparator,
+    CurrentVisualPriceComparisonContext,
+    CurrentVisualPriceComparisonStatus,
+    VisualPriceReferenceResult,
+    VisualPriceReferenceStatus,
+)
+from pocket_option_analyzer.infrastructure.bootstrap import SignalPipelineFactory
+from pocket_option_analyzer.vision.models import (
+    CandleColorProfile,
+    ChartRegion,
+    CurrentVisualPriceRowRejectionReason,
+    CurrentVisualPriceStatus,
+    MarketAnalysis,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class _FrameOracle:
+    frame_id: int
+    frame_key: str
+    expected_status: CurrentVisualPriceStatus
+    selected_y: float | None
+    decision_diagnostic: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ReplayResult:
+    oracle: _FrameOracle
+    analysis: MarketAnalysis
+    reference_result: VisualPriceReferenceResult
+
+
+_ORACLES = (
+    _FrameOracle(
+        1,
+        "frame_00000001_20260823T202231602142Z",
+        CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE,
+        None,
+        "no_pixels_in_band",
+    ),
+    _FrameOracle(
+        11,
+        "frame_00000011_20260823T202242463685Z",
+        CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE,
+        None,
+        "no_pixels_in_band",
+    ),
+    _FrameOracle(
+        30,
+        "frame_00000030_20260823T202302830489Z",
+        CurrentVisualPriceStatus.OK,
+        774.0,
+        "candidate_available",
+    ),
+    _FrameOracle(
+        40,
+        "frame_00000040_20260823T202313695589Z",
+        CurrentVisualPriceStatus.OK,
+        735.0,
+        "candidate_available",
+    ),
+    _FrameOracle(
+        57,
+        "frame_00000057_20260823T202332010478Z",
+        CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE,
+        None,
+        "no_line_rows",
+    ),
+    _FrameOracle(
+        67,
+        "frame_00000067_20260823T202342844955Z",
+        CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE,
+        None,
+        "no_pixels_in_band",
+    ),
+)
+
+
+def _session_directory() -> Path:
+    return (
+        Path(__file__).resolve().parents[3]
+        / "logs"
+        / "calibration"
+        / "p04b_session_05"
+        / "evidence"
+    )
+
+
+@lru_cache(maxsize=1)
+def _replay_session() -> tuple[_ReplayResult, ...]:
+    session_directory = _session_directory()
+    try:
+        available = session_directory.is_dir()
+    except OSError:
+        available = False
+    if not available:
+        pytest.skip("P0.4b session05 evidence is not available locally.")
+
+    pipeline = SignalPipelineFactory._create_market_analysis_pipeline(
+        color_profile=CandleColorProfile.white_red(),
+    )
+    results = []
+    for oracle in _ORACLES:
+        image_path = session_directory / "frames" / oracle.frame_key / "chart.png"
+        image = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
+        if image is None:
+            pytest.skip(f"Unable to read local replay image: {image_path}")
+        region = ChartRegion(
+            x=0,
+            y=0,
+            width=int(image.shape[1]),
+            height=int(image.shape[0]),
+        )
+        analysis = pipeline.analyze(
+            image,
+            price_observation_image=image,
+            chart_region=region,
+            price_observation_region=region,
+        )
+        results.append(
+            _ReplayResult(
+                oracle=oracle,
+                analysis=analysis,
+                reference_result=(
+                    VisualStrategySignalAnalysisPipeline._price_reference_result(
+                        analysis
+                    )
+                ),
+            )
+        )
+    return tuple(results)
+
+
+def _result(frame_id: int) -> _ReplayResult:
+    return next(
+        result for result in _replay_session() if result.oracle.frame_id == frame_id
+    )
+
+
+def _comparison_context(result: _ReplayResult) -> CurrentVisualPriceComparisonContext:
+    return CurrentVisualPriceComparisonContext(
+        current_visual_price=result.analysis.current_visual_price,
+        chart_region=result.analysis.chart_region,
+        price_observation_region=result.analysis.price_observation_region,
+        reference_result=result.reference_result,
+    )
+
+
+def test_session_05_current_visual_price_matrix_is_observability_first() -> None:
+    results = _replay_session()
+
+    assert len(results) == 6
+    for result in results:
+        extraction = result.analysis.current_visual_price
+        trace = result.analysis.current_visual_price_detection_trace
+        assert extraction is not None and trace is not None
+        assert extraction.status is result.oracle.expected_status
+        assert extraction.selected_y == result.oracle.selected_y
+        assert trace.decision_diagnostic == result.oracle.decision_diagnostic
+
+
+def test_session_05_frame_30_accepts_trusted_marker_outside_legacy_margin() -> None:
+    result = _result(30)
+    extraction = result.analysis.current_visual_price
+    trace = result.analysis.current_visual_price_detection_trace
+
+    assert extraction is not None and extraction.price is not None
+    assert extraction.status is CurrentVisualPriceStatus.OK
+    assert extraction.price.roi_y == pytest.approx(774.0, abs=0.5)
+    assert trace is not None
+    assert (trace.safe_top, trace.safe_bottom) == (40, 40)
+    assert extraction.price.roi_y > 787 - trace.safe_bottom
+    row = next(row for row in trace.row_evaluations if row.qualified)
+    assert row.longest_run_pixels == 178
+    assert row.line_run_pixels == 185
+    assert row.line_run_span_pixels == 188
+    assert row.line_run_continuity == pytest.approx(0.9840425531914894)
+    assert row.label_support is True
+    assert row.label_support_trace is not None
+    assert row.label_support_trace.support_row_count == 27
+    assert row.label_support_trace.evaluated_row_count == 33
+    assert row.label_support_trace.support_density == pytest.approx(0.5942760942760943)
+    assert result.reference_result.close_roi_y == 773
+    assert abs(extraction.price.roi_y - result.reference_result.close_roi_y) == 1
+
+
+def test_session_05_frame_40_preserves_non_productive_right_edge_diagnostic() -> None:
+    result = _result(40)
+    extraction = result.analysis.current_visual_price
+    trace = result.analysis.current_visual_price_detection_trace
+
+    assert extraction is not None and extraction.price is not None
+    assert extraction.status is CurrentVisualPriceStatus.OK
+    assert extraction.price.roi_y == pytest.approx(735.0, abs=0.5)
+    assert trace is not None
+    row = next(row for row in trace.row_evaluations if row.qualified)
+    assert row.right_edge_gap == 5
+    assert row.pass_edge is False
+    assert result.reference_result.close_roi_y == 736
+    assert abs(extraction.price.roi_y - result.reference_result.close_roi_y) == 1
+
+
+def test_session_05_frame_57_partial_label_remains_without_line_candidate() -> None:
+    result = _result(57)
+    extraction = result.analysis.current_visual_price
+    trace = result.analysis.current_visual_price_detection_trace
+
+    assert extraction is not None
+    assert extraction.status is CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
+    assert trace is not None
+    assert tuple(row.row_y for row in trace.row_evaluations) == (786, 787)
+    assert not any(row.line_evidence for row in trace.row_evaluations)
+    for row in trace.row_evaluations:
+        assert CurrentVisualPriceRowRejectionReason.LINE_RUN_TOO_SHORT in (
+            row.rejection_reasons
+        )
+        assert CurrentVisualPriceRowRejectionReason.LINE_STARTS_TOO_LATE in (
+            row.rejection_reasons
+        )
+    assert trace.decision_diagnostic == "no_line_rows"
+
+
+def test_session_05_snapshot_two_current_price_comparison_is_available() -> None:
+    entry = _result(30)
+    exit_result = _result(40)
+
+    assert entry.reference_result.status is VisualPriceReferenceStatus.OK
+    assert exit_result.reference_result.status is VisualPriceReferenceStatus.OK
+    entry_reference = entry.reference_result.reference
+    exit_reference = exit_result.reference_result.reference
+    assert entry_reference is not None and exit_reference is not None
+    assert len(entry_reference.anchor_shape) == 27
+    assert entry_reference.anchor_shape == exit_reference.anchor_shape
+
+    comparison = CurrentVisualPriceComparator().compare(
+        _comparison_context(entry),
+        _comparison_context(exit_result),
+    )
+
+    assert comparison.status is CurrentVisualPriceComparisonStatus.AVAILABLE
+    assert comparison.entry_anchored_value == pytest.approx(0.0196078431372549)
+    assert comparison.exit_anchored_value == pytest.approx(0.0784313725490196)
+    assert comparison.delta == pytest.approx(0.0588235294117647)

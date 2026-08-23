@@ -204,16 +204,59 @@ def test_line_outside_right_band_is_rejected() -> None:
     )
 
 
-def test_y_11_is_outside_safe_region_and_y_12_is_accepted() -> None:
-    outside = image()
-    marker(outside, 11)
-    inside = image()
-    marker(inside, 12)
-    extractor = PocketOptionCurrentVisualPriceExtractor()
-    rejected = extractor.extract(outside)
-    assert rejected.status is CurrentVisualPriceStatus.CANDIDATE_OUTSIDE_SAFE_REGION
-    assert rejected.selected_y == 11.0
-    assert extractor.extract(inside).status is CurrentVisualPriceStatus.OK
+@pytest.mark.parametrize("y", [1, 11, 12, 50, 87, 88, 98])
+def test_trusted_marker_availability_does_not_depend_on_safe_margin(y: int) -> None:
+    frame = image()
+    marker(frame, y)
+
+    analysis = PocketOptionCurrentVisualPriceExtractor().extract_with_trace(frame)
+
+    assert analysis.extraction.status is CurrentVisualPriceStatus.OK
+    assert analysis.extraction.selected_y == float(y)
+    assert analysis.extraction.price is not None
+    assert analysis.extraction.price.roi_y == float(y)
+    assert (analysis.trace.safe_top, analysis.trace.safe_bottom) == (12, 12)
+    assert analysis.trace.decision_diagnostic == "candidate_available"
+
+
+@pytest.mark.parametrize("y", [13, 774])
+def test_clipped_but_sufficient_marker_is_available_near_real_roi_edges(
+    y: int,
+) -> None:
+    frame = image(height=788, width=1174)
+    marker(frame, y, effective_right=1062, right_gap=2)
+    extractor = PocketOptionCurrentVisualPriceExtractor(
+        effective_chart_right_x=1062,
+    )
+
+    analysis = extractor.extract_with_trace(frame)
+
+    assert analysis.extraction.status is CurrentVisualPriceStatus.OK
+    assert analysis.extraction.selected_y == float(y)
+    assert (analysis.trace.safe_top, analysis.trace.safe_bottom) == (40, 40)
+    assert y < analysis.trace.safe_top or y > 787 - analysis.trace.safe_bottom
+    row = next(row for row in analysis.trace.row_evaluations if row.qualified)
+    assert row.line_evidence is True
+    assert row.label_support is True
+    assert row.label_support_trace is not None
+    assert row.label_support_trace.window_start_y == max(0, y - 20)
+    assert row.label_support_trace.window_end_y == min(788, y + 21)
+
+
+def test_partial_label_without_sufficient_line_near_bottom_is_unavailable() -> None:
+    frame = image(height=788, width=1174)
+    frame[786:788, 1010:1062] = CURRENT_PRICE_BLUE
+
+    analysis = PocketOptionCurrentVisualPriceExtractor(
+        effective_chart_right_x=1062,
+    ).extract_with_trace(frame)
+
+    assert analysis.extraction.status is (
+        CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
+    )
+    assert analysis.extraction.selected_y is None
+    assert not any(row.line_evidence for row in analysis.trace.row_evaluations)
+    assert analysis.trace.decision_diagnostic == "no_line_rows"
 
 
 def test_vertical_wick_and_short_fragment_are_rejected() -> None:
