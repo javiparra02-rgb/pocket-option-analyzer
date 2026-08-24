@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from threading import Event, Lock
+from threading import Event, Lock, RLock
 from typing import Protocol
+from uuid import uuid4
 
 from pocket_option_analyzer.domain.signals import SignalRecord
 
@@ -49,6 +50,7 @@ class FrameAnalysisLoopService:
         analysis_use_case: AnalyzeCapturedFrameUseCase,
         interval_seconds: float = 1.0,
         sleep_function: Callable[[float], None] | None = None,
+        session_key_factory: Callable[[], str] | None = None,
     ) -> None:
         if interval_seconds < 0:
             raise ValueError("Loop interval seconds cannot be negative.")
@@ -57,10 +59,13 @@ class FrameAnalysisLoopService:
         self._analysis_use_case = analysis_use_case
         self._interval_seconds = interval_seconds
         self._sleep_function = sleep_function
+        self._session_key_factory = session_key_factory or (lambda: uuid4().hex)
 
         self._is_running = False
         self._stop_event = Event()
         self._state_lock = Lock()
+        self._session_lock = RLock()
+        self._active_session_key: str | None = None
 
     @property
     def is_running(
@@ -78,14 +83,37 @@ class FrameAnalysisLoopService:
         Devuelve None cuando no existe un frame disponible.
         """
 
-        frame = self._capture_service.capture_once()
+        with self._session_lock:
+            owns_session = self._active_session_key is None
+            if owns_session:
+                self._start_session_locked()
+            try:
+                frame = self._capture_service.capture_once()
 
-        if frame is None:
-            return None
+                if frame is None:
+                    return None
 
-        return self._analysis_use_case.execute(
-            frame=frame,
-        )
+                return self._analysis_use_case.execute(
+                    frame=frame,
+                )
+            finally:
+                if owns_session:
+                    self._stop_session_locked()
+
+    def start_session(self) -> bool:
+        """Start one logical session, returning whether this call owns it."""
+
+        with self._session_lock:
+            if self._active_session_key is not None:
+                return False
+            self._start_session_locked()
+            return True
+
+    def stop_session(self) -> None:
+        """Stop session state after any in-flight frame has completed."""
+
+        with self._session_lock:
+            self._stop_session_locked()
 
     def start(
         self,
@@ -105,8 +133,10 @@ class FrameAnalysisLoopService:
             return
 
         iterations = 0
+        owns_session = False
 
         try:
+            owns_session = self.start_session()
             while not self._stop_event.is_set():
                 self.run_once()
 
@@ -118,8 +148,12 @@ class FrameAnalysisLoopService:
                 if self._wait_for_next_iteration():
                     break
         finally:
-            with self._state_lock:
-                self._is_running = False
+            try:
+                if owns_session:
+                    self.stop_session()
+            finally:
+                with self._state_lock:
+                    self._is_running = False
 
     def stop(
         self,
@@ -169,3 +203,18 @@ class FrameAnalysisLoopService:
         )
 
         return self._stop_event.is_set()
+
+    def _start_session_locked(self) -> None:
+        session_key = self._session_key_factory()
+        if not isinstance(session_key, str) or not session_key:
+            raise ValueError("session_key_factory must return a non-empty string.")
+        self._analysis_use_case.start_session(session_key=session_key)
+        self._active_session_key = session_key
+
+    def _stop_session_locked(self) -> None:
+        if self._active_session_key is None:
+            return
+        try:
+            self._analysis_use_case.stop_session()
+        finally:
+            self._active_session_key = None

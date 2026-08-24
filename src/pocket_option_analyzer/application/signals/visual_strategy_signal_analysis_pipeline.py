@@ -7,6 +7,11 @@ import numpy as np
 
 from pocket_option_analyzer.application.market import (
     CandleIntervalIndicatorCacheStatus,
+    CurrentCandleIdentityFrameMetadata,
+    CurrentCandleIdentityResolution,
+    CurrentCandleIdentityResult,
+    CurrentCandleIdentityRuntimeShadow,
+    CurrentCandleIdentityTrace,
     VisualEntryContextAnalyzer,
     VisualIndicatorSnapshotBuilder,
     VisualIndicatorSnapshotContext,
@@ -80,6 +85,9 @@ class VisualStrategySignalAnalysisPipeline:
         signal_generator: StrategySignalGenerator,
         profile: StrategyProfile,
         entry_context_analyzer: VisualEntryContextAnalyzer | None = None,
+        current_candle_identity_shadow: (
+            CurrentCandleIdentityRuntimeShadow | None
+        ) = None,
     ) -> None:
         self._market_analysis_pipeline = market_analysis_pipeline
         self._indicator_snapshot_builder = indicator_snapshot_builder
@@ -90,6 +98,7 @@ class VisualStrategySignalAnalysisPipeline:
             if entry_context_analyzer is not None
             else VisualEntryContextAnalyzer()
         )
+        self._current_candle_identity_shadow = current_candle_identity_shadow
         self._last_observation_data: _ObservationData | None = None
         self._last_price_reference: VisualPriceReference | None = None
         self._last_price_reference_result: VisualPriceReferenceResult | None = None
@@ -98,6 +107,9 @@ class VisualStrategySignalAnalysisPipeline:
             CurrentVisualPriceComparisonContext | None
         ) = None
         self._last_market_analysis: MarketAnalysis | None = None
+        self._last_current_candle_identity_resolution: (
+            CurrentCandleIdentityResolution | None
+        ) = None
 
     @property
     def last_price_reference(self) -> VisualPriceReference | None:
@@ -134,6 +146,63 @@ class VisualStrategySignalAnalysisPipeline:
         """Devuelve el análisis del último frame, incluida su traza inmutable."""
 
         return self._last_market_analysis
+
+    @property
+    def last_current_candle_identity_resolution(
+        self,
+    ) -> CurrentCandleIdentityResolution | None:
+        """Return the last atomic shadow result and diagnostic trace."""
+
+        return self._last_current_candle_identity_resolution
+
+    @property
+    def last_current_candle_identity_result(
+        self,
+    ) -> CurrentCandleIdentityResult | None:
+        """Return the last shadow result without affecting legacy analysis."""
+
+        resolution = self._last_current_candle_identity_resolution
+        return resolution.result if resolution is not None else None
+
+    @property
+    def last_current_candle_identity(
+        self,
+    ) -> CurrentCandleIdentityResult | None:
+        """Return the public in-memory shadow conclusion for the last frame."""
+
+        return self.last_current_candle_identity_result
+
+    @property
+    def last_current_candle_identity_trace(
+        self,
+    ) -> CurrentCandleIdentityTrace | None:
+        """Return the trace paired atomically with the last shadow result."""
+
+        resolution = self._last_current_candle_identity_resolution
+        return resolution.trace if resolution is not None else None
+
+    @property
+    def current_candle_identity_shadow(
+        self,
+    ) -> CurrentCandleIdentityRuntimeShadow | None:
+        """Expose the injected session-owned shadow for diagnostics."""
+
+        return self._current_candle_identity_shadow
+
+    def start_session(self, *, session_key: str) -> None:
+        """Start the optional identity shadow for a runtime session."""
+
+        if self._current_candle_identity_shadow is not None:
+            self._current_candle_identity_shadow.start_session(
+                session_key=session_key,
+            )
+        self._last_current_candle_identity_resolution = None
+
+    def stop_session(self) -> None:
+        """Stop tracking while retaining the last immutable diagnostic result."""
+
+        if self._current_candle_identity_shadow is not None:
+            self._current_candle_identity_shadow.stop_session()
 
     def build_last_observation(
         self,
@@ -176,6 +245,11 @@ class VisualStrategySignalAnalysisPipeline:
         price_observation_image: np.ndarray | None = None,
         chart_region: ChartRegion | None = None,
         price_observation_region: ChartRegion | None = None,
+        frame_id: int | None = None,
+        frame_timestamp: datetime | None = None,
+        monotonic_timestamp: float | None = None,
+        source_key: str | None = None,
+        session_key: str | None = None,
     ) -> MarketSignal:
         """
         Analiza una imagen y devuelve una señal de mercado.
@@ -190,6 +264,7 @@ class VisualStrategySignalAnalysisPipeline:
         self._last_current_visual_price = None
         self._last_visual_price_comparison_context = None
         self._last_market_analysis = None
+        self._last_current_candle_identity_resolution = None
 
         market_analysis = self._market_analysis_pipeline.analyze(
             image=image,
@@ -198,6 +273,25 @@ class VisualStrategySignalAnalysisPipeline:
             price_observation_region=price_observation_region,
         )
         self._last_current_visual_price = market_analysis.current_visual_price
+
+        identity_metadata = self._identity_metadata(
+            image=image,
+            frame_id=frame_id,
+            frame_timestamp=frame_timestamp,
+            monotonic_timestamp=monotonic_timestamp,
+            source_key=source_key,
+            session_key=session_key,
+        )
+        if (
+            self._current_candle_identity_shadow is not None
+            and identity_metadata is not None
+        ):
+            self._last_current_candle_identity_resolution = (
+                self._current_candle_identity_shadow.resolve(
+                    metadata=identity_metadata,
+                    market_analysis=market_analysis,
+                )
+            )
 
         reference_analysis = self._price_reference_analysis(
             market_analysis=market_analysis,
@@ -318,6 +412,43 @@ class VisualStrategySignalAnalysisPipeline:
                 f"{signal.reason}"
                 f"{self._strategy_diagnostics_suffix()}"
             ),
+        )
+
+    @staticmethod
+    def _identity_metadata(
+        *,
+        image: np.ndarray,
+        frame_id: int | None,
+        frame_timestamp: datetime | None,
+        monotonic_timestamp: float | None,
+        source_key: str | None,
+        session_key: str | None,
+    ) -> CurrentCandleIdentityFrameMetadata | None:
+        if session_key is None:
+            return None
+        values = (
+            frame_id,
+            frame_timestamp,
+            monotonic_timestamp,
+            source_key,
+        )
+        if any(value is None for value in values):
+            raise ValueError(
+                "Current-candle identity runtime metadata must be complete."
+            )
+        assert frame_id is not None
+        assert frame_timestamp is not None
+        assert monotonic_timestamp is not None
+        assert source_key is not None
+        assert session_key is not None
+        return CurrentCandleIdentityFrameMetadata(
+            frame_id=frame_id,
+            wall_timestamp=frame_timestamp,
+            monotonic_timestamp=monotonic_timestamp,
+            source_key=source_key,
+            session_key=session_key,
+            roi_width=int(image.shape[1]),
+            roi_height=int(image.shape[0]),
         )
 
     @staticmethod

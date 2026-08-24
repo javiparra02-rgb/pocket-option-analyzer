@@ -48,6 +48,15 @@ class FakeFrameWithId:
     image: np.ndarray
 
 
+@dataclass(frozen=True, slots=True)
+class FakeFrameWithIdentityMetadata:
+    frame_id: int
+    timestamp: datetime
+    monotonic_timestamp_ns: int
+    source_key: str
+    image: np.ndarray
+
+
 class FakeVisualSignalRecordingPipeline:
     def __init__(self) -> None:
         self.received_image = None
@@ -57,6 +66,17 @@ class FakeVisualSignalRecordingPipeline:
         self.received_chart_region = None
         self.received_price_observation_region = None
         self.received_frame_id = None
+        self.received_monotonic_timestamp = None
+        self.received_source_key = None
+        self.received_session_key = None
+        self.started_sessions: list[str] = []
+        self.stop_calls = 0
+
+    def start_session(self, *, session_key: str) -> None:
+        self.started_sessions.append(session_key)
+
+    def stop_session(self) -> None:
+        self.stop_calls += 1
 
     def analyze_and_record(
         self,
@@ -67,6 +87,9 @@ class FakeVisualSignalRecordingPipeline:
         chart_region=None,
         price_observation_region=None,
         frame_id=None,
+        monotonic_timestamp=None,
+        source_key=None,
+        session_key=None,
     ) -> SignalRecord:
         self.received_image = image
         self.received_created_at = created_at
@@ -75,6 +98,9 @@ class FakeVisualSignalRecordingPipeline:
         self.received_chart_region = chart_region
         self.received_price_observation_region = price_observation_region
         self.received_frame_id = frame_id
+        self.received_monotonic_timestamp = monotonic_timestamp
+        self.received_source_key = source_key
+        self.received_session_key = session_key
 
         return SignalRecord(
             signal=MarketSignal(
@@ -203,3 +229,29 @@ def test_execute_propagates_existing_frame_id() -> None:
     )
 
     assert pipeline.received_frame_id == 42
+
+
+def test_execute_propagates_real_identity_metadata_for_active_session() -> None:
+    pipeline = FakeVisualSignalRecordingPipeline()
+    use_case = AnalyzeCapturedFrameUseCase(pipeline=pipeline)
+    captured_at = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+
+    use_case.start_session(session_key="session-01")
+    use_case.execute(
+        frame=FakeFrameWithIdentityMetadata(
+            frame_id=42,
+            timestamp=captured_at,
+            monotonic_timestamp_ns=12_345_678_900,
+            source_key="win32_hwnd:1234",
+            image=np.zeros((80, 100, 3), dtype=np.uint8),
+        )
+    )
+    use_case.stop_session()
+
+    assert pipeline.started_sessions == ["session-01"]
+    assert pipeline.received_created_at is captured_at
+    assert pipeline.received_frame_id == 42
+    assert pipeline.received_monotonic_timestamp == 12.3456789
+    assert pipeline.received_source_key == "win32_hwnd:1234"
+    assert pipeline.received_session_key == "session-01"
+    assert pipeline.stop_calls == 1

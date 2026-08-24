@@ -20,6 +20,9 @@ class _VerticalLineObservation:
     support_ratio: float
     contact_gap_ratio: float
     horizontal_alignment_ratio: float
+    line_x: int | None
+    start_y: int | None
+    end_y: int | None
 
 
 class PocketOptionExpiryOverlayEvidenceResolver:
@@ -183,6 +186,9 @@ class PocketOptionExpiryOverlayEvidenceResolver:
             cap_height_to_width_ratio=cap_ratio,
             wickless=wickless,
             diagnostic=diagnostic,
+            vertical_line_x=observation.line_x,
+            vertical_line_start_y=observation.start_y,
+            vertical_line_end_y=observation.end_y,
         )
 
     def _find_vertical_line(
@@ -237,6 +243,9 @@ class PocketOptionExpiryOverlayEvidenceResolver:
                 support_ratio=0.0,
                 contact_gap_ratio=0.0,
                 horizontal_alignment_ratio=0.0,
+                line_x=None,
+                start_y=None,
+                end_y=None,
             )
         column_x, start_y, end_y = best
         return _VerticalLineObservation(
@@ -249,6 +258,9 @@ class PocketOptionExpiryOverlayEvidenceResolver:
                 )
                 / width
             ),
+            line_x=column_x,
+            start_y=start_y,
+            end_y=end_y,
         )
 
     @staticmethod

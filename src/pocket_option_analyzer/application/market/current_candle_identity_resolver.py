@@ -801,6 +801,10 @@ class CurrentCandleIdentityResolver:
         )
         return CurrentCandleIdentityTrace(
             frame_id=context.frame_id,
+            wall_timestamp=context.wall_timestamp,
+            monotonic_timestamp=context.monotonic_timestamp,
+            source_key=context.source_key,
+            session_key=context.session_key,
             status=status,
             internal_state=state.lifecycle,
             continuity_generation=state.continuity_generation,
@@ -814,6 +818,10 @@ class CurrentCandleIdentityResolver:
             missing_evidence=missing_evidence,
             reset_reason=reset_reason,
             expiry_evidence_consistent=context.expiry_evidence_consistent,
+            expiry_vertical_line_x=context.expiry_vertical_line_x,
+            expiry_vertical_line_conflict=(
+                context.expiry_vertical_line_conflict
+            ),
             diagnostics=(diagnostic,),
         )
 

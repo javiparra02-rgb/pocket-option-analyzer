@@ -3,6 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from pocket_option_analyzer.application.market import (
+    CurrentCandleIdentityConfig,
+    CurrentCandleIdentityResolver,
+    CurrentCandleIdentityRuntimeShadow,
     VisualIndicatorSnapshotBuilder,
 )
 from pocket_option_analyzer.application.runtime import (
@@ -151,11 +154,19 @@ class SignalPipelineFactory:
             )
         )
 
+        current_candle_identity_config = CurrentCandleIdentityConfig()
+        current_candle_identity_shadow = CurrentCandleIdentityRuntimeShadow(
+            resolver=CurrentCandleIdentityResolver(
+                config=current_candle_identity_config,
+            ),
+        )
+
         visual_strategy_signal_analysis_pipeline = VisualStrategySignalAnalysisPipeline(
             market_analysis_pipeline=market_analysis_pipeline,
             indicator_snapshot_builder=VisualIndicatorSnapshotBuilder(),
             signal_generator=strategy_signal_generator,
             profile=profile,
+            current_candle_identity_shadow=current_candle_identity_shadow,
         )
 
         recorder = SignalRecorder(

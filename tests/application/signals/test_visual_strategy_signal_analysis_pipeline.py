@@ -1,16 +1,30 @@
 from datetime import UTC, datetime
 
 import numpy as np
+import pytest
 
 from pocket_option_analyzer.application.market import (
     CandleIntervalIndicatorCacheStatus,
+    CurrentCandleIdentityEvidence,
+    CurrentCandleIdentityLifecycle,
+    CurrentCandleIdentityResetReason,
+    CurrentCandleIdentityResolution,
+    CurrentCandleIdentityResult,
+    CurrentCandleIdentityRuntimeShadow,
+    CurrentCandleIdentitySource,
+    CurrentCandleIdentityStatus,
+    CurrentCandleIdentityTrace,
+    TerminalSlotRegion,
     VisualIndicatorSnapshotContext,
 )
 from pocket_option_analyzer.application.signals import (
     StrategySignalGenerator,
     VisualStrategySignalAnalysisPipeline,
 )
-from pocket_option_analyzer.application.strategy import StrategyConditionEvaluator
+from pocket_option_analyzer.application.strategy import (
+    StrategyConditionEvaluator,
+    VisualPriceReferenceStatus,
+)
 from pocket_option_analyzer.application.timing import (
     CandleIntervalKey,
 )
@@ -112,6 +126,107 @@ class FakeStrategySignalGenerator:
         return self.result
 
 
+class FakeCurrentCandleIdentityShadow:
+    def __init__(self, status: CurrentCandleIdentityStatus) -> None:
+        terminal_region = (
+            TerminalSlotRegion(
+                center_x_roi=90.0,
+                lower_x_roi=87.0,
+                upper_x_roi=93.0,
+                normalized_center_x=0.9,
+                estimated_pitch_px=12.0,
+                continuity_generation=1,
+                learned_from_frame_ids=(1, 2),
+            )
+            if status is CurrentCandleIdentityStatus.MISSING_FROM_VIEW
+            else None
+        )
+        evidence = (
+            CurrentCandleIdentityEvidence(
+                matched_historical_member_count=3,
+                type_match_ratio=1.0,
+                terminal_candidate_ids=(),
+                sufficient=True,
+            )
+            if status is CurrentCandleIdentityStatus.MISSING_FROM_VIEW
+            else None
+        )
+        result = CurrentCandleIdentityResult(
+            status=status,
+            candidate_id=None,
+            source=(
+                CurrentCandleIdentitySource.TERMINAL_SLOT_EMPTY
+                if status is CurrentCandleIdentityStatus.MISSING_FROM_VIEW
+                else CurrentCandleIdentitySource.NONE
+            ),
+            terminal_region=terminal_region,
+            estimated_pitch_px=12.0,
+            continuity_generation=1,
+            evidence=evidence,
+            diagnostics=("shadow_only",),
+        )
+        self.resolution = CurrentCandleIdentityResolution(
+            result=result,
+            trace=CurrentCandleIdentityTrace(
+                frame_id=7,
+                wall_timestamp=datetime(2026, 8, 24, 12, 0, tzinfo=UTC),
+                monotonic_timestamp=123.5,
+                source_key="win32_hwnd:99",
+                session_key="session-a",
+                status=status,
+                internal_state=CurrentCandleIdentityLifecycle.BOOTSTRAPPING,
+                continuity_generation=1,
+                legacy_latest_candidate_id=None,
+                terminal_region=terminal_region,
+                estimated_pitch_px=12.0,
+                sequence_match=None,
+                rollover_suspected=False,
+                rollover_confirmed=False,
+                chosen_candidate_id=None,
+                missing_evidence=None,
+                reset_reason=None,
+                expiry_evidence_consistent=None,
+                expiry_vertical_line_x=None,
+                expiry_vertical_line_conflict=False,
+                diagnostics=("shadow_only",),
+            ),
+        )
+        self.received_metadata = None
+        self.received_market_analysis = None
+        self.started_sessions: list[str] = []
+        self.stop_calls = 0
+
+    def start_session(self, *, session_key: str) -> None:
+        self.started_sessions.append(session_key)
+
+    def stop_session(self) -> None:
+        self.stop_calls += 1
+
+    def resolve(self, *, metadata, market_analysis):
+        self.received_metadata = metadata
+        self.received_market_analysis = market_analysis
+        return self.resolution
+
+
+class OperationalFailureCurrentCandleIdentityResolver:
+    def __init__(self) -> None:
+        self.lifecycle = CurrentCandleIdentityLifecycle.BOOTSTRAPPING
+        self.continuity_generation = 0
+
+    def start_session(self, *, source_key: str, session_key: str) -> None:
+        self.continuity_generation += 1
+
+    def stop_session(self) -> None:
+        self.continuity_generation += 1
+
+    def reset(self, reason: CurrentCandleIdentityResetReason) -> None:
+        assert reason is CurrentCandleIdentityResetReason.INTERNAL_ERROR
+        self.continuity_generation += 1
+
+    def resolve_with_trace(self, *, frame_context):
+        raise OSError("shadow instrumentation failed")
+
+
 def _visual_series() -> CandleSeries:
 
     return CandleSeries(
@@ -188,6 +303,183 @@ def _indicators() -> IndicatorSnapshot:
             ),
         ),
     )
+
+
+@pytest.mark.parametrize(
+    "identity_status",
+    (
+        CurrentCandleIdentityStatus.UNAVAILABLE,
+        CurrentCandleIdentityStatus.AMBIGUOUS,
+        CurrentCandleIdentityStatus.MISSING_FROM_VIEW,
+    ),
+)
+def test_current_candle_identity_remains_shadow_only(
+    identity_status: CurrentCandleIdentityStatus,
+) -> None:
+    extraction = CurrentVisualPriceExtraction(
+        price=CurrentVisualPrice(50.0, 0.5, 100, 100, "test", 0.9),
+        status=CurrentVisualPriceStatus.OK,
+        candidate_count=1,
+        selected_x=90.0,
+        selected_y=50.0,
+        confidence=0.9,
+    )
+    base_series = _visual_series()
+    analysis = MarketAnalysis(
+        series=CandleSeries(
+            candles=(
+                *base_series.candles,
+                ClassifiedCandle(
+                    candidate=CandleCandidate(
+                        x=30,
+                        y=30,
+                        width=5,
+                        height=20,
+                        area=100,
+                        geometry=CandleGeometry(
+                            high_y=30,
+                            body_top_y=35,
+                            body_bottom_y=44,
+                            low_y=49,
+                        ),
+                    ),
+                    candle_type=CandleType.BULLISH,
+                ),
+            ),
+        ),
+        trend=TrendDirection.BULLISH,
+        current_visual_price=extraction,
+    )
+    profile = StrategyProfile.otc_precision_10s()
+    shadow = FakeCurrentCandleIdentityShadow(identity_status)
+    shadow_pipeline = VisualStrategySignalAnalysisPipeline(
+        market_analysis_pipeline=FakeMarketAnalysisPipeline(analysis),
+        indicator_snapshot_builder=FakeVisualIndicatorSnapshotBuilder(None),
+        signal_generator=FakeStrategySignalGenerator(
+            MarketSignal.neutral("not called")
+        ),
+        profile=profile,
+        current_candle_identity_shadow=shadow,  # type: ignore[arg-type]
+    )
+    legacy_pipeline = VisualStrategySignalAnalysisPipeline(
+        market_analysis_pipeline=FakeMarketAnalysisPipeline(analysis),
+        indicator_snapshot_builder=FakeVisualIndicatorSnapshotBuilder(None),
+        signal_generator=FakeStrategySignalGenerator(
+            MarketSignal.neutral("not called")
+        ),
+        profile=profile,
+    )
+    image = np.zeros((100, 100, 3), dtype=np.uint8)
+
+    legacy_signal = legacy_pipeline.analyze(image=image)
+    shadow_pipeline.start_session(session_key="session-a")
+    shadow_signal = shadow_pipeline.analyze(
+        image=image,
+        frame_id=7,
+        frame_timestamp=datetime(2026, 8, 24, 12, 0, tzinfo=UTC),
+        monotonic_timestamp=123.5,
+        source_key="win32_hwnd:99",
+        session_key="session-a",
+    )
+
+    assert shadow_signal == legacy_signal
+    assert shadow_pipeline.last_price_reference_result == (
+        legacy_pipeline.last_price_reference_result
+    )
+    assert shadow_pipeline.last_price_reference_result is not None
+    assert shadow_pipeline.last_price_reference_result.status is (
+        VisualPriceReferenceStatus.CURRENT_CLOSE_NOT_OBSERVABLE
+    )
+    assert shadow_pipeline.last_current_visual_price is extraction
+    assert legacy_pipeline.last_current_visual_price is extraction
+    assert shadow_pipeline.last_market_analysis is analysis
+    assert shadow_pipeline.last_market_analysis.series.latest is (
+        analysis.series.latest
+    )
+    assert shadow.received_market_analysis is analysis
+    assert shadow.received_metadata.frame_id == 7
+    assert shadow.received_metadata.roi_width == 100
+    assert shadow.received_metadata.roi_height == 100
+    assert shadow_pipeline.last_current_candle_identity_resolution is (
+        shadow.resolution
+    )
+    assert shadow_pipeline.last_current_candle_identity_result is (
+        shadow.resolution.result
+    )
+    assert shadow_pipeline.last_current_candle_identity is (
+        shadow.resolution.result
+    )
+    assert shadow_pipeline.last_current_candle_identity_trace is (
+        shadow.resolution.trace
+    )
+
+    shadow_pipeline.stop_session()
+    assert shadow.stop_calls == 1
+    assert shadow_pipeline.last_current_candle_identity_resolution is (
+        shadow.resolution
+    )
+
+
+def test_operational_identity_failure_does_not_change_legacy_analysis() -> None:
+    extraction = CurrentVisualPriceExtraction(
+        price=CurrentVisualPrice(50.0, 0.5, 100, 100, "test", 0.9),
+        status=CurrentVisualPriceStatus.OK,
+        candidate_count=1,
+        selected_x=90.0,
+        selected_y=50.0,
+        confidence=0.9,
+    )
+    analysis = MarketAnalysis(
+        series=_visual_series(),
+        trend=TrendDirection.BULLISH,
+        current_visual_price=extraction,
+    )
+    profile = StrategyProfile.otc_precision_10s()
+    resolver = OperationalFailureCurrentCandleIdentityResolver()
+    identity_shadow = CurrentCandleIdentityRuntimeShadow(
+        resolver=resolver,  # type: ignore[arg-type]
+    )
+    shadow_pipeline = VisualStrategySignalAnalysisPipeline(
+        market_analysis_pipeline=FakeMarketAnalysisPipeline(analysis),
+        indicator_snapshot_builder=FakeVisualIndicatorSnapshotBuilder(None),
+        signal_generator=FakeStrategySignalGenerator(
+            MarketSignal.neutral("not called")
+        ),
+        profile=profile,
+        current_candle_identity_shadow=identity_shadow,
+    )
+    legacy_pipeline = VisualStrategySignalAnalysisPipeline(
+        market_analysis_pipeline=FakeMarketAnalysisPipeline(analysis),
+        indicator_snapshot_builder=FakeVisualIndicatorSnapshotBuilder(None),
+        signal_generator=FakeStrategySignalGenerator(
+            MarketSignal.neutral("not called")
+        ),
+        profile=profile,
+    )
+    image = np.zeros((100, 100, 3), dtype=np.uint8)
+
+    expected_signal = legacy_pipeline.analyze(image=image)
+    shadow_pipeline.start_session(session_key="session-a")
+    actual_signal = shadow_pipeline.analyze(
+        image=image,
+        frame_id=7,
+        frame_timestamp=datetime(2026, 8, 24, 12, 0, tzinfo=UTC),
+        monotonic_timestamp=123.5,
+        source_key="win32_hwnd:99",
+        session_key="session-a",
+    )
+
+    assert actual_signal == expected_signal
+    assert shadow_pipeline.last_price_reference_result == (
+        legacy_pipeline.last_price_reference_result
+    )
+    assert shadow_pipeline.last_current_visual_price is extraction
+    assert legacy_pipeline.last_current_visual_price is extraction
+    assert shadow_pipeline.last_current_candle_identity is not None
+    assert shadow_pipeline.last_current_candle_identity.status is (
+        CurrentCandleIdentityStatus.UNAVAILABLE
+    )
+    assert resolver.lifecycle is CurrentCandleIdentityLifecycle.BOOTSTRAPPING
 
 
 def test_analyze_generates_signal_from_visual_indicators() -> None:

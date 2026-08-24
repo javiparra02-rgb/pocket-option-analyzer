@@ -74,6 +74,14 @@ class SynchronizedCaptureService(FakeCaptureService):
 class FakeAnalysisUseCase:
     def __init__(self) -> None:
         self.received_frames = []
+        self.started_sessions: list[str] = []
+        self.stop_session_calls = 0
+
+    def start_session(self, *, session_key: str) -> None:
+        self.started_sessions.append(session_key)
+
+    def stop_session(self) -> None:
+        self.stop_session_calls += 1
 
     def execute(
         self,
@@ -90,6 +98,11 @@ class FakeAnalysisUseCase:
             created_at=frame.captured_at,
             source="test_loop",
         )
+
+
+class FailingAnalysisUseCase(FakeAnalysisUseCase):
+    def execute(self, frame) -> SignalRecord:
+        raise RuntimeError("analysis failed")
 
 
 class FakeSleep:
@@ -133,6 +146,7 @@ def test_run_once_captures_analyzes_and_returns_record() -> None:
     service = FrameAnalysisLoopService(
         capture_service=capture_service,
         analysis_use_case=analysis_use_case,
+        session_key_factory=lambda: "one-shot-session",
     )
 
     record = service.run_once()
@@ -143,6 +157,8 @@ def test_run_once_captures_analyzes_and_returns_record() -> None:
     assert analysis_use_case.received_frames == [
         frame,
     ]
+    assert analysis_use_case.started_sessions == ["one-shot-session"]
+    assert analysis_use_case.stop_session_calls == 1
 
 
 def test_run_once_returns_none_when_capture_has_no_frame() -> None:
@@ -155,12 +171,15 @@ def test_run_once_returns_none_when_capture_has_no_frame() -> None:
     service = FrameAnalysisLoopService(
         capture_service=capture_service,
         analysis_use_case=analysis_use_case,
+        session_key_factory=lambda: "empty-one-shot",
     )
 
     record = service.run_once()
 
     assert record is None
     assert analysis_use_case.received_frames == []
+    assert analysis_use_case.started_sessions == ["empty-one-shot"]
+    assert analysis_use_case.stop_session_calls == 1
 
 
 def test_start_runs_until_max_iterations() -> None:
@@ -182,6 +201,7 @@ def test_start_runs_until_max_iterations() -> None:
         analysis_use_case=analysis_use_case,
         interval_seconds=0.5,
         sleep_function=sleep,
+        session_key_factory=lambda: "continuous-session",
     )
 
     service.start(
@@ -195,6 +215,8 @@ def test_start_runs_until_max_iterations() -> None:
         0.5,
         0.5,
     ]
+    assert analysis_use_case.started_sessions == ["continuous-session"]
+    assert analysis_use_case.stop_session_calls == 1
 
 
 def test_service_rejects_negative_interval() -> None:
@@ -261,6 +283,11 @@ def test_stop_interrupts_default_wait_and_service_can_restart() -> None:
     assert service.is_running is False
     assert capture_service.capture_calls == 2
     assert len(analysis_use_case.received_frames) == 2
+    assert len(analysis_use_case.started_sessions) == 2
+    assert analysis_use_case.started_sessions[0] != (
+        analysis_use_case.started_sessions[1]
+    )
+    assert analysis_use_case.stop_session_calls == 2
 
 
 def test_service_ignores_concurrent_start() -> None:
@@ -309,3 +336,19 @@ def test_service_ignores_concurrent_start() -> None:
 
     assert not service_thread.is_alive()
     assert service.is_running is False
+
+
+def test_session_is_stopped_when_analysis_raises() -> None:
+    analysis_use_case = FailingAnalysisUseCase()
+    service = FrameAnalysisLoopService(
+        capture_service=FakeCaptureService(frames=[_frame()]),
+        analysis_use_case=analysis_use_case,
+        session_key_factory=lambda: "failed-session",
+    )
+
+    with pytest.raises(RuntimeError, match="analysis failed"):
+        service.start(max_iterations=1)
+
+    assert service.is_running is False
+    assert analysis_use_case.started_sessions == ["failed-session"]
+    assert analysis_use_case.stop_session_calls == 1

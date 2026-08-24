@@ -66,6 +66,16 @@ class VisualSignalRecordingPipeline:
         self._observation_recorder = observation_recorder
         self._visual_evidence_recorder = visual_evidence_recorder
 
+    def start_session(self, *, session_key: str) -> None:
+        """Start session-scoped shadow state in the analysis pipeline."""
+
+        self._analysis_pipeline.start_session(session_key=session_key)
+
+    def stop_session(self) -> None:
+        """Stop session-scoped shadow state after the last frame completes."""
+
+        self._analysis_pipeline.stop_session()
+
     def analyze_and_record(
         self,
         image: np.ndarray,
@@ -75,20 +85,28 @@ class VisualSignalRecordingPipeline:
         chart_region: ChartRegion | None = None,
         price_observation_region: ChartRegion | None = None,
         frame_id: int | None = None,
+        monotonic_timestamp: float | None = None,
+        source_key: str | None = None,
+        session_key: str | None = None,
     ) -> SignalRecord:
         """
         Analiza una imagen y registra la decisión del gate.
         """
+
+        resolved_created_at = created_at or datetime.now(
+            UTC,
+        )
 
         signal = self._analysis_pipeline.analyze(
             image=image,
             price_observation_image=price_observation_image,
             chart_region=chart_region,
             price_observation_region=price_observation_region,
-        )
-
-        resolved_created_at = created_at or datetime.now(
-            UTC,
+            frame_id=frame_id,
+            frame_timestamp=resolved_created_at,
+            monotonic_timestamp=monotonic_timestamp,
+            source_key=source_key,
+            session_key=session_key,
         )
 
         evidence_associations = (

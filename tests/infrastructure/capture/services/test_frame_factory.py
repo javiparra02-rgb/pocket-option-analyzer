@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import numpy as np
 
 from pocket_option_analyzer.infrastructure.capture import FrameFactory
@@ -85,3 +87,20 @@ def test_frame_factory_creates_timezone_aware_utc_timestamp() -> None:
     assert frame.timestamp.tzinfo is not None
     assert frame.timestamp.utcoffset() is not None
     assert frame.timestamp.utcoffset().total_seconds() == 0
+
+
+def test_frame_factory_preserves_wall_monotonic_and_source_metadata() -> None:
+    captured_at = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+    factory = FrameFactory(
+        wall_clock=lambda: captured_at,
+        monotonic_clock_ns=lambda: 12_345_678_900,
+    )
+
+    frame = factory.create(
+        np.zeros((10, 10, 4), dtype=np.uint8),
+        source_key="win32_hwnd:123",
+    )
+
+    assert frame.timestamp is captured_at
+    assert frame.monotonic_timestamp_ns == 12_345_678_900
+    assert frame.source_key == "win32_hwnd:123"

@@ -19,6 +19,8 @@ class FakeFrameAnalysisLoop:
         self.run_once_calls = 0
         self.start_calls = []
         self.stop_calls = 0
+        self.start_session_calls = 0
+        self.stop_session_calls = 0
 
     @property
     def is_running(self) -> bool:
@@ -48,6 +50,13 @@ class FakeFrameAnalysisLoop:
     ) -> None:
         self._is_running = True
         self.start_calls.append(max_iterations)
+
+    def start_session(self) -> bool:
+        self.start_session_calls += 1
+        return True
+
+    def stop_session(self) -> None:
+        self.stop_session_calls += 1
 
     def stop(self) -> None:
         self._is_running = False
@@ -87,6 +96,17 @@ def test_runtime_service_delegates_start() -> None:
     assert loop.start_calls == [
         3,
     ]
+
+
+def test_runtime_service_delegates_session_lifecycle() -> None:
+    loop = FakeFrameAnalysisLoop()
+    service = AnalysisRuntimeService(loop_service=loop)
+
+    assert service.start_session() is True
+    service.stop_session()
+
+    assert loop.start_session_calls == 1
+    assert loop.stop_session_calls == 1
 
 
 def test_runtime_service_delegates_stop() -> None:

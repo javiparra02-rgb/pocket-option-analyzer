@@ -25,6 +25,11 @@ from .current_candle_identity import (
 )
 from .current_candle_identity_matcher import CurrentCandleIdentityMatcher
 from .current_candle_identity_resolver import CurrentCandleIdentityResolver
+from .current_candle_identity_runtime_shadow import (
+    CurrentCandleIdentityFrameContextBuilder,
+    CurrentCandleIdentityFrameMetadata,
+    CurrentCandleIdentityRuntimeShadow,
+)
 from .visual_entry_context import VisualEntryContext
 from .visual_entry_context_analyzer import VisualEntryContextAnalyzer
 from .visual_indicator_snapshot_builder import VisualIndicatorSnapshotBuilder
@@ -40,9 +45,12 @@ __all__ = [
     "CurrentCandleIdentityEvidence",
     "CurrentCandleIdentityLifecycle",
     "CurrentCandleIdentityMatcher",
+    "CurrentCandleIdentityFrameContextBuilder",
+    "CurrentCandleIdentityFrameMetadata",
     "CurrentCandleIdentityResetReason",
     "CurrentCandleIdentityResolution",
     "CurrentCandleIdentityResolver",
+    "CurrentCandleIdentityRuntimeShadow",
     "CurrentCandleIdentityResult",
     "CurrentCandleIdentitySource",
     "CurrentCandleIdentityStatus",

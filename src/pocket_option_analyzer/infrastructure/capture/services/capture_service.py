@@ -157,6 +157,7 @@ class CaptureService:
             price_observation_image=price_observation_image,
             chart_region=region,
             price_observation_region=price_observation_region,
+            source_key=f"win32_hwnd:{window.hwnd}",
         )
 
         self._frame_buffer.append(

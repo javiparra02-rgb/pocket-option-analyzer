@@ -42,6 +42,23 @@ class AnalyzeCapturedFrameUseCase:
     ) -> None:
         self._pipeline = pipeline
         self._source = source
+        self._session_key: str | None = None
+
+    def start_session(self, *, session_key: str) -> None:
+        """Start a fresh continuous-analysis session."""
+
+        if not session_key:
+            raise ValueError("session_key cannot be empty.")
+        self._pipeline.start_session(session_key=session_key)
+        self._session_key = session_key
+
+    def stop_session(self) -> None:
+        """Stop and clear all session-scoped analysis state."""
+
+        try:
+            self._pipeline.stop_session()
+        finally:
+            self._session_key = None
 
     def execute(
         self,
@@ -51,7 +68,21 @@ class AnalyzeCapturedFrameUseCase:
         Analiza el frame capturado y devuelve el registro de señal.
         """
 
-        arguments = dict(
+        created_at = self._resolve_created_at(frame)
+        frame_id = getattr(frame, "frame_id", None)
+        monotonic_timestamp = self._resolve_monotonic_timestamp(frame)
+        source_key = self._resolve_source_key(frame)
+        identity_session_key = (
+            self._session_key
+            if (
+                frame_id is not None
+                and created_at is not None
+                and monotonic_timestamp is not None
+                and source_key is not None
+            )
+            else None
+        )
+        return self._pipeline.analyze_and_record(
             image=frame.image,
             price_observation_image=getattr(
                 frame,
@@ -68,13 +99,33 @@ class AnalyzeCapturedFrameUseCase:
                 "price_observation_region",
                 None,
             ),
-            created_at=self._resolve_created_at(frame),
+            created_at=created_at,
             source=self._source,
+            frame_id=frame_id,
+            monotonic_timestamp=monotonic_timestamp,
+            source_key=source_key,
+            session_key=identity_session_key,
         )
-        frame_id = getattr(frame, "frame_id", None)
-        if frame_id is not None:
-            arguments["frame_id"] = frame_id
-        return self._pipeline.analyze_and_record(**arguments)
+
+    @staticmethod
+    def _resolve_monotonic_timestamp(frame: FrameLike) -> float | None:
+        timestamp_ns = getattr(frame, "monotonic_timestamp_ns", None)
+        if timestamp_ns is None:
+            return None
+        if not isinstance(timestamp_ns, int) or timestamp_ns < 0:
+            raise ValueError(
+                "Frame monotonic_timestamp_ns must be a non-negative integer."
+            )
+        return timestamp_ns / 1_000_000_000
+
+    @staticmethod
+    def _resolve_source_key(frame: FrameLike) -> str | None:
+        source_key = getattr(frame, "source_key", None)
+        if source_key is None:
+            return None
+        if not isinstance(source_key, str) or not source_key:
+            raise ValueError("Frame source_key must be a non-empty string.")
+        return source_key
 
     def _resolve_created_at(
         self,

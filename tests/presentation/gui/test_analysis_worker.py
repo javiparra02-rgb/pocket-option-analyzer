@@ -21,10 +21,21 @@ class FakeRuntimeService:
         self,
         records,
         error: Exception | None = None,
+        owns_session: bool = True,
     ) -> None:
         self._records = list(records)
         self._error = error
+        self._owns_session = owns_session
         self.run_once_calls = 0
+        self.start_session_calls = 0
+        self.stop_session_calls = 0
+
+    def start_session(self) -> bool:
+        self.start_session_calls += 1
+        return self._owns_session
+
+    def stop_session(self) -> None:
+        self.stop_session_calls += 1
 
     def run_once(self):
         self.run_once_calls += 1
@@ -51,6 +62,15 @@ class BlockingRuntimeService:
     ) -> None:
         self.run_once_calls = 0
         self.first_iteration_completed = Event()
+        self.start_session_calls = 0
+        self.stop_session_calls = 0
+
+    def start_session(self) -> bool:
+        self.start_session_calls += 1
+        return True
+
+    def stop_session(self) -> None:
+        self.stop_session_calls += 1
 
     def run_once(
         self,
@@ -161,16 +181,17 @@ def test_worker_emits_records_and_running_state() -> None:
 
     sleep = FakeSleep()
     collector = SignalCollector()
+    runtime = FakeRuntimeService(
+        records=[
+            _record(),
+            _record(
+                direction=SignalDirection.PUT,
+            ),
+        ],
+    )
 
     worker = AnalysisWorker(
-        runtime_service=FakeRuntimeService(
-            records=[
-                _record(),
-                _record(
-                    direction=SignalDirection.PUT,
-                ),
-            ],
-        ),
+        runtime_service=runtime,
         interval_seconds=0.5,
         sleep_function=sleep,
     )
@@ -193,6 +214,8 @@ def test_worker_emits_records_and_running_state() -> None:
         False,
     ]
     assert collector.finished_calls == 1
+    assert runtime.start_session_calls == 1
+    assert runtime.stop_session_calls == 1
     assert sleep.calls == [
         0.5,
     ]
@@ -266,12 +289,13 @@ def test_worker_can_be_stopped_from_sleep_callback() -> None:
 def test_worker_emits_error_and_finishes() -> None:
 
     collector = SignalCollector()
+    runtime = FakeRuntimeService(
+        records=[],
+        error=RuntimeError("capture failed"),
+    )
 
     worker = AnalysisWorker(
-        runtime_service=FakeRuntimeService(
-            records=[],
-            error=RuntimeError("capture failed"),
-        ),
+        runtime_service=runtime,
         interval_seconds=0.0,
         sleep_function=FakeSleep(),
     )
@@ -288,6 +312,22 @@ def test_worker_emits_error_and_finishes() -> None:
         "capture failed",
     ]
     assert collector.finished_calls == 1
+    assert runtime.start_session_calls == 1
+    assert runtime.stop_session_calls == 1
+
+
+def test_worker_does_not_stop_session_owned_by_another_controller() -> None:
+    runtime = FakeRuntimeService(records=[None], owns_session=False)
+    worker = AnalysisWorker(
+        runtime_service=runtime,
+        interval_seconds=0.0,
+        sleep_function=FakeSleep(),
+    )
+
+    worker.run(max_iterations=1)
+
+    assert runtime.start_session_calls == 1
+    assert runtime.stop_session_calls == 0
 
 
 def test_worker_rejects_negative_interval() -> None:

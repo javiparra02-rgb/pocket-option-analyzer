@@ -227,6 +227,8 @@ def test_capture_once_derives_independent_rois_from_one_capture() -> None:
     frame = service.capture_once()
 
     assert frame is not None
+    assert frame.source_key == "win32_hwnd:123"
+    assert frame.monotonic_timestamp_ns is not None
     assert frame.price_observation_image is not None
     assert capture.capture_calls == 1
     assert chart_extractor.received_images == [source_image]

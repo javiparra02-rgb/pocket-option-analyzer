@@ -25,6 +25,12 @@ class FrameAnalysisLoop(Protocol):
         Ejecuta un ciclo único de captura/análisis.
         """
 
+    def start_session(self) -> bool:
+        """Start a logical analysis session if none is active."""
+
+    def stop_session(self) -> None:
+        """Stop the active logical analysis session."""
+
     def start(
         self,
         max_iterations: int | None = None,
@@ -71,6 +77,16 @@ class AnalysisRuntimeService:
         """
 
         return self._loop_service.run_once()
+
+    def start_session(self) -> bool:
+        """Start session-scoped runtime analysis state."""
+
+        return self._loop_service.start_session()
+
+    def stop_session(self) -> None:
+        """Stop session-scoped state after the current frame completes."""
+
+        self._loop_service.stop_session()
 
     def start(
         self,

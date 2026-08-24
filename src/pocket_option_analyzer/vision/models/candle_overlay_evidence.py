@@ -25,6 +25,9 @@ class CandleOverlayEvidence:
     cap_height_to_width_ratio: float
     wickless: bool | None
     diagnostic: str
+    vertical_line_x: int | None = None
+    vertical_line_start_y: int | None = None
+    vertical_line_end_y: int | None = None
 
     def __post_init__(self) -> None:
         if not self.candidate_id:
@@ -53,6 +56,31 @@ class CandleOverlayEvidence:
                 )
         if not self.diagnostic:
             raise ValueError("diagnostic no puede estar vacío.")
+        line_coordinates = (
+            self.vertical_line_x,
+            self.vertical_line_start_y,
+            self.vertical_line_end_y,
+        )
+        some_coordinates_available = any(
+            value is not None for value in line_coordinates
+        )
+        coordinates_available = all(value is not None for value in line_coordinates)
+        if some_coordinates_available and not coordinates_available:
+            raise ValueError(
+                "La geometría de línea debe estar disponible conjuntamente."
+            )
+        if coordinates_available:
+            assert self.vertical_line_x is not None
+            assert self.vertical_line_start_y is not None
+            assert self.vertical_line_end_y is not None
+            if min(
+                self.vertical_line_x,
+                self.vertical_line_start_y,
+                self.vertical_line_end_y,
+            ) < 0:
+                raise ValueError("La geometría de línea no puede ser negativa.")
+            if self.vertical_line_start_y > self.vertical_line_end_y:
+                raise ValueError("La geometría vertical debe estar ordenada.")
         metrics_available = self.vertical_line_support_ratio is not None
         if metrics_available != (
             self.contact_gap_ratio is not None
@@ -70,6 +98,8 @@ class CandleOverlayEvidence:
             raise ValueError(
                 "Una evaluación completada debe conservar métricas de línea."
             )
+        if coordinates_available and not metrics_available:
+            raise ValueError("La geometría requiere métricas de línea disponibles.")
 
 
 @dataclass(frozen=True, slots=True)

@@ -20,6 +20,8 @@ class Frame:
     price_observation_image: np.ndarray | None = None
     chart_region: ChartRegion | None = None
     price_observation_region: ChartRegion | None = None
+    monotonic_timestamp_ns: int | None = None
+    source_key: str | None = None
 
     @property
     def width(self) -> int:

@@ -208,12 +208,23 @@ class _AnalysisPipeline:
         )
         self.last_visual_price_comparison_context = None
 
+    def start_session(self, *, session_key: str) -> None:
+        pass
+
+    def stop_session(self) -> None:
+        pass
+
     def analyze(
         self,
         image,
         price_observation_image=None,
         chart_region=None,
         price_observation_region=None,
+        frame_id=None,
+        frame_timestamp=None,
+        monotonic_timestamp=None,
+        source_key=None,
+        session_key=None,
     ) -> MarketSignal:
         return MarketSignal(
             direction=SignalDirection.CALL,

@@ -6,6 +6,12 @@ from datetime import UTC, datetime
 
 import numpy as np
 
+from pocket_option_analyzer.application.market import (
+    CurrentCandleIdentityConfig,
+    CurrentCandleIdentityResolver,
+    CurrentCandleIdentityRuntimeShadow,
+    CurrentCandleIdentityStatus,
+)
 from pocket_option_analyzer.domain.indicators import (
     EmaSnapshot,
     IndicatorSnapshot,
@@ -19,6 +25,7 @@ from pocket_option_analyzer.domain.signals import (
 from pocket_option_analyzer.infrastructure.bootstrap import (
     SignalPipelineFactory,
 )
+from pocket_option_analyzer.infrastructure.capture.models import Frame
 from pocket_option_analyzer.infrastructure.evidence import (
     FilesystemVisualEvidenceRecorder,
 )
@@ -408,6 +415,53 @@ def test_factory_injects_expiry_overlay_evidence_resolver() -> None:
         pipeline._overlay_evidence_resolver,
         PocketOptionExpiryOverlayEvidenceResolver,
     )
+
+
+def test_factory_injects_one_always_on_in_memory_identity_shadow() -> None:
+    pipeline = SignalPipelineFactory.create_visual_signal_recording_pipeline()
+    second_pipeline = (
+        SignalPipelineFactory.create_visual_signal_recording_pipeline()
+    )
+    analysis_pipeline = pipeline._analysis_pipeline
+    shadow = analysis_pipeline.current_candle_identity_shadow
+    second_shadow = (
+        second_pipeline._analysis_pipeline.current_candle_identity_shadow
+    )
+
+    assert isinstance(shadow, CurrentCandleIdentityRuntimeShadow)
+    assert isinstance(shadow.resolver, CurrentCandleIdentityResolver)
+    assert shadow.resolver.config == CurrentCandleIdentityConfig()
+    assert shadow.last_resolution is None
+    assert second_shadow is not shadow
+    assert second_shadow.resolver is not shadow.resolver
+    assert pipeline._visual_evidence_recorder is None
+
+
+def test_factory_runtime_executes_identity_shadow_with_real_frame_metadata() -> None:
+    captured_at = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+    frame = Frame(
+        frame_id=17,
+        timestamp=captured_at,
+        monotonic_timestamp_ns=123_500_000_000,
+        source_key="win32_hwnd:321",
+        image=np.zeros((100, 1161, 3), dtype=np.uint8),
+    )
+    runtime = SignalPipelineFactory.create_analysis_runtime_service(
+        capture_service=FakeCaptureService(frames=[frame]),
+    )
+
+    runtime.run_once()
+
+    analysis_pipeline = (
+        runtime._loop_service._analysis_use_case._pipeline._analysis_pipeline
+    )
+    resolution = analysis_pipeline.last_current_candle_identity_resolution
+    assert resolution is not None
+    assert resolution.result.status is CurrentCandleIdentityStatus.UNAVAILABLE
+    assert resolution.trace.frame_id == 17
+    assert resolution.trace.wall_timestamp is captured_at
+    assert resolution.trace.monotonic_timestamp == 123.5
+    assert resolution.trace.source_key == "win32_hwnd:321"
 
 
 def test_visual_evidence_adapter_is_disabled_without_directory(tmp_path) -> None:

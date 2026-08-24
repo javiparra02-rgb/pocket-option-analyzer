@@ -89,8 +89,14 @@ class AnalysisWorker(QObject):
         )
 
         iterations = 0
+        owns_session = False
 
         try:
+            try:
+                owns_session = self._runtime_service.start_session()
+            except Exception as error:
+                self.error_occurred.emit(str(error))
+                return
             while not self._stop_event.is_set():
                 try:
                     guard_error = self._validate_iteration()
@@ -121,6 +127,11 @@ class AnalysisWorker(QObject):
                 if self._wait_for_next_iteration():
                     break
         finally:
+            if owns_session:
+                try:
+                    self._runtime_service.stop_session()
+                except Exception as error:
+                    self.error_occurred.emit(str(error))
             self._is_running = False
 
             self.running_changed.emit(

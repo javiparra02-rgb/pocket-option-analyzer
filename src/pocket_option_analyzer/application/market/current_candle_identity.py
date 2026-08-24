@@ -365,6 +365,10 @@ class CurrentCandleIdentityTrace:
     """Rich non-persisted diagnostic trace for later b15b2 stages."""
 
     frame_id: int
+    wall_timestamp: datetime
+    monotonic_timestamp: float
+    source_key: str
+    session_key: str
     status: CurrentCandleIdentityStatus
     internal_state: CurrentCandleIdentityLifecycle
     continuity_generation: int
@@ -378,11 +382,27 @@ class CurrentCandleIdentityTrace:
     missing_evidence: CurrentCandleMissingEvidence | None
     reset_reason: CurrentCandleIdentityResetReason | None
     expiry_evidence_consistent: bool | None
+    expiry_vertical_line_x: int | None
+    expiry_vertical_line_conflict: bool
     diagnostics: tuple[str, ...]
 
     def __post_init__(self) -> None:
         if self.frame_id < 0 or self.continuity_generation < 1:
             raise ValueError("Frame y generación deben ser válidos.")
+        if not isinstance(self.wall_timestamp, datetime):
+            raise TypeError("wall_timestamp debe ser datetime.")
+        if not isfinite(self.monotonic_timestamp) or self.monotonic_timestamp < 0:
+            raise ValueError("monotonic_timestamp debe ser finito y no negativo.")
+        if not self.source_key or not self.session_key:
+            raise ValueError("source_key y session_key no pueden estar vacíos.")
+        if self.expiry_vertical_line_x is not None and (
+            self.expiry_vertical_line_x < 0
+        ):
+            raise ValueError("expiry_vertical_line_x no puede ser negativo.")
+        if self.expiry_vertical_line_conflict and (
+            self.expiry_vertical_line_x is not None
+        ):
+            raise ValueError("Un conflicto expiry no puede elegir una X canónica.")
         if self.chosen_candidate_id is not None and not self.chosen_candidate_id:
             raise ValueError("chosen_candidate_id no puede estar vacío.")
         if self.rollover_confirmed and not self.rollover_suspected:
@@ -422,6 +442,8 @@ class CurrentCandleFrameContext:
     final_candles: tuple[FinalCandleTrace, ...]
     overlay_evidence: CandleOverlayEvidenceTrace | None = None
     expiry_evidence_consistent: bool | None = None
+    expiry_vertical_line_x: int | None = None
+    expiry_vertical_line_conflict: bool = False
 
     def __post_init__(self) -> None:
         if self.frame_id < 0:
@@ -434,6 +456,14 @@ class CurrentCandleFrameContext:
             raise ValueError("Las dimensiones del ROI deben ser positivas.")
         if not self.source_key or not self.session_key:
             raise ValueError("source_key y session_key no pueden estar vacíos.")
+        if self.expiry_vertical_line_x is not None and (
+            self.expiry_vertical_line_x < 0
+        ):
+            raise ValueError("expiry_vertical_line_x no puede ser negativo.")
+        if self.expiry_vertical_line_conflict and (
+            self.expiry_vertical_line_x is not None
+        ):
+            raise ValueError("Un conflicto expiry no puede elegir una X canónica.")
         final_ids = tuple(candle.candidate_id for candle in self.final_candles)
         if len(final_ids) != len(set(final_ids)):
             raise ValueError("final_candles no puede repetir candidate_id.")

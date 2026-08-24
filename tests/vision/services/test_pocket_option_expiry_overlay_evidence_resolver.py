@@ -107,6 +107,12 @@ def test_cap_attached_to_long_vertical_line_is_expiry_overlay() -> None:
     assert evidence.contact_gap_ratio <= 0.05
     assert evidence.horizontal_alignment_ratio is not None
     assert evidence.horizontal_alignment_ratio <= 0.05
+    assert evidence.vertical_line_x is not None
+    assert abs(evidence.vertical_line_x - candle.candidate.x) <= 1
+    assert evidence.vertical_line_start_y == (
+        candle.candidate.y + candle.candidate.height
+    )
+    assert evidence.vertical_line_end_y == 199
 
 
 def test_small_candle_without_line_has_no_overlay_evidence() -> None:
@@ -115,6 +121,9 @@ def test_small_candle_without_line_has_no_overlay_evidence() -> None:
     evidence = _resolve(_image_with_candidate(candle, line_x=None), candle)
 
     assert evidence.status is CandleOverlayEvidenceStatus.NO_EVIDENCE
+    assert evidence.vertical_line_x is None
+    assert evidence.vertical_line_start_y is None
+    assert evidence.vertical_line_end_y is None
 
 
 def test_wickless_candle_without_line_has_no_overlay_evidence() -> None:
@@ -287,6 +296,21 @@ def test_evidence_trace_rejects_unknown_or_misaligned_candidate_ids() -> None:
         CandleOverlayEvidenceTrace(
             evaluated_candidate_ids=("expected",),
             evidence=(evidence,),
+        )
+
+
+def test_overlay_evidence_requires_complete_line_geometry() -> None:
+    with pytest.raises(ValueError, match="conjuntamente"):
+        CandleOverlayEvidence(
+            candidate_id="candidate",
+            status=CandleOverlayEvidenceStatus.NO_EVIDENCE,
+            vertical_line_support_ratio=0.5,
+            contact_gap_ratio=0.0,
+            horizontal_alignment_ratio=0.0,
+            cap_height_to_width_ratio=1.0,
+            wickless=False,
+            diagnostic="test",
+            vertical_line_x=10,
         )
 
 
