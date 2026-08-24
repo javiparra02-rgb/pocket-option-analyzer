@@ -336,11 +336,20 @@ def test_session_03_expiry_caps_remain_visible_but_outside_membership() -> None:
             assert candidate_id not in trace.series_membership.member_candidate_ids
 
 
-def test_session_03_all_visual_references_remain_available() -> None:
+def test_session_03_observable_visual_references_remain_available() -> None:
+    results = _replay_session()
+
     assert all(
         result.reference_result.status is VisualPriceReferenceStatus.OK
-        for result in _replay_session()
+        for result in results
+        if result.oracle.frame_id != 200
     )
+    off_roi = _result(200).reference_result
+    assert off_roi.status is (
+        VisualPriceReferenceStatus.CURRENT_CLOSE_NOT_OBSERVABLE
+    )
+    assert off_roi.reference is None
+    assert off_roi.close_roi_y == 787
 
 
 def test_session_03_frame_63_repairs_only_expiry_overlay_membership() -> None:

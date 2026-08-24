@@ -10,6 +10,7 @@ from .candle_color_detector import CandleColorDetector
 from .candle_detection_pipeline import CandleDetectionPipeline
 from .candle_filter import CandleFilter
 from .candle_metrics_calculator import CandleMetricsCalculator
+from .candle_observability_analyzer import CandleObservabilityAnalyzer
 from .candle_segmenter import CandleSegmenter
 from .candle_series_builder import CandleSeriesBuilder
 from .candle_series_membership_resolver import CandleSeriesMembershipResolver
@@ -54,6 +55,7 @@ __all__ = [
     "CandleFilter",
     "CandleGeometryExtractor",
     "CandleMetricsCalculator",
+    "CandleObservabilityAnalyzer",
     "CandleSegmenter",
     "CandleSeriesBuilder",
     "CandleSeriesMembershipResolver",

@@ -5,14 +5,18 @@ import pytest
 from pocket_option_analyzer.application.signals import (
     VisualStrategySignalAnalysisPipeline,
 )
+from pocket_option_analyzer.application.strategy import VisualPriceReferenceResult
+from pocket_option_analyzer.infrastructure.evidence import VisualEvidenceSerializer
 from pocket_option_analyzer.vision.models import (
     CandleAnalysisResult,
+    CandleCandidate,
     CandleCandidateTrace,
     CandleDetectionResult,
     CandleDetectionTrace,
     CandleFilterConfigurationTrace,
     CandleFilterResult,
     CandleMergeTrace,
+    CandleObservability,
     CurrentVisualPriceAnalysis,
     CurrentVisualPriceCandidateTrace,
     CurrentVisualPriceDetectionTrace,
@@ -24,6 +28,7 @@ from pocket_option_analyzer.vision.services import (
     CandleAnalysisPipeline,
     CandleDetectionPipeline,
     CandleFilter,
+    CandleObservabilityAnalyzer,
     MarketAnalysisPipeline,
     PocketOptionCurrentVisualPriceExtractor,
 )
@@ -33,7 +38,9 @@ from pocket_option_analyzer.vision.services import (
     "model",
     (
         CandleCandidateTrace,
+        CandleCandidate,
         CandleMergeTrace,
+        CandleObservability,
         CandleFilterConfigurationTrace,
         FinalCandleTrace,
         CandleDetectionTrace,
@@ -45,6 +52,7 @@ from pocket_option_analyzer.vision.services import (
         CurrentVisualPriceDetectionTrace,
         CurrentVisualPriceAnalysis,
         MarketAnalysis,
+        VisualPriceReferenceResult,
     ),
 )
 def test_diagnostic_trace_model_type_hints_resolve_at_runtime(model: type) -> None:
@@ -68,7 +76,13 @@ def test_diagnostic_trace_public_return_types_resolve_at_runtime() -> None:
         is CurrentVisualPriceAnalysis
     )
     assert get_type_hints(MarketAnalysisPipeline.analyze)["return"] is MarketAnalysis
+    assert get_type_hints(CandleObservabilityAnalyzer.analyze)["return"] is (
+        CandleObservability
+    )
+    assert get_type_hints(CandleObservability.close_boundary_for)
+    assert get_type_hints(CandleObservability.fully_observable_close_for)
     assert get_type_hints(
         VisualStrategySignalAnalysisPipeline._price_reference_analysis
     )
     assert get_type_hints(VisualStrategySignalAnalysisPipeline._with_reference_roles)
+    assert get_type_hints(VisualEvidenceSerializer._observability_to_dict)

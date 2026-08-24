@@ -10,8 +10,10 @@ from pocket_option_analyzer.vision.models import (
     CandleFilterConfigurationTrace,
     CandleFilterDiagnostics,
     CandleMergeTrace,
+    CandleObservability,
     CandleOverlayEvidenceTrace,
     CandleSeriesMembershipTrace,
+    CandleType,
     ChartRegion,
     CurrentVisualPriceDetectionTrace,
     CurrentVisualPriceExtraction,
@@ -331,6 +333,10 @@ class VisualEvidenceSerializer:
             "body_top_y": candle.body_top_y,
             "body_bottom_y": candle.body_bottom_y,
             "low_y": candle.low_y,
+            "observability": VisualEvidenceSerializer._observability_to_dict(
+                candle.observability,
+                candle.candle_type,
+            ),
             "is_latest": candle.is_latest,
             "is_anchor": candle.is_anchor,
             "anchor_index": candle.anchor_index,
@@ -338,6 +344,28 @@ class VisualEvidenceSerializer:
                 candle.anchor_exclusion_reason.value
                 if candle.anchor_exclusion_reason is not None
                 else None
+            ),
+        }
+
+    @staticmethod
+    def _observability_to_dict(
+        observability: CandleObservability | None,
+        candle_type: CandleType,
+    ) -> dict[str, Any] | None:
+        if observability is None:
+            return None
+        close_boundary = observability.close_boundary_for(candle_type)
+        return {
+            "roi_height": observability.roi_height,
+            "body_top_y": observability.body_top_y,
+            "body_bottom_y": observability.body_bottom_y,
+            "body_touches_top": observability.body_touches_top,
+            "body_touches_bottom": observability.body_touches_bottom,
+            "close_boundary": (
+                close_boundary.value if close_boundary is not None else None
+            ),
+            "fully_observable_close": observability.fully_observable_close_for(
+                candle_type
             ),
         }
 

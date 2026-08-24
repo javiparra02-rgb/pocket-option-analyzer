@@ -7,6 +7,7 @@ from math import isfinite
 from .candle_candidate import CandleCandidate
 from .candle_color import CandleColor
 from .candle_geometry import CandleGeometry
+from .candle_observability import CandleObservability
 from .candle_overlay_evidence import CandleOverlayEvidenceTrace
 from .candle_series_membership import CandleSeriesMembershipTrace
 from .candle_type import CandleType
@@ -188,6 +189,7 @@ class FinalCandleTrace:
     candle_type: CandleType
     geometry: CandleGeometry | None
     is_latest: bool
+    observability: CandleObservability | None = None
     is_anchor: bool = False
     anchor_index: int | None = None
     anchor_exclusion_reason: CandleAnchorExclusionReason | None = (
@@ -207,6 +209,14 @@ class FinalCandleTrace:
             raise ValueError("La geometría diagnóstica no puede ser negativa.")
         if self.is_latest and self.is_anchor:
             raise ValueError("Una candle no puede ser latest y anchor simultáneamente.")
+        if self.observability is not None:
+            if self.geometry is None:
+                raise ValueError("observability requiere geometry.")
+            if (
+                self.observability.body_top_y != self.geometry.body_top_y
+                or self.observability.body_bottom_y != self.geometry.body_bottom_y
+            ):
+                raise ValueError("observability debe coincidir con geometry.")
         if self.is_anchor != (self.anchor_index is not None):
             raise ValueError("anchor_index debe existir exactamente para los anchors.")
         if self.anchor_index is not None and self.anchor_index < 0:

@@ -27,6 +27,9 @@ from pocket_option_analyzer.vision.services.candle_filter import (
 from pocket_option_analyzer.vision.services.candle_geometry_extractor import (
     CandleGeometryExtractor,
 )
+from pocket_option_analyzer.vision.services.candle_observability_analyzer import (
+    CandleObservabilityAnalyzer,
+)
 from pocket_option_analyzer.vision.services.candle_segmenter import (
     CandleSegmenter,
 )
@@ -47,12 +50,16 @@ class CandleDetectionPipeline:
         candle_filter: CandleFilter,
         color_detector: CandleColorDetector | None = None,
         geometry_extractor: CandleGeometryExtractor | None = None,
+        observability_analyzer: CandleObservabilityAnalyzer | None = None,
     ) -> None:
         self._mask_builder = mask_builder
         self._segmenter = segmenter
         self._filter = candle_filter
         self._color_detector = color_detector
         self._geometry_extractor = geometry_extractor
+        self._observability_analyzer = (
+            observability_analyzer or CandleObservabilityAnalyzer()
+        )
 
     @property
     def last_filter_diagnostics(
@@ -193,6 +200,7 @@ class CandleDetectionPipeline:
                     area=candidate.area,
                     color=color,
                     geometry=candidate.geometry,
+                    observability=candidate.observability,
                 )
             )
 
@@ -217,6 +225,14 @@ class CandleDetectionPipeline:
                 mask=mask,
                 candidate=candidate,
             )
+            observability = (
+                self._observability_analyzer.analyze(
+                    geometry=geometry,
+                    roi_height=int(mask.shape[0]),
+                )
+                if geometry is not None
+                else None
+            )
 
             enriched_candidates.append(
                 CandleCandidate(
@@ -227,6 +243,7 @@ class CandleDetectionPipeline:
                     area=candidate.area,
                     color=candidate.color,
                     geometry=geometry,
+                    observability=observability,
                 )
             )
 

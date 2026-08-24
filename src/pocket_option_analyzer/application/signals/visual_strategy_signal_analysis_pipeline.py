@@ -446,6 +446,30 @@ class VisualStrategySignalAnalysisPipeline:
 
         raw_normalized_close = (chart_bottom_roi_y - close_roi_y) / chart_range_roi_px
 
+        observability = latest_candidate.observability
+        if (
+            observability is None
+            or observability.fully_observable_close_for(latest.candle_type) is not True
+        ):
+            return _VisualPriceReferenceAnalysis(
+                result=VisualPriceReferenceResult(
+                    reference=None,
+                    status=(
+                        VisualPriceReferenceStatus.CURRENT_CLOSE_NOT_OBSERVABLE
+                    ),
+                    anchor_count=len(anchor_candles),
+                    latest_candle_type=latest.candle_type.value,
+                    latest_candidate_x=latest_candidate.x,
+                    latest_candidate_y=latest_candidate.y,
+                    close_roi_y=close_roi_y,
+                    anchor_top_roi_y=chart_top_roi_y,
+                    anchor_bottom_roi_y=chart_bottom_roi_y,
+                    raw_normalized_close=raw_normalized_close,
+                ),
+                latest=latest,
+                anchors=anchor_candles,
+            )
+
         def normalize(
             roi_y: int,
         ) -> float:

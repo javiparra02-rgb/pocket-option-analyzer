@@ -223,6 +223,7 @@ class MarketAnalysisPipeline:
                     candle_type=candle.candle_type,
                     geometry=candidate.geometry,
                     is_latest=is_latest,
+                    observability=candidate.observability,
                     anchor_exclusion_reason=(
                         CandleAnchorExclusionReason.LATEST
                         if is_latest

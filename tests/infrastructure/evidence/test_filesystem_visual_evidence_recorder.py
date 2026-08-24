@@ -35,6 +35,7 @@ from pocket_option_analyzer.vision.models import (
     CandleFilterConfigurationTrace,
     CandleGeometry,
     CandleMergeTrace,
+    CandleObservability,
     CandleOverlayEvidence,
     CandleOverlayEvidenceStatus,
     CandleOverlayEvidenceTrace,
@@ -191,6 +192,13 @@ def _candle_trace() -> CandleDetectionTrace:
                 color=CandleColor.WHITE,
                 candle_type=CandleType.BULLISH,
                 geometry=CandleGeometry(10, 14, 25, 39),
+                observability=CandleObservability(
+                    roi_height=48,
+                    body_top_y=14,
+                    body_bottom_y=25,
+                    body_touches_top=False,
+                    body_touches_bottom=False,
+                ),
                 is_latest=False,
                 is_anchor=True,
                 anchor_index=0,
@@ -208,6 +216,13 @@ def _candle_trace() -> CandleDetectionTrace:
                 color=CandleColor.RED,
                 candle_type=CandleType.BEARISH,
                 geometry=CandleGeometry(12, 16, 28, 41),
+                observability=CandleObservability(
+                    roi_height=48,
+                    body_top_y=16,
+                    body_bottom_y=28,
+                    body_touches_top=False,
+                    body_touches_bottom=False,
+                ),
                 is_latest=True,
                 is_anchor=False,
             ),
@@ -915,6 +930,15 @@ def test_latest_and_anchor_roles_use_explicit_candle_coordinates(
 
     assert trace["latest"]["candidate_id"] == "m1"
     assert trace["latest"]["body_bottom_y"] == 28
+    assert trace["latest"]["observability"] == {
+        "roi_height": 48,
+        "body_top_y": 16,
+        "body_bottom_y": 28,
+        "body_touches_top": False,
+        "body_touches_bottom": False,
+        "close_boundary": "body_bottom",
+        "fully_observable_close": True,
+    }
     assert trace["anchors"][0]["candidate_id"] == "c1"
     assert trace["anchors"][0]["anchor_index"] == 0
     assert trace["anchors"][0]["high_y"] == 10

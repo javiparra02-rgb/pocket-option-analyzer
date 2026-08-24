@@ -28,6 +28,8 @@ class VisualPriceReferenceStatus(StrEnum):
 
     CLOSE_OUTSIDE_ANCHOR_RANGE = "close_outside_anchor_range"
 
+    CURRENT_CLOSE_NOT_OBSERVABLE = "current_close_not_observable"
+
 
 @dataclass(frozen=True, slots=True)
 class VisualPriceReferenceResult:

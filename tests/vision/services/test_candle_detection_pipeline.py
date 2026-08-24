@@ -263,6 +263,12 @@ def test_detect_assigns_candle_geometry_when_extractor_is_configured() -> None:
 
     assert len(result) == 1
     assert result[0].geometry is geometry
+    assert result[0].observability is not None
+    assert result[0].observability.roi_height == 100
+    assert result[0].observability.body_top_y == 15
+    assert result[0].observability.body_bottom_y == 25
+    assert result[0].observability.body_touches_top is False
+    assert result[0].observability.body_touches_bottom is False
     assert geometry_extractor.received_mask is image
     assert geometry_extractor.received_candidate.x == 10
 
@@ -307,6 +313,8 @@ def test_detect_with_trace_uses_same_pass_and_preserves_enrichment() -> None:
     assert len(result.candidates) == 1
     assert result.candidates[0].color is CandleColor.WHITE
     assert result.candidates[0].geometry is geometry
+    assert result.candidates[0].observability is not None
+    assert result.candidates[0].observability.roi_height == 100
     assert result.candidate_ids == ("candidate_000",)
     candidate_trace = result.trace.candidates[0]
     assert candidate_trace.candidate_id == "candidate_000"

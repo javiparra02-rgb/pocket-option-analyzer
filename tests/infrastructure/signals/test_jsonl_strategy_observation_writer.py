@@ -634,6 +634,48 @@ def test_writer_serializes_missing_reference_diagnostic(tmp_path) -> None:
     assert reference_diagnostic["raw_normalized_close"] == 1.046875
 
 
+def test_writer_serializes_current_close_not_observable_diagnostic(
+    tmp_path,
+) -> None:
+    instant = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+    path = tmp_path / "observations.jsonl"
+    diagnostic = VisualPriceReferenceResult(
+        reference=None,
+        status=VisualPriceReferenceStatus.CURRENT_CLOSE_NOT_OBSERVABLE,
+        anchor_count=27,
+        latest_candle_type="bearish",
+        latest_candidate_x=321,
+        latest_candidate_y=705,
+        close_roi_y=787,
+        anchor_top_roi_y=167,
+        anchor_bottom_roi_y=787,
+        raw_normalized_close=0.0,
+    )
+    validation = VisualReferenceValidation(
+        snapshot_id=instant.isoformat(),
+        observed_at=instant,
+        resolve_at=instant + timedelta(seconds=10),
+        entry_reference=None,
+        entry_reference_result=diagnostic,
+    )
+
+    JsonlStrategyObservationWriter(path).write_reference_validation(validation)
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    assert payload["entry_reference"] is None
+    assert payload["entry_reference_diagnostic"] == {
+        "status": "current_close_not_observable",
+        "anchor_count": 27,
+        "latest_candle_type": "bearish",
+        "latest_candidate_x": 321,
+        "latest_candidate_y": 705,
+        "close_roi_y": 787,
+        "anchor_top_roi_y": 167,
+        "anchor_bottom_roi_y": 787,
+        "raw_normalized_close": 0.0,
+    }
+
+
 def test_writer_serializes_failed_exit_reference_diagnostic(tmp_path) -> None:
     instant = datetime(2026, 8, 16, 22, 47, tzinfo=UTC)
     path = tmp_path / "observations.jsonl"

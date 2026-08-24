@@ -1,6 +1,10 @@
 from pocket_option_analyzer.vision.models.candle_geometry import (
     CandleGeometry,
 )
+from pocket_option_analyzer.vision.models.candle_observability import (
+    CandleCloseBoundary,
+    CandleObservability,
+)
 
 from .candle_candidate import CandleCandidate
 from .candle_color import CandleColor
@@ -60,6 +64,7 @@ from .trend_direction import TrendDirection
 
 __all__ = [
     "CandleCandidate",
+    "CandleCloseBoundary",
     "CandleColor",
     "CandleColorProfile",
     "CandleFilterDiagnostics",
@@ -76,6 +81,7 @@ __all__ = [
     "CandleWidthDecisionReason",
     "FinalCandleTrace",
     "CandleMetrics",
+    "CandleObservability",
     "CandleOverlayEvidence",
     "CandleOverlayEvidenceStatus",
     "CandleOverlayEvidenceTrace",

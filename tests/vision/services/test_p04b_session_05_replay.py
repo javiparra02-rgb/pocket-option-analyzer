@@ -172,6 +172,51 @@ def test_session_05_current_visual_price_matrix_is_observability_first() -> None
         assert trace.decision_diagnostic == result.oracle.decision_diagnostic
 
 
+@pytest.mark.parametrize(
+    ("frame_id", "expected_status"),
+    (
+        (1, VisualPriceReferenceStatus.CURRENT_CLOSE_NOT_OBSERVABLE),
+        (11, VisualPriceReferenceStatus.CURRENT_CLOSE_NOT_OBSERVABLE),
+        (30, VisualPriceReferenceStatus.OK),
+        (40, VisualPriceReferenceStatus.OK),
+        (57, VisualPriceReferenceStatus.CURRENT_CLOSE_NOT_OBSERVABLE),
+        (67, VisualPriceReferenceStatus.CURRENT_CLOSE_NOT_OBSERVABLE),
+    ),
+)
+def test_session_05_reference_observability_matrix(
+    frame_id: int,
+    expected_status: VisualPriceReferenceStatus,
+) -> None:
+    result = _result(frame_id).reference_result
+
+    assert result.status is expected_status
+    assert result.is_available is (expected_status is VisualPriceReferenceStatus.OK)
+    if expected_status is VisualPriceReferenceStatus.CURRENT_CLOSE_NOT_OBSERVABLE:
+        assert result.reference is None
+        assert result.close_roi_y == 787
+
+
+def test_session_05_observability_stays_associated_with_productive_latest() -> None:
+    for result in _replay_session():
+        latest = result.analysis.series.latest
+        trace = result.analysis.candle_detection_trace
+        assert latest is not None
+        assert trace is not None
+        latest_trace = next(
+            candle for candle in trace.final_candles if candle.is_latest
+        )
+        assert latest.candidate.geometry is not None
+        assert latest.candidate.observability is not None
+        assert latest_trace.observability is latest.candidate.observability
+        assert latest_trace.observability.roi_height == 788
+        assert latest_trace.observability.body_top_y == (
+            latest.candidate.geometry.body_top_y
+        )
+        assert latest_trace.observability.body_bottom_y == (
+            latest.candidate.geometry.body_bottom_y
+        )
+
+
 def test_session_05_frame_30_accepts_trusted_marker_outside_legacy_margin() -> None:
     result = _result(30)
     extraction = result.analysis.current_visual_price
