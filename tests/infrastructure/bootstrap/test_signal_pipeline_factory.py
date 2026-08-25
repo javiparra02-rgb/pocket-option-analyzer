@@ -5,7 +5,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import numpy as np
+import pytest
 
+from pocket_option_analyzer.application.evidence import (
+    IdentityShadowEvidenceConfig,
+)
 from pocket_option_analyzer.application.market import (
     CurrentCandleIdentityConfig,
     CurrentCandleIdentityResolver,
@@ -485,3 +489,24 @@ def test_visual_evidence_adapter_is_enabled_only_with_directory(tmp_path) -> Non
     assert isinstance(recorder, FilesystemVisualEvidenceRecorder)
     assert recorder.directory == evidence_directory
     assert (evidence_directory / "session_metadata.json").is_file()
+    assert pipeline._identity_evidence_recorder is None
+
+
+def test_identity_evidence_uses_same_opt_in_filesystem_adapter(tmp_path) -> None:
+    evidence_directory = tmp_path / "evidence"
+    config = IdentityShadowEvidenceConfig()
+
+    pipeline = SignalPipelineFactory.create_visual_signal_recording_pipeline(
+        visual_evidence_directory=evidence_directory,
+        identity_evidence_config=config,
+    )
+
+    assert pipeline._identity_evidence_recorder is pipeline._visual_evidence_recorder
+    assert pipeline._visual_evidence_recorder._identity_config is config
+
+
+def test_identity_config_without_visual_root_is_not_silently_persisted() -> None:
+    with pytest.raises(ValueError, match="visual_evidence_directory"):
+        SignalPipelineFactory.create_visual_signal_recording_pipeline(
+            identity_evidence_config=IdentityShadowEvidenceConfig(),
+        )

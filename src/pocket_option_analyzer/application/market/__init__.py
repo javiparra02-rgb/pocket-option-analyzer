@@ -29,6 +29,7 @@ from .current_candle_identity_runtime_shadow import (
     CurrentCandleIdentityFrameContextBuilder,
     CurrentCandleIdentityFrameMetadata,
     CurrentCandleIdentityRuntimeShadow,
+    CurrentCandleIdentityRuntimeSnapshot,
 )
 from .visual_entry_context import VisualEntryContext
 from .visual_entry_context_analyzer import VisualEntryContextAnalyzer
@@ -47,6 +48,7 @@ __all__ = [
     "CurrentCandleIdentityMatcher",
     "CurrentCandleIdentityFrameContextBuilder",
     "CurrentCandleIdentityFrameMetadata",
+    "CurrentCandleIdentityRuntimeSnapshot",
     "CurrentCandleIdentityResetReason",
     "CurrentCandleIdentityResolution",
     "CurrentCandleIdentityResolver",

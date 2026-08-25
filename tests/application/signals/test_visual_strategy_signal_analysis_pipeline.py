@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -195,6 +196,7 @@ class FakeCurrentCandleIdentityShadow:
         self.received_market_analysis = None
         self.started_sessions: list[str] = []
         self.stop_calls = 0
+        self.last_snapshot = None
 
     def start_session(self, *, session_key: str) -> None:
         self.started_sessions.append(session_key)
@@ -205,6 +207,10 @@ class FakeCurrentCandleIdentityShadow:
     def resolve(self, *, metadata, market_analysis):
         self.received_metadata = metadata
         self.received_market_analysis = market_analysis
+        self.last_snapshot = SimpleNamespace(
+            resolution=self.resolution,
+            frame_context=SimpleNamespace(frame_id=metadata.frame_id),
+        )
         return self.resolution
 
 

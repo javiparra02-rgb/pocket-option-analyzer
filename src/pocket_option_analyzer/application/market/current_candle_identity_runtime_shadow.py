@@ -56,6 +56,28 @@ class CurrentCandleIdentityFrameMetadata:
             raise ValueError("Las dimensiones del ROI deben ser positivas.")
 
 
+@dataclass(frozen=True, slots=True)
+class CurrentCandleIdentityRuntimeSnapshot:
+    """Atomic same-pass context and resolver output retained for evidence."""
+
+    frame_context: CurrentCandleFrameContext
+    resolution: CurrentCandleIdentityResolution
+
+    def __post_init__(self) -> None:
+        trace = self.resolution.trace
+        context = self.frame_context
+        if trace.frame_id != context.frame_id:
+            raise ValueError("Runtime snapshot frame IDs must match.")
+        if trace.wall_timestamp != context.wall_timestamp:
+            raise ValueError("Runtime snapshot wall timestamps must match.")
+        if trace.monotonic_timestamp != context.monotonic_timestamp:
+            raise ValueError("Runtime snapshot monotonic timestamps must match.")
+        if trace.source_key != context.source_key:
+            raise ValueError("Runtime snapshot source keys must match.")
+        if trace.session_key != context.session_key:
+            raise ValueError("Runtime snapshot session keys must match.")
+
+
 class CurrentCandleIdentityFrameContextBuilder:
     """Build identity context from the exact same-pass MarketAnalysis trace."""
 
@@ -75,7 +97,12 @@ class CurrentCandleIdentityFrameContextBuilder:
         overlay_evidence = (
             candle_trace.overlay_evidence if candle_trace is not None else None
         )
-        expiry_line_x, expiry_line_conflict = self._expiry_vertical_line(
+        (
+            expiry_line_x,
+            expiry_line_start_y,
+            expiry_line_end_y,
+            expiry_line_conflict,
+        ) = self._expiry_vertical_line(
             overlay_evidence
         )
         return CurrentCandleFrameContext(
@@ -91,24 +118,32 @@ class CurrentCandleIdentityFrameContextBuilder:
             overlay_evidence=overlay_evidence,
             expiry_vertical_line_x=expiry_line_x,
             expiry_vertical_line_conflict=expiry_line_conflict,
+            expiry_vertical_line_start_y=expiry_line_start_y,
+            expiry_vertical_line_end_y=expiry_line_end_y,
         )
 
     @staticmethod
     def _expiry_vertical_line(
         overlay_evidence: CandleOverlayEvidenceTrace | None,
-    ) -> tuple[int | None, bool]:
+    ) -> tuple[int | None, int | None, int | None, bool]:
         if overlay_evidence is None:
-            return None, False
+            return None, None, None, False
         overlays = tuple(
             evidence
             for evidence in overlay_evidence.evidence
             if evidence.status is CandleOverlayEvidenceStatus.EXPIRY_OVERLAY
         )
         if len(overlays) > 1:
-            return None, True
+            return None, None, None, True
         if not overlays:
-            return None, False
-        return overlays[0].vertical_line_x, False
+            return None, None, None, False
+        overlay = overlays[0]
+        return (
+            overlay.vertical_line_x,
+            overlay.vertical_line_start_y,
+            overlay.vertical_line_end_y,
+            False,
+        )
 
 
 class CurrentCandleIdentityRuntimeShadow:
@@ -128,6 +163,7 @@ class CurrentCandleIdentityRuntimeShadow:
         self._session_key: str | None = None
         self._resolver_started = False
         self._last_resolution: CurrentCandleIdentityResolution | None = None
+        self._last_snapshot: CurrentCandleIdentityRuntimeSnapshot | None = None
 
     @property
     def resolver(self) -> CurrentCandleIdentityResolver:
@@ -141,6 +177,13 @@ class CurrentCandleIdentityRuntimeShadow:
 
         with self._lock:
             return self._last_resolution
+
+    @property
+    def last_snapshot(self) -> CurrentCandleIdentityRuntimeSnapshot | None:
+        """Return the exact context/result pair from the last resolver pass."""
+
+        with self._lock:
+            return self._last_snapshot
 
     @property
     def session_key(self) -> str | None:
@@ -160,6 +203,7 @@ class CurrentCandleIdentityRuntimeShadow:
             self._session_key = session_key
             self._resolver_started = False
             self._last_resolution = None
+            self._last_snapshot = None
 
     def stop_session(self) -> None:
         """Clear resolver tracking even after normal or exceptional shutdown."""
@@ -200,6 +244,10 @@ class CurrentCandleIdentityRuntimeShadow:
             except OSError as error:
                 resolution = self._operational_failure(context, error)
             self._last_resolution = resolution
+            self._last_snapshot = CurrentCandleIdentityRuntimeSnapshot(
+                frame_context=context,
+                resolution=resolution,
+            )
             return resolution
 
     def _operational_failure(
@@ -247,5 +295,9 @@ class CurrentCandleIdentityRuntimeShadow:
             expiry_vertical_line_x=context.expiry_vertical_line_x,
             expiry_vertical_line_conflict=context.expiry_vertical_line_conflict,
             diagnostics=(diagnostic,),
+            expiry_vertical_line_start_y=(
+                context.expiry_vertical_line_start_y
+            ),
+            expiry_vertical_line_end_y=context.expiry_vertical_line_end_y,
         )
         return CurrentCandleIdentityResolution(result=result, trace=trace)

@@ -1,4 +1,10 @@
-from .contracts import VisualEvidenceRecorder
+from .contracts import IdentityShadowEvidenceRecorder, VisualEvidenceRecorder
+from .identity_shadow import (
+    IdentityShadowEventType,
+    IdentityShadowEvidenceConfig,
+    IdentityShadowFrameEvidence,
+    IdentityShadowPngMode,
+)
 from .models import (
     VisualEvidenceAssociation,
     VisualEvidencePhase,
@@ -10,4 +16,9 @@ __all__ = [
     "VisualEvidencePhase",
     "VisualEvidenceRecorder",
     "VisualFrameEvidence",
+    "IdentityShadowEventType",
+    "IdentityShadowEvidenceConfig",
+    "IdentityShadowEvidenceRecorder",
+    "IdentityShadowFrameEvidence",
+    "IdentityShadowPngMode",
 ]

@@ -385,6 +385,8 @@ class CurrentCandleIdentityTrace:
     expiry_vertical_line_x: int | None
     expiry_vertical_line_conflict: bool
     diagnostics: tuple[str, ...]
+    expiry_vertical_line_start_y: int | None = None
+    expiry_vertical_line_end_y: int | None = None
 
     def __post_init__(self) -> None:
         if self.frame_id < 0 or self.continuity_generation < 1:
@@ -403,6 +405,22 @@ class CurrentCandleIdentityTrace:
             self.expiry_vertical_line_x is not None
         ):
             raise ValueError("Un conflicto expiry no puede elegir una X canónica.")
+        line_coordinates = (
+            self.expiry_vertical_line_x,
+            self.expiry_vertical_line_start_y,
+            self.expiry_vertical_line_end_y,
+        )
+        if any(value is not None for value in line_coordinates) and not all(
+            value is not None for value in line_coordinates
+        ):
+            raise ValueError("La geometría expiry debe estar disponible completa.")
+        if all(value is not None for value in line_coordinates):
+            assert self.expiry_vertical_line_start_y is not None
+            assert self.expiry_vertical_line_end_y is not None
+            if min(value for value in line_coordinates if value is not None) < 0:
+                raise ValueError("La geometría expiry no puede ser negativa.")
+            if self.expiry_vertical_line_start_y > self.expiry_vertical_line_end_y:
+                raise ValueError("La geometría expiry vertical debe estar ordenada.")
         if self.chosen_candidate_id is not None and not self.chosen_candidate_id:
             raise ValueError("chosen_candidate_id no puede estar vacío.")
         if self.rollover_confirmed and not self.rollover_suspected:
@@ -444,6 +462,8 @@ class CurrentCandleFrameContext:
     expiry_evidence_consistent: bool | None = None
     expiry_vertical_line_x: int | None = None
     expiry_vertical_line_conflict: bool = False
+    expiry_vertical_line_start_y: int | None = None
+    expiry_vertical_line_end_y: int | None = None
 
     def __post_init__(self) -> None:
         if self.frame_id < 0:
@@ -464,6 +484,22 @@ class CurrentCandleFrameContext:
             self.expiry_vertical_line_x is not None
         ):
             raise ValueError("Un conflicto expiry no puede elegir una X canónica.")
+        line_coordinates = (
+            self.expiry_vertical_line_x,
+            self.expiry_vertical_line_start_y,
+            self.expiry_vertical_line_end_y,
+        )
+        if any(value is not None for value in line_coordinates) and not all(
+            value is not None for value in line_coordinates
+        ):
+            raise ValueError("La geometría expiry debe estar disponible completa.")
+        if all(value is not None for value in line_coordinates):
+            assert self.expiry_vertical_line_start_y is not None
+            assert self.expiry_vertical_line_end_y is not None
+            if min(value for value in line_coordinates if value is not None) < 0:
+                raise ValueError("La geometría expiry no puede ser negativa.")
+            if self.expiry_vertical_line_start_y > self.expiry_vertical_line_end_y:
+                raise ValueError("La geometría expiry vertical debe estar ordenada.")
         final_ids = tuple(candle.candidate_id for candle in self.final_candles)
         if len(final_ids) != len(set(final_ids)):
             raise ValueError("final_candles no puede repetir candidate_id.")

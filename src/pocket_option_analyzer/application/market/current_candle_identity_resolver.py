@@ -823,6 +823,10 @@ class CurrentCandleIdentityResolver:
                 context.expiry_vertical_line_conflict
             ),
             diagnostics=(diagnostic,),
+            expiry_vertical_line_start_y=(
+                context.expiry_vertical_line_start_y
+            ),
+            expiry_vertical_line_end_y=context.expiry_vertical_line_end_y,
         )
 
     def _missing_evidence(

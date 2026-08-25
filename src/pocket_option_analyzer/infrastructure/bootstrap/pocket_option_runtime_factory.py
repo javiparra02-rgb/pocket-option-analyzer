@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pocket_option_analyzer.application.evidence import (
+    IdentityShadowEvidenceConfig,
+    IdentityShadowPngMode,
+)
 from pocket_option_analyzer.application.runtime import (
     AnalysisRuntimeService,
 )
@@ -101,6 +105,30 @@ class PocketOptionRuntimeFactory:
             else CandleColorProfile.white_red()
         )
 
+        identity_evidence_config = None
+        if resolved_settings.visual_identity_evidence_enabled:
+            if resolved_settings.visual_evidence_directory is None:
+                raise ValueError(
+                    "VISUAL_IDENTITY_EVIDENCE_ENABLED requires "
+                    "VISUAL_EVIDENCE_DIRECTORY."
+                )
+            identity_evidence_config = IdentityShadowEvidenceConfig(
+                ring_buffer_size=(
+                    resolved_settings.visual_identity_evidence_ring_buffer_size
+                ),
+                pre_event_trace_count=(
+                    resolved_settings.visual_identity_evidence_pre_event_trace_count
+                ),
+                png_mode=(
+                    IdentityShadowPngMode.ALL_FRAMES
+                    if resolved_settings.visual_identity_evidence_intensive_png
+                    else IdentityShadowPngMode.EVENT_ONLY
+                ),
+                checkpoint_interval_frames=(
+                    resolved_settings.visual_identity_evidence_checkpoint_interval_frames
+                ),
+            )
+
         return SignalPipelineFactory.create_analysis_runtime_service(
             capture_service=resolved_capture_service,
             signal_history=signal_history,
@@ -113,6 +141,7 @@ class PocketOptionRuntimeFactory:
                 resolved_settings.visual_evidence_directory
             ),
             application_version=resolved_settings.app_version,
+            identity_evidence_config=identity_evidence_config,
         )
 
     @staticmethod

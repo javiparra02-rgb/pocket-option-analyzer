@@ -7,6 +7,7 @@ import numpy as np
 
 from pocket_option_analyzer.application.market import (
     CandleIntervalIndicatorCacheStatus,
+    CurrentCandleFrameContext,
     CurrentCandleIdentityFrameMetadata,
     CurrentCandleIdentityResolution,
     CurrentCandleIdentityResult,
@@ -110,6 +111,9 @@ class VisualStrategySignalAnalysisPipeline:
         self._last_current_candle_identity_resolution: (
             CurrentCandleIdentityResolution | None
         ) = None
+        self._last_current_candle_identity_frame_context: (
+            CurrentCandleFrameContext | None
+        ) = None
 
     @property
     def last_price_reference(self) -> VisualPriceReference | None:
@@ -182,6 +186,14 @@ class VisualStrategySignalAnalysisPipeline:
         return resolution.trace if resolution is not None else None
 
     @property
+    def last_current_candle_identity_frame_context(
+        self,
+    ) -> CurrentCandleFrameContext | None:
+        """Return the exact same-pass context consumed by the shadow resolver."""
+
+        return self._last_current_candle_identity_frame_context
+
+    @property
     def current_candle_identity_shadow(
         self,
     ) -> CurrentCandleIdentityRuntimeShadow | None:
@@ -197,6 +209,7 @@ class VisualStrategySignalAnalysisPipeline:
                 session_key=session_key,
             )
         self._last_current_candle_identity_resolution = None
+        self._last_current_candle_identity_frame_context = None
 
     def stop_session(self) -> None:
         """Stop tracking while retaining the last immutable diagnostic result."""
@@ -265,6 +278,7 @@ class VisualStrategySignalAnalysisPipeline:
         self._last_visual_price_comparison_context = None
         self._last_market_analysis = None
         self._last_current_candle_identity_resolution = None
+        self._last_current_candle_identity_frame_context = None
 
         market_analysis = self._market_analysis_pipeline.analyze(
             image=image,
@@ -291,6 +305,18 @@ class VisualStrategySignalAnalysisPipeline:
                     metadata=identity_metadata,
                     market_analysis=market_analysis,
                 )
+            )
+            runtime_snapshot = self._current_candle_identity_shadow.last_snapshot
+            if (
+                runtime_snapshot is None
+                or runtime_snapshot.resolution
+                is not self._last_current_candle_identity_resolution
+            ):
+                raise RuntimeError(
+                    "Identity shadow did not retain its atomic runtime snapshot."
+                )
+            self._last_current_candle_identity_frame_context = (
+                runtime_snapshot.frame_context
             )
 
         reference_analysis = self._price_reference_analysis(

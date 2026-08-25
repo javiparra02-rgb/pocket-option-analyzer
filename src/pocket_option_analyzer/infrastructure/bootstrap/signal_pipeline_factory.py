@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pocket_option_analyzer.application.evidence import (
+    IdentityShadowEvidenceConfig,
+)
 from pocket_option_analyzer.application.market import (
     CurrentCandleIdentityConfig,
     CurrentCandleIdentityResolver,
@@ -128,6 +131,7 @@ class SignalPipelineFactory:
         color_profile: CandleColorProfile | None = None,
         visual_evidence_directory: Path | None = None,
         application_version: str | None = None,
+        identity_evidence_config: IdentityShadowEvidenceConfig | None = None,
     ) -> VisualSignalRecordingPipeline:
         """
         Crea el pipeline visual completo de señales.
@@ -139,6 +143,14 @@ class SignalPipelineFactory:
         """
 
         history = signal_history if signal_history is not None else SignalHistory()
+
+        if (
+            identity_evidence_config is not None
+            and visual_evidence_directory is None
+        ):
+            raise ValueError(
+                "Identity evidence requires visual_evidence_directory."
+            )
 
         profile = strategy_profile or StrategyProfile.otc_precision_10s()
 
@@ -182,6 +194,7 @@ class SignalPipelineFactory:
                 directory=visual_evidence_directory,
                 application_version=application_version,
                 observation_jsonl_path=observation_file_path,
+                identity_evidence_config=identity_evidence_config,
             )
             if visual_evidence_directory is not None
             else None
@@ -199,6 +212,11 @@ class SignalPipelineFactory:
                 ),
             ),
             visual_evidence_recorder=visual_evidence_recorder,
+            identity_evidence_recorder=(
+                visual_evidence_recorder
+                if identity_evidence_config is not None
+                else None
+            ),
         )
 
     @staticmethod
@@ -211,6 +229,7 @@ class SignalPipelineFactory:
         source: str = "captured_frame_visual_analysis",
         visual_evidence_directory: Path | None = None,
         application_version: str | None = None,
+        identity_evidence_config: IdentityShadowEvidenceConfig | None = None,
     ) -> AnalyzeCapturedFrameUseCase:
         """
         Crea el caso de uso completo para analizar frames capturados.
@@ -224,6 +243,7 @@ class SignalPipelineFactory:
             color_profile=color_profile,
             visual_evidence_directory=visual_evidence_directory,
             application_version=application_version,
+            identity_evidence_config=identity_evidence_config,
         )
 
         return AnalyzeCapturedFrameUseCase(
@@ -243,6 +263,7 @@ class SignalPipelineFactory:
         interval_seconds: float = 1.0,
         visual_evidence_directory: Path | None = None,
         application_version: str | None = None,
+        identity_evidence_config: IdentityShadowEvidenceConfig | None = None,
     ) -> FrameAnalysisLoopService:
         """
         Crea el servicio completo de ciclo continuo.
@@ -265,6 +286,7 @@ class SignalPipelineFactory:
                 source=source,
                 visual_evidence_directory=visual_evidence_directory,
                 application_version=application_version,
+                identity_evidence_config=identity_evidence_config,
             )
         )
 
@@ -286,6 +308,7 @@ class SignalPipelineFactory:
         interval_seconds: float = 1.0,
         visual_evidence_directory: Path | None = None,
         application_version: str | None = None,
+        identity_evidence_config: IdentityShadowEvidenceConfig | None = None,
     ) -> AnalysisRuntimeService:
         """
         Crea el runtime completo de análisis.
@@ -308,6 +331,7 @@ class SignalPipelineFactory:
             interval_seconds=interval_seconds,
             visual_evidence_directory=visual_evidence_directory,
             application_version=application_version,
+            identity_evidence_config=identity_evidence_config,
         )
 
         return AnalysisRuntimeService(

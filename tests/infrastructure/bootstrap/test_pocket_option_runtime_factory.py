@@ -485,6 +485,46 @@ def test_runtime_factory_uses_opt_in_visual_evidence_setting(tmp_path) -> None:
     assert recorder.directory == evidence_directory
 
 
+def test_runtime_factory_wires_opt_in_identity_evidence_policy(tmp_path) -> None:
+    evidence_directory = tmp_path / "evidence"
+    runtime = PocketOptionRuntimeFactory.create_runtime_service(
+        capture_service=FakeCaptureService(frames=[]),
+        signal_file_path=None,
+        observation_file_path=None,
+        settings=Settings(
+            _env_file=None,
+            visual_evidence_directory=evidence_directory,
+            visual_identity_evidence_enabled=True,
+            visual_identity_evidence_ring_buffer_size=45,
+            visual_identity_evidence_pre_event_trace_count=7,
+            visual_identity_evidence_intensive_png=True,
+            visual_identity_evidence_checkpoint_interval_frames=60,
+        ),
+    )
+
+    pipeline = runtime._loop_service._analysis_use_case._pipeline
+    recorder = pipeline._identity_evidence_recorder
+    assert recorder is pipeline._visual_evidence_recorder
+    assert recorder._identity_config.ring_buffer_size == 45
+    assert recorder._identity_config.pre_event_trace_count == 7
+    assert recorder._identity_config.png_mode.value == "all_frames"
+    assert recorder._identity_config.checkpoint_interval_frames == 60
+
+
+def test_runtime_factory_rejects_identity_evidence_without_root() -> None:
+    with pytest.raises(ValueError, match="VISUAL_EVIDENCE_DIRECTORY"):
+        PocketOptionRuntimeFactory.create_runtime_service(
+            capture_service=FakeCaptureService(frames=[]),
+            signal_file_path=None,
+            observation_file_path=None,
+            settings=Settings(
+                _env_file=None,
+                visual_evidence_directory=None,
+                visual_identity_evidence_enabled=True,
+            ),
+        )
+
+
 @pytest.mark.parametrize(
     "extractor",
     [

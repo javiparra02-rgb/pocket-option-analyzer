@@ -70,6 +70,27 @@ class Settings(BaseSettings):
 
     visual_evidence_directory: Path | None = None
 
+    visual_identity_evidence_enabled: bool = False
+
+    visual_identity_evidence_ring_buffer_size: int = Field(
+        default=30,
+        ge=1,
+        le=3600,
+    )
+
+    visual_identity_evidence_pre_event_trace_count: int = Field(
+        default=5,
+        ge=0,
+        le=3600,
+    )
+
+    visual_identity_evidence_intensive_png: bool = False
+
+    visual_identity_evidence_checkpoint_interval_frames: int | None = Field(
+        default=None,
+        ge=1,
+    )
+
     # ------------------------------------------------------------------
     # Capture
     # ------------------------------------------------------------------

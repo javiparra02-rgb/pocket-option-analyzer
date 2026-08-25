@@ -12,6 +12,7 @@ from pocket_option_analyzer.application.market import (
     CurrentCandleIdentityResetReason,
     CurrentCandleIdentityResolver,
     CurrentCandleIdentityRuntimeShadow,
+    CurrentCandleIdentityRuntimeSnapshot,
     CurrentCandleIdentityStatus,
 )
 from pocket_option_analyzer.vision.models import (
@@ -244,6 +245,8 @@ def test_context_builder_reuses_exact_same_pass_trace_objects() -> None:
     assert context.final_candles is trace.final_candles
     assert context.overlay_evidence is trace.overlay_evidence
     assert context.expiry_vertical_line_x == 701
+    assert context.expiry_vertical_line_start_y == 100
+    assert context.expiry_vertical_line_end_y == 700
     assert context.expiry_vertical_line_conflict is False
 
 
@@ -260,6 +263,8 @@ def test_context_builder_reports_conflicting_expiry_lines_conservatively() -> No
     )
 
     assert context.expiry_vertical_line_x is None
+    assert context.expiry_vertical_line_start_y is None
+    assert context.expiry_vertical_line_end_y is None
     assert context.expiry_vertical_line_conflict is True
 
 
@@ -287,9 +292,13 @@ def test_runtime_shadow_bootstraps_across_one_real_session() -> None:
         metadata=_metadata(2),
         market_analysis=_market_analysis(frame_id=2, candle_types=rollover_types),
     )
+    third_analysis = _market_analysis(
+        frame_id=3,
+        candle_types=rollover_types,
+    )
     third = shadow.resolve(
         metadata=_metadata(3),
-        market_analysis=_market_analysis(frame_id=3, candle_types=rollover_types),
+        market_analysis=third_analysis,
     )
 
     assert first.result.status is CurrentCandleIdentityStatus.UNAVAILABLE
@@ -300,6 +309,20 @@ def test_runtime_shadow_bootstraps_across_one_real_session() -> None:
     assert third.trace.monotonic_timestamp == 103.0
     assert third.trace.source_key == "win32_hwnd:123"
     assert third.trace.session_key == "session-a"
+    assert shadow.last_snapshot is not None
+    assert shadow.last_snapshot.resolution is third
+    assert shadow.last_snapshot.frame_context.frame_id == 3
+    third_trace = third_analysis.candle_detection_trace
+    assert third_trace is not None
+    assert (
+        shadow.last_snapshot.frame_context.membership
+        is third_trace.series_membership
+    )
+    assert shadow.last_snapshot.frame_context.final_candles is third_trace.final_candles
+    assert (
+        shadow.last_snapshot.frame_context.overlay_evidence
+        is third_trace.overlay_evidence
+    )
 
 
 def test_runtime_shadow_stop_and_restart_clear_temporal_continuity() -> None:
@@ -504,6 +527,7 @@ def test_runtime_shadow_does_not_hide_program_invariant_failures() -> None:
 def test_runtime_shadow_public_contracts_resolve_runtime_type_hints() -> None:
     for contract in (
         CurrentCandleIdentityFrameMetadata,
+        CurrentCandleIdentityRuntimeSnapshot,
         CurrentCandleIdentityFrameContextBuilder.build,
         CurrentCandleIdentityRuntimeShadow.start_session,
         CurrentCandleIdentityRuntimeShadow.stop_session,

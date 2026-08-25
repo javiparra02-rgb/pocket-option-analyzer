@@ -7,9 +7,11 @@ import os
 import re
 import shutil
 import tempfile
+from collections import deque
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import RLock
 from time import perf_counter
 from typing import Any
 
@@ -17,10 +19,25 @@ import cv2
 import numpy as np
 
 from pocket_option_analyzer.application.evidence import (
+    IdentityShadowEventType,
+    IdentityShadowEvidenceConfig,
+    IdentityShadowFrameEvidence,
+    IdentityShadowPngMode,
     VisualEvidenceAssociation,
     VisualFrameEvidence,
 )
+from pocket_option_analyzer.application.market import (
+    CurrentCandleIdentityLifecycle,
+    CurrentCandleIdentityResetReason,
+    CurrentCandleIdentitySource,
+    CurrentCandleIdentityStatus,
+    CurrentCandleIdentityTrace,
+)
 
+from .identity_shadow_evidence_reader import IdentityShadowEvidenceReader
+from .identity_shadow_evidence_serializer import (
+    IdentityShadowEvidenceSerializer,
+)
 from .visual_evidence_serializer import VisualEvidenceSerializer
 
 logger = logging.getLogger(__name__)
@@ -48,6 +65,7 @@ class FilesystemVisualEvidenceRecorder:
         application_version: str | None = None,
         observation_jsonl_path: Path | None = None,
         source_commit: str | None = None,
+        identity_evidence_config: IdentityShadowEvidenceConfig | None = None,
         png_encoder: PngEncoder | None = None,
         clock: Clock | None = None,
         timer: Timer | None = None,
@@ -60,11 +78,30 @@ class FilesystemVisualEvidenceRecorder:
         self._application_version = application_version
         self._observation_jsonl_path = observation_jsonl_path
         self._source_commit = source_commit
+        self._identity_config = identity_evidence_config
         self._png_encoder = png_encoder or self._default_png_encoder
         self._clock = clock or (lambda: datetime.now(UTC))
         self._timer = timer or perf_counter
         self._frame_keys_by_id: dict[int, str] = {}
         self._manifest_associations: set[tuple[str, str]] = set()
+        self._identity_lock = RLock()
+        self._identity_session_key: str | None = None
+        self._identity_frames_path = self._directory / "identity_shadow/frames.jsonl"
+        self._identity_events_path = self._directory / "identity_shadow/events.jsonl"
+        self._identity_png_directory = self._directory / "identity_shadow/png"
+        self._identity_frame_count = 0
+        self._identity_event_count = 0
+        self._identity_previous_frame_hash: str | None = None
+        self._identity_previous_event_hash: str | None = None
+        self._identity_previous_trace: CurrentCandleIdentityTrace | None = None
+        self._identity_seen_frame_keys: set[str] = set()
+        self._identity_ring: deque[dict[str, Any]] = deque(
+            maxlen=(
+                identity_evidence_config.ring_buffer_size
+                if identity_evidence_config is not None
+                else 1
+            )
+        )
 
         self._directory.mkdir(parents=True, exist_ok=True)
         self._frames_directory.mkdir(parents=True, exist_ok=True)
@@ -148,6 +185,405 @@ class FilesystemVisualEvidenceRecorder:
                 relevant_paths=tuple(relevant_paths),
             )
             raise
+
+    def start_identity_session(self, *, session_key: str) -> None:
+        """Initialize the opt-in identity stream without touching analysis."""
+
+        if self._identity_config is None:
+            return
+        if not session_key:
+            raise ValueError("session_key cannot be empty.")
+        with self._identity_lock:
+            if self._identity_session_key is not None:
+                self._stop_identity_session_locked()
+            self._identity_png_directory.mkdir(parents=True, exist_ok=True)
+            self._ensure_append_file(self._identity_frames_path)
+            self._ensure_append_file(self._identity_events_path)
+            self._load_identity_streams()
+            self._identity_session_key = session_key
+            self._identity_previous_trace = None
+            self._identity_ring.clear()
+            self._append_identity_event(
+                event_type=IdentityShadowEventType.LIFECYCLE_START,
+                session_key=session_key,
+                frame_payload=None,
+                previous_status=None,
+                png=None,
+            )
+
+    def stop_identity_session(self) -> None:
+        """Synchronously finish one identity evidence lifecycle."""
+
+        if self._identity_config is None:
+            return
+        with self._identity_lock:
+            self._stop_identity_session_locked()
+
+    def record_identity_shadow(
+        self,
+        frame_evidence: IdentityShadowFrameEvidence,
+    ) -> None:
+        """Persist one compact same-pass trace; failures remain diagnostic."""
+
+        if self._identity_config is None:
+            return
+        with self._identity_lock:
+            try:
+                self._record_identity_shadow_locked(frame_evidence)
+            except Exception as error:  # noqa: BLE001 - diagnostic fail-soft port.
+                self._record_identity_failure(frame_evidence, error)
+
+    def _record_identity_shadow_locked(
+        self,
+        evidence: IdentityShadowFrameEvidence,
+    ) -> None:
+        session_key = self._identity_session_key
+        if session_key is None:
+            raise RuntimeError("Identity evidence session is not active.")
+        if evidence.session_key != session_key:
+            raise ValueError("Identity evidence belongs to another session.")
+        next_sequence = self._identity_frame_count + 1
+        payload = IdentityShadowEvidenceSerializer.frame_to_dict(
+            evidence,
+            sequence_number=next_sequence,
+            previous_trace=self._identity_previous_trace,
+            previous_frame=(self._identity_ring[-1] if self._identity_ring else None),
+        )
+        frame_key = str(payload["frame_key"])
+        if frame_key in self._identity_seen_frame_keys:
+            raise ValueError("Duplicate identity frame evidence.")
+        event_types = self._identity_event_types(evidence)
+        checkpoint_due = self._identity_checkpoint_due(next_sequence)
+        if checkpoint_due:
+            event_types.append(IdentityShadowEventType.CHECKPOINT)
+        png = None
+        if self._identity_png_required(event_types):
+            png = self._publish_identity_png(evidence)
+        payload["png"] = png
+        payload["previous_record_sha256"] = self._identity_previous_frame_hash
+        record_hash = IdentityShadowEvidenceSerializer.payload_sha256(payload)
+        payload["record_sha256"] = record_hash
+        self._append_jsonl(self._identity_frames_path, payload)
+        self._identity_frame_count = next_sequence
+        self._identity_previous_frame_hash = record_hash
+        self._identity_seen_frame_keys.add(frame_key)
+
+        previous_status = (
+            self._identity_previous_trace.status
+            if self._identity_previous_trace is not None
+            else None
+        )
+        try:
+            for event_type in event_types:
+                self._append_identity_event(
+                    event_type=event_type,
+                    session_key=session_key,
+                    frame_payload=payload,
+                    previous_status=(
+                        previous_status.value
+                        if previous_status is not None
+                        else None
+                    ),
+                    png=png,
+                )
+        finally:
+            self._identity_ring.append(payload)
+            self._identity_previous_trace = evidence.resolution.trace
+
+    def _stop_identity_session_locked(self) -> None:
+        session_key = self._identity_session_key
+        if session_key is None:
+            return
+        try:
+            self._append_identity_event(
+                event_type=IdentityShadowEventType.LIFECYCLE_STOP,
+                session_key=session_key,
+                frame_payload=None,
+                previous_status=(
+                    self._identity_previous_trace.status.value
+                    if self._identity_previous_trace is not None
+                    else None
+                ),
+                png=None,
+            )
+        except Exception as error:  # noqa: BLE001 - shutdown must be fail-soft.
+            self._record_failure_if_possible(
+                error=error,
+                stage="identity_lifecycle_stop",
+                frame_id=(
+                    self._identity_previous_trace.frame_id
+                    if self._identity_previous_trace is not None
+                    else 0
+                ),
+                snapshot_ids=(),
+                relevant_paths=("identity_shadow/events.jsonl",),
+            )
+        finally:
+            self._identity_session_key = None
+            self._identity_previous_trace = None
+            self._identity_ring.clear()
+
+    def _identity_event_types(
+        self,
+        evidence: IdentityShadowFrameEvidence,
+    ) -> list[IdentityShadowEventType]:
+        trace = evidence.resolution.trace
+        result = evidence.resolution.result
+        previous = self._identity_previous_trace
+        events: list[IdentityShadowEventType] = []
+        if (
+            trace.internal_state is CurrentCandleIdentityLifecycle.BOOTSTRAPPING
+            and result.status is not CurrentCandleIdentityStatus.CONFIRMED
+            and (
+                previous is None
+                or previous.diagnostics != trace.diagnostics
+                or previous.continuity_generation != trace.continuity_generation
+            )
+        ):
+            events.append(IdentityShadowEventType.BOOTSTRAP_PENDING)
+        if result.source is CurrentCandleIdentitySource.BOOTSTRAP_CONFIRMATION:
+            events.append(IdentityShadowEventType.BOOTSTRAP_CONFIRMED)
+        if trace.rollover_suspected:
+            events.append(IdentityShadowEventType.ROLLOVER_SUSPECTED)
+        if trace.rollover_confirmed:
+            events.append(IdentityShadowEventType.ROLLOVER_CONFIRMED)
+        status_changed = previous is None or previous.status is not trace.status
+        if status_changed:
+            events.append(IdentityShadowEventType.STATUS_CHANGED)
+        diagnostic_changed = (
+            previous is None
+            or previous.diagnostics != trace.diagnostics
+            or previous.missing_evidence != trace.missing_evidence
+        )
+        if (
+            trace.status is CurrentCandleIdentityStatus.MISSING_FROM_VIEW
+            and (status_changed or diagnostic_changed)
+        ):
+            events.append(IdentityShadowEventType.MISSING_FROM_VIEW)
+        if (
+            trace.status is CurrentCandleIdentityStatus.AMBIGUOUS
+            and (status_changed or diagnostic_changed)
+        ):
+            events.append(IdentityShadowEventType.AMBIGUOUS)
+        if trace.reset_reason is not None:
+            events.append(IdentityShadowEventType.RESET)
+        if trace.reset_reason is CurrentCandleIdentityResetReason.INTERNAL_ERROR:
+            events.append(IdentityShadowEventType.RESOLVER_FAILURE)
+        return list(dict.fromkeys(events))
+
+    def _identity_checkpoint_due(self, sequence_number: int) -> bool:
+        assert self._identity_config is not None
+        interval = self._identity_config.checkpoint_interval_frames
+        return interval is not None and sequence_number % interval == 0
+
+    def _identity_png_required(
+        self,
+        event_types: list[IdentityShadowEventType],
+    ) -> bool:
+        assert self._identity_config is not None
+        if self._identity_config.png_mode is IdentityShadowPngMode.ALL_FRAMES:
+            return True
+        relevant = {
+            IdentityShadowEventType.ROLLOVER_SUSPECTED,
+            IdentityShadowEventType.ROLLOVER_CONFIRMED,
+            IdentityShadowEventType.MISSING_FROM_VIEW,
+            IdentityShadowEventType.AMBIGUOUS,
+            IdentityShadowEventType.RESET,
+            IdentityShadowEventType.RESOLVER_FAILURE,
+            IdentityShadowEventType.CHECKPOINT,
+        }
+        return bool(relevant.intersection(event_types))
+
+    def _publish_identity_png(
+        self,
+        evidence: IdentityShadowFrameEvidence,
+    ) -> dict[str, Any]:
+        visual_key = IdentityShadowEvidenceSerializer.visual_frame_key(evidence)
+        visual_metadata_path = self._frames_directory / visual_key / "frame.json"
+        if visual_metadata_path.exists():
+            metadata = self._read_json(visual_metadata_path)
+            descriptor = metadata.get("images", {}).get("chart")
+            if not isinstance(descriptor, dict):
+                raise ValueError("Reusable visual evidence has no chart PNG.")
+            expected_pixel_hash = self._array_metadata(evidence.image)[
+                "pixel_sha256"
+            ]
+            if descriptor.get("pixel_sha256") != expected_pixel_hash:
+                raise ValueError("Reusable visual PNG belongs to different pixels.")
+            return {
+                "filename": descriptor["filename"],
+                "sha256": descriptor["sha256"],
+                "pixel_sha256": descriptor["pixel_sha256"],
+                "reuses_visual_frame_evidence": True,
+            }
+
+        identity_key = IdentityShadowEvidenceSerializer.identity_frame_key(evidence)
+        path = self._identity_png_directory / f"{identity_key}.png"
+        encoded = self._png_encoder(evidence.image)
+        if not isinstance(encoded, bytes) or not encoded:
+            raise ValueError("PNG encoder returned no bytes.")
+        decoded = cv2.imdecode(
+            np.frombuffer(encoded, dtype=np.uint8),
+            cv2.IMREAD_UNCHANGED,
+        )
+        if decoded is None or not np.array_equal(decoded, evidence.image):
+            raise ValueError("Identity PNG fidelity validation failed.")
+        encoded_hash = hashlib.sha256(encoded).hexdigest()
+        if path.exists():
+            if hashlib.sha256(path.read_bytes()).hexdigest() != encoded_hash:
+                raise ValueError("Conflicting identity PNG already exists.")
+        else:
+            self._atomic_write_bytes(path, encoded)
+        return {
+            "filename": path.relative_to(self._directory).as_posix(),
+            "sha256": encoded_hash,
+            "pixel_sha256": self._array_metadata(evidence.image)["pixel_sha256"],
+            "reuses_visual_frame_evidence": False,
+        }
+
+    def _append_identity_event(
+        self,
+        *,
+        event_type: IdentityShadowEventType,
+        session_key: str,
+        frame_payload: dict[str, Any] | None,
+        previous_status: str | None,
+        png: dict[str, Any] | None,
+    ) -> None:
+        sequence = self._identity_event_count + 1
+        frame_key = frame_payload.get("frame_key") if frame_payload else None
+        pre_event_count = (
+            self._identity_config.pre_event_trace_count
+            if self._identity_config is not None
+            else 0
+        )
+        pre_event_keys = [
+            str(item["frame_key"])
+            for item in list(self._identity_ring)[-pre_event_count:]
+        ] if pre_event_count else []
+        payload: dict[str, Any] = {
+            "identity_shadow_schema_version": (
+                IdentityShadowEvidenceSerializer.SCHEMA_VERSION
+            ),
+            "sequence_number": sequence,
+            "event_id": self._identity_event_id(
+                sequence=sequence,
+                event_type=event_type,
+                session_key=session_key,
+                frame_key=str(frame_key) if frame_key is not None else None,
+            ),
+            "event_type": event_type.value,
+            "recorded_at": self._aware_utc_now().isoformat(),
+            "session_key": session_key,
+            "frame_key": frame_key,
+            "frame_id": frame_payload.get("frame_id") if frame_payload else None,
+            "wall_timestamp": (
+                frame_payload.get("wall_timestamp") if frame_payload else None
+            ),
+            "continuity_generation": (
+                frame_payload.get("continuity_generation")
+                if frame_payload
+                else None
+            ),
+            "lifecycle_state": (
+                frame_payload.get("lifecycle_state") if frame_payload else None
+            ),
+            "identity_status": (
+                frame_payload.get("identity", {}).get("status")
+                if frame_payload
+                else None
+            ),
+            "previous_identity_status": previous_status,
+            "reset_reason": (
+                frame_payload.get("reset_reason") if frame_payload else None
+            ),
+            "pre_event_frame_keys": pre_event_keys,
+            "png": png,
+            "previous_record_sha256": self._identity_previous_event_hash,
+        }
+        record_hash = IdentityShadowEvidenceSerializer.payload_sha256(payload)
+        payload["record_sha256"] = record_hash
+        self._append_jsonl(self._identity_events_path, payload)
+        self._identity_event_count = sequence
+        self._identity_previous_event_hash = record_hash
+
+    @staticmethod
+    def _identity_event_id(
+        *,
+        sequence: int,
+        event_type: IdentityShadowEventType,
+        session_key: str,
+        frame_key: str | None,
+    ) -> str:
+        session_digest = hashlib.sha256(session_key.encode("utf-8")).hexdigest()[:12]
+        target = frame_key or f"session_{session_digest}"
+        return f"event_{sequence:08d}_{event_type.value}_{target}"
+
+    def _record_identity_failure(
+        self,
+        evidence: IdentityShadowFrameEvidence,
+        error: Exception,
+    ) -> None:
+        frame_key = IdentityShadowEvidenceSerializer.identity_frame_key(evidence)
+        self._record_failure_if_possible(
+            error=error,
+            stage="record_identity_shadow",
+            frame_id=evidence.frame_id,
+            snapshot_ids=(),
+            relevant_paths=(
+                "identity_shadow/frames.jsonl",
+                "identity_shadow/events.jsonl",
+                f"identity_shadow/png/{frame_key}.png",
+            ),
+        )
+        try:
+            self._append_identity_event(
+                event_type=IdentityShadowEventType.PERSISTENCE_FAILURE,
+                session_key=evidence.session_key,
+                frame_payload={
+                    "frame_key": frame_key,
+                    "frame_id": evidence.frame_id,
+                    "wall_timestamp": evidence.frame_timestamp.isoformat(),
+                    "continuity_generation": (
+                        evidence.resolution.trace.continuity_generation
+                    ),
+                    "lifecycle_state": (
+                        evidence.resolution.trace.internal_state.value
+                    ),
+                    "identity": {
+                        "status": evidence.resolution.result.status.value
+                    },
+                    "reset_reason": (
+                        evidence.resolution.trace.reset_reason.value
+                        if evidence.resolution.trace.reset_reason is not None
+                        else None
+                    ),
+                },
+                previous_status=(
+                    self._identity_previous_trace.status.value
+                    if self._identity_previous_trace is not None
+                    else None
+                ),
+                png=None,
+            )
+        except Exception:  # noqa: BLE001 - final best-effort failure signal.
+            logger.exception("Identity persistence failure event could not be written.")
+
+    def _load_identity_streams(self) -> None:
+        reader = IdentityShadowEvidenceReader(self._directory)
+        frames = reader.read_frames()
+        events = reader.read_events()
+        self._identity_frame_count = len(frames)
+        self._identity_event_count = len(events)
+        self._identity_previous_frame_hash = (
+            str(frames[-1]["record_sha256"]) if frames else None
+        )
+        self._identity_previous_event_hash = (
+            str(events[-1]["record_sha256"]) if events else None
+        )
+        self._identity_seen_frame_keys = {
+            str(frame["frame_key"]) for frame in frames
+        }
 
     @classmethod
     def frame_key(cls, frame_evidence: VisualFrameEvidence) -> str:
@@ -462,6 +898,17 @@ class FilesystemVisualEvidenceRecorder:
             metadata = self._read_json(path)
             if metadata.get("schema_version") != self.SCHEMA_VERSION:
                 raise ValueError("Unsupported visual evidence session schema.")
+            if self._identity_config is not None:
+                expected = self._identity_session_metadata()
+                existing = metadata.get("identity_shadow")
+                if existing is None:
+                    metadata["identity_shadow"] = expected
+                    self._atomic_write_json(path, metadata)
+                elif existing != expected:
+                    raise ValueError(
+                        "Identity evidence configuration changed inside one "
+                        "evidence session."
+                    )
             return
         payload = {
             "schema_version": self.SCHEMA_VERSION,
@@ -500,7 +947,27 @@ class FilesystemVisualEvidenceRecorder:
                 "or explicit ownership transfer"
             ),
         }
+        if self._identity_config is not None:
+            payload["identity_shadow"] = self._identity_session_metadata()
         self._atomic_write_json(path, payload)
+
+    def _identity_session_metadata(self) -> dict[str, Any]:
+        config = self._identity_config
+        if config is None:
+            raise RuntimeError("Identity evidence is not configured.")
+        return {
+            "enabled": True,
+            "schema_version": IdentityShadowEvidenceSerializer.SCHEMA_VERSION,
+            "frames_stream": "identity_shadow/frames.jsonl",
+            "events_stream": "identity_shadow/events.jsonl",
+            "ring_buffer_size": config.ring_buffer_size,
+            "pre_event_trace_count": config.pre_event_trace_count,
+            "png_mode": config.png_mode.value,
+            "checkpoint_interval_frames": config.checkpoint_interval_frames,
+            "post_event_frames": 0,
+            "source_key_persistence": "sha256",
+            "thresholds_calibrated": False,
+        }
 
     def _portable_observation_path(self) -> str | None:
         if self._observation_jsonl_path is None:
@@ -624,6 +1091,25 @@ class FilesystemVisualEvidenceRecorder:
             stream.write(payload)
             stream.flush()
             os.fsync(stream.fileno())
+
+    @staticmethod
+    def _atomic_write_bytes(path: Path, payload: bytes) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=f".{path.name}.",
+            suffix=".tmp",
+            dir=path.parent,
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary_path, path)
+        finally:
+            if temporary_path.exists():
+                temporary_path.unlink()
 
     @classmethod
     def _write_json_file(cls, path: Path, payload: dict[str, Any]) -> None:

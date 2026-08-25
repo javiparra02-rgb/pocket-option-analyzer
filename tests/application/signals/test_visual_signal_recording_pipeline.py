@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -36,6 +37,10 @@ class FakeVisualStrategySignalAnalysisPipeline:
         self.last_price_reference = None
         self.last_current_visual_price = None
         self.last_visual_price_comparison_context = None
+        self.last_current_candle_identity_resolution = None
+        self.last_current_candle_identity_frame_context = None
+        self.last_market_analysis = None
+        self.last_price_reference_result = None
         self.received_frame_id = None
         self.received_frame_timestamp = None
         self.received_monotonic_timestamp = None
@@ -91,6 +96,58 @@ class FakeObservationRecorder:
 
     def record(self, observation) -> bool:
         return True
+
+
+class FakeIdentityEvidenceRecorder:
+    def __init__(self, *, fail_record: bool = False) -> None:
+        self.fail_record = fail_record
+        self.started_sessions: list[str] = []
+        self.stopped_sessions = 0
+        self.frames = []
+
+    def start_identity_session(self, *, session_key: str) -> None:
+        self.started_sessions.append(session_key)
+
+    def stop_identity_session(self) -> None:
+        self.stopped_sessions += 1
+
+    def record_identity_shadow(self, frame_evidence) -> None:
+        if self.fail_record:
+            raise OSError("identity evidence unavailable")
+        self.frames.append(frame_evidence)
+
+
+def _set_identity_same_pass(
+    analysis_pipeline: FakeVisualStrategySignalAnalysisPipeline,
+    *,
+    frame_id: int,
+    timestamp: datetime,
+    status: str = "unavailable",
+) -> tuple[SimpleNamespace, SimpleNamespace]:
+    resolution = SimpleNamespace(
+        trace=SimpleNamespace(
+            frame_id=frame_id,
+            wall_timestamp=timestamp,
+            monotonic_timestamp=123.5,
+            source_key="win32_hwnd:99",
+            session_key="session-01",
+            legacy_latest_candidate_id=None,
+        ),
+        result=SimpleNamespace(status=status),
+    )
+    frame_context = SimpleNamespace(
+        frame_id=frame_id,
+        wall_timestamp=timestamp,
+        monotonic_timestamp=123.5,
+        source_key="win32_hwnd:99",
+        session_key="session-01",
+        roi_width=100,
+        roi_height=80,
+        membership=None,
+    )
+    analysis_pipeline.last_current_candle_identity_resolution = resolution
+    analysis_pipeline.last_current_candle_identity_frame_context = frame_context
+    return resolution, frame_context
 
 
 def test_analyze_and_record_propagates_price_observation_image_by_identity() -> None:
@@ -158,6 +215,130 @@ def test_analyze_and_record_propagates_identity_runtime_metadata() -> None:
     assert analysis_pipeline.received_source_key == "win32_hwnd:99"
     assert analysis_pipeline.received_session_key == "session-01"
     assert analysis_pipeline.stop_session_calls == 1
+
+
+def test_identity_evidence_uses_atomic_same_pass_objects_without_reanalysis() -> None:
+    timestamp = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+    image = np.zeros((80, 100, 3), dtype=np.uint8)
+    analysis_pipeline = FakeVisualStrategySignalAnalysisPipeline()
+    resolution, frame_context = _set_identity_same_pass(
+        analysis_pipeline,
+        frame_id=7,
+        timestamp=timestamp,
+    )
+    evidence_recorder = FakeIdentityEvidenceRecorder()
+    pipeline = VisualSignalRecordingPipeline(
+        analysis_pipeline=analysis_pipeline,
+        recorder=SignalRecorder(SignalHistory()),
+        identity_evidence_recorder=evidence_recorder,
+    )
+
+    pipeline.start_session(session_key="session-01")
+    pipeline.analyze_and_record(
+        image=image,
+        created_at=timestamp,
+        frame_id=7,
+        monotonic_timestamp=123.5,
+        source_key="win32_hwnd:99",
+        session_key="session-01",
+    )
+    pipeline.stop_session()
+
+    assert evidence_recorder.started_sessions == ["session-01"]
+    assert evidence_recorder.stopped_sessions == 1
+    assert len(evidence_recorder.frames) == 1
+    persisted = evidence_recorder.frames[0]
+    assert persisted.image is image
+    assert persisted.resolution is resolution
+    assert persisted.frame_context is frame_context
+    assert analysis_pipeline.received_frame_id == 7
+
+
+def test_identity_evidence_failure_does_not_change_legacy_signal() -> None:
+    timestamp = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+    baseline_analysis = FakeVisualStrategySignalAnalysisPipeline()
+    _set_identity_same_pass(
+        baseline_analysis,
+        frame_id=7,
+        timestamp=timestamp,
+        status="missing_from_view",
+    )
+    baseline_pipeline = VisualSignalRecordingPipeline(
+        analysis_pipeline=baseline_analysis,
+        recorder=SignalRecorder(SignalHistory()),
+    )
+    baseline = baseline_pipeline.analyze_and_record(
+        image=np.zeros((80, 100, 3), dtype=np.uint8),
+        created_at=timestamp,
+        frame_id=7,
+        monotonic_timestamp=123.5,
+        source_key="win32_hwnd:99",
+        session_key="session-01",
+    )
+    analysis_pipeline = FakeVisualStrategySignalAnalysisPipeline()
+    resolution, _ = _set_identity_same_pass(
+        analysis_pipeline,
+        frame_id=7,
+        timestamp=timestamp,
+        status="missing_from_view",
+    )
+    pipeline = VisualSignalRecordingPipeline(
+        analysis_pipeline=analysis_pipeline,
+        recorder=SignalRecorder(SignalHistory()),
+        identity_evidence_recorder=FakeIdentityEvidenceRecorder(
+            fail_record=True,
+        ),
+    )
+
+    record = pipeline.analyze_and_record(
+        image=np.zeros((80, 100, 3), dtype=np.uint8),
+        created_at=timestamp,
+        frame_id=7,
+        monotonic_timestamp=123.5,
+        source_key="win32_hwnd:99",
+        session_key="session-01",
+    )
+
+    assert record.signal.direction is SignalDirection.CALL
+    assert record.signal.strength is SignalStrength.HIGH
+    assert record.signal == baseline.signal
+    assert record.disposition is baseline.disposition
+    assert analysis_pipeline.last_current_candle_identity_resolution is resolution
+
+
+def test_missing_identity_with_persistence_does_not_gate_legacy_reference() -> None:
+    timestamp = datetime(2026, 8, 24, 12, 0, tzinfo=UTC)
+    reference_result = VisualPriceReferenceResult(
+        reference=None,
+        status=VisualPriceReferenceStatus.LATEST_CANDLE_MISSING,
+    )
+    analysis_pipeline = FakeVisualStrategySignalAnalysisPipeline()
+    analysis_pipeline.last_price_reference_result = reference_result
+    _set_identity_same_pass(
+        analysis_pipeline,
+        frame_id=7,
+        timestamp=timestamp,
+        status="missing_from_view",
+    )
+    evidence_recorder = FakeIdentityEvidenceRecorder()
+    pipeline = VisualSignalRecordingPipeline(
+        analysis_pipeline=analysis_pipeline,
+        recorder=SignalRecorder(SignalHistory()),
+        identity_evidence_recorder=evidence_recorder,
+    )
+
+    record = pipeline.analyze_and_record(
+        image=np.zeros((80, 100, 3), dtype=np.uint8),
+        created_at=timestamp,
+        frame_id=7,
+        monotonic_timestamp=123.5,
+        source_key="win32_hwnd:99",
+        session_key="session-01",
+    )
+
+    assert record.signal.direction is SignalDirection.CALL
+    assert analysis_pipeline.last_price_reference_result is reference_result
+    assert len(evidence_recorder.frames) == 1
 
 
 def test_analyze_and_record_propagates_exit_visual_price_by_identity() -> None:

@@ -6,6 +6,8 @@ from datetime import UTC, datetime
 import numpy as np
 
 from pocket_option_analyzer.application.evidence import (
+    IdentityShadowEvidenceRecorder,
+    IdentityShadowFrameEvidence,
     VisualEvidenceAssociation,
     VisualEvidencePhase,
     VisualEvidenceRecorder,
@@ -58,6 +60,7 @@ class VisualSignalRecordingPipeline:
         actionable_signal_gate: ActionableSignalGate | None = None,
         observation_recorder: StrategyObservationRecorder | None = None,
         visual_evidence_recorder: VisualEvidenceRecorder | None = None,
+        identity_evidence_recorder: IdentityShadowEvidenceRecorder | None = None,
     ) -> None:
         self._analysis_pipeline = analysis_pipeline
         self._recorder = recorder
@@ -65,16 +68,31 @@ class VisualSignalRecordingPipeline:
         self._actionable_signal_gate = actionable_signal_gate or ActionableSignalGate()
         self._observation_recorder = observation_recorder
         self._visual_evidence_recorder = visual_evidence_recorder
+        self._identity_evidence_recorder = identity_evidence_recorder
 
     def start_session(self, *, session_key: str) -> None:
         """Start session-scoped shadow state in the analysis pipeline."""
 
         self._analysis_pipeline.start_session(session_key=session_key)
+        if self._identity_evidence_recorder is not None:
+            try:
+                self._identity_evidence_recorder.start_identity_session(
+                    session_key=session_key,
+                )
+            except Exception:  # noqa: BLE001 - diagnostics remain fail-soft.
+                logger.exception("Identity evidence session could not be started.")
 
     def stop_session(self) -> None:
         """Stop session-scoped shadow state after the last frame completes."""
 
-        self._analysis_pipeline.stop_session()
+        try:
+            self._analysis_pipeline.stop_session()
+        finally:
+            if self._identity_evidence_recorder is not None:
+                try:
+                    self._identity_evidence_recorder.stop_identity_session()
+                except Exception:  # noqa: BLE001 - shutdown remains fail-soft.
+                    logger.exception("Identity evidence session could not be stopped.")
 
     def analyze_and_record(
         self,
@@ -109,7 +127,7 @@ class VisualSignalRecordingPipeline:
             session_key=session_key,
         )
 
-        evidence_associations = (
+        evidence_associations: list[VisualEvidenceAssociation] | None = (
             [] if self._visual_evidence_recorder is not None else None
         )
         frame_evidence = self._build_frame_evidence_fail_soft(
@@ -167,6 +185,15 @@ class VisualSignalRecordingPipeline:
         self._record_frame_evidence_fail_soft(
             frame_evidence=frame_evidence,
             associations=evidence_associations,
+        )
+        self._record_identity_evidence_fail_soft(
+            frame_id=frame_id,
+            frame_timestamp=resolved_created_at,
+            monotonic_timestamp=monotonic_timestamp,
+            source_key=source_key,
+            session_key=session_key,
+            image=image,
+            chart_region=chart_region,
         )
 
         gate_decision = self._actionable_signal_gate.evaluate(
@@ -362,3 +389,64 @@ class VisualSignalRecordingPipeline:
             )
         except Exception:  # noqa: BLE001 - instrumentation must remain fail-soft.
             logger.exception("Visual evidence recorder failed.")
+
+    def _record_identity_evidence_fail_soft(
+        self,
+        *,
+        frame_id: int | None,
+        frame_timestamp: datetime,
+        monotonic_timestamp: float | None,
+        source_key: str | None,
+        session_key: str | None,
+        image: np.ndarray,
+        chart_region: ChartRegion | None,
+    ) -> None:
+        recorder = self._identity_evidence_recorder
+        if recorder is None:
+            return
+        resolution = getattr(
+            self._analysis_pipeline,
+            "last_current_candle_identity_resolution",
+            None,
+        )
+        frame_context = getattr(
+            self._analysis_pipeline,
+            "last_current_candle_identity_frame_context",
+            None,
+        )
+        if resolution is None or frame_context is None:
+            return
+        if (
+            frame_id is None
+            or monotonic_timestamp is None
+            or source_key is None
+            or session_key is None
+        ):
+            logger.warning(
+                "Identity evidence was skipped because runtime metadata is "
+                "incomplete."
+            )
+            return
+        try:
+            height, width = image.shape[:2]
+            evidence = IdentityShadowFrameEvidence(
+                frame_id=frame_id,
+                frame_timestamp=frame_timestamp,
+                monotonic_timestamp=monotonic_timestamp,
+                source_key=source_key,
+                session_key=session_key,
+                roi_width=int(width),
+                roi_height=int(height),
+                image=image,
+                chart_region=chart_region,
+                resolution=resolution,
+                frame_context=frame_context,
+                visual_price_reference_result=getattr(
+                    self._analysis_pipeline,
+                    "last_price_reference_result",
+                    None,
+                ),
+            )
+            recorder.record_identity_shadow(evidence)
+        except Exception:  # noqa: BLE001 - instrumentation must remain fail-soft.
+            logger.exception("Identity shadow evidence recorder failed.")
