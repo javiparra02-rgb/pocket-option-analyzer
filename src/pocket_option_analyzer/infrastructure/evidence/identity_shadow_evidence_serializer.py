@@ -8,9 +8,14 @@ from pocket_option_analyzer.application.evidence import (
     IdentityShadowFrameEvidence,
 )
 from pocket_option_analyzer.application.market import (
+    BootstrapConfirmationEvaluation,
     CurrentCandleIdentityTrace,
+    CurrentCandleMissingEvidence,
     CurrentCandleSequenceMatchMetrics,
+    TerminalSeedEvaluation,
     TerminalSlotRegion,
+    TrackingTerminalEvaluation,
+    TrustedRolloverEvaluation,
 )
 from pocket_option_analyzer.vision.models import (
     CandleOverlayEvidence,
@@ -23,6 +28,7 @@ class IdentityShadowEvidenceSerializer:
     """Explicit stable JSON projection for identity calibration/replay."""
 
     SCHEMA_VERSION = 1
+    DECISION_TELEMETRY_SCHEMA_VERSION = 1
 
     @staticmethod
     def payload_sha256(payload: dict[str, Any]) -> str:
@@ -125,6 +131,23 @@ class IdentityShadowEvidenceSerializer:
                 ),
                 "current": cls._terminal_region(trace.terminal_region),
             },
+            "identity_decision_telemetry_schema_version": (
+                cls.DECISION_TELEMETRY_SCHEMA_VERSION
+            ),
+            "trusted_rollover_evaluation": cls._trusted_rollover_evaluation(
+                trace.trusted_rollover_evaluation
+            ),
+            "terminal_seed_evaluation": cls._terminal_seed_evaluation(
+                trace.terminal_seed_evaluation
+            ),
+            "bootstrap_confirmation_evaluation": (
+                cls._bootstrap_confirmation_evaluation(
+                    trace.bootstrap_confirmation_evaluation
+                )
+            ),
+            "tracking_terminal_evaluation": cls._tracking_terminal_evaluation(
+                trace.tracking_terminal_evaluation
+            ),
             "sequence_match": cls._sequence_match(trace),
             "rollover": {
                 "suspected": trace.rollover_suspected,
@@ -225,6 +248,141 @@ class IdentityShadowEvidenceSerializer:
             "sufficient": value.sufficient,
         }
 
+    @staticmethod
+    def _trusted_rollover_evaluation(
+        value: TrustedRolloverEvaluation,
+    ) -> dict[str, Any]:
+        return {
+            "status": value.status.value,
+            "rejection_reason": (
+                value.rejection_reason.value
+                if value.rejection_reason is not None
+                else None
+            ),
+            "match_status": (
+                value.match_status.value if value.match_status is not None else None
+            ),
+            "selected_hypothesis": (
+                value.selected_hypothesis.value
+                if value.selected_hypothesis is not None
+                else None
+            ),
+            "rollover_qualifies": value.rollover_qualifies,
+            "support": {
+                "actual": value.support_actual,
+                "minimum": value.support_minimum,
+                "pass": value.support_pass,
+            },
+            "type_ratio": {
+                "actual": value.type_ratio_actual,
+                "minimum": value.type_ratio_minimum,
+                "pass": value.type_ratio_pass,
+            },
+            "residual": {
+                "actual_px": value.residual_actual_px,
+                "maximum_px": value.residual_maximum_px,
+                "pass": value.residual_pass,
+            },
+            "previous_member_count": value.previous_member_count,
+            "current_member_count": value.current_member_count,
+            "unmatched_previous_ids": list(value.unmatched_previous_ids),
+            "unmatched_current_ids": list(value.unmatched_current_ids),
+            "expected_previous_leftmost_id": (
+                value.expected_previous_leftmost_id
+            ),
+            "expected_current_rightmost_id": value.expected_current_rightmost_id,
+            "previous_boundary_compatible": value.previous_boundary_compatible,
+            "current_boundary_compatible": value.current_boundary_compatible,
+            "temporal_rollover_trusted": value.temporal_rollover_trusted,
+        }
+
+    @staticmethod
+    def _terminal_seed_evaluation(
+        value: TerminalSeedEvaluation,
+    ) -> dict[str, Any]:
+        return {
+            "status": value.status.value,
+            "candidate_id": value.candidate_id,
+            "provenance": value.provenance.value,
+            "is_unmatched_current": value.is_unmatched_current,
+            "is_current_rightmost": value.is_current_rightmost,
+            "membership_included": value.membership_included,
+            "geometry_valid": value.geometry_valid,
+            "close_observable": value.close_observable,
+            "overlay_status": (
+                value.overlay_status.value if value.overlay_status is not None else None
+            ),
+            "diagnostic": value.diagnostic,
+        }
+
+    @classmethod
+    def _bootstrap_confirmation_evaluation(
+        cls,
+        value: BootstrapConfirmationEvaluation,
+    ) -> dict[str, Any]:
+        return {
+            "evaluated": value.evaluated,
+            "accepted": value.accepted,
+            "rejection_reason": (
+                value.rejection_reason.value
+                if value.rejection_reason is not None
+                else None
+            ),
+            "pending_before": value.pending_before,
+            "pending_after": value.pending_after,
+            "lifecycle_before": (
+                value.lifecycle_before.value
+                if value.lifecycle_before is not None
+                else None
+            ),
+            "lifecycle_after": (
+                value.lifecycle_after.value
+                if value.lifecycle_after is not None
+                else None
+            ),
+            "selected_stable": value.selected_stable,
+            "provisional_region": cls._terminal_region(value.provisional_region),
+            "candidates_in_region": list(value.candidates_in_region),
+            "candidate_count": value.candidate_count,
+            "overlay_conflict": value.overlay_conflict,
+            "resulting_status": (
+                value.resulting_status.value
+                if value.resulting_status is not None
+                else None
+            ),
+        }
+
+    @classmethod
+    def _tracking_terminal_evaluation(
+        cls,
+        value: TrackingTerminalEvaluation,
+    ) -> dict[str, Any]:
+        return {
+            "evaluated": value.evaluated,
+            "region_before": cls._terminal_region(value.region_before),
+            "region_after": cls._terminal_region(value.region_after),
+            "selected_hypothesis": (
+                value.selected_hypothesis.value
+                if value.selected_hypothesis is not None
+                else None
+            ),
+            "candidates_in_region": list(value.candidates_in_region),
+            "rollover_terminal_status": value.rollover_terminal_status.value,
+            "candidate_provenance": value.candidate_provenance.value,
+            "competitor_ids": list(value.competitor_ids),
+            "overlay_conflict": value.overlay_conflict,
+            "missing_evidence": cls._missing_evidence_value(
+                value.missing_evidence
+            ),
+            "resulting_status": (
+                value.resulting_status.value
+                if value.resulting_status is not None
+                else None
+            ),
+            "region_moved": value.region_moved,
+            "decision_reason": value.decision_reason.value,
+        }
+
     @classmethod
     def _sequence_match(
         cls,
@@ -276,7 +434,14 @@ class IdentityShadowEvidenceSerializer:
     def _missing_evidence(
         trace: CurrentCandleIdentityTrace,
     ) -> dict[str, Any] | None:
-        value = trace.missing_evidence
+        return IdentityShadowEvidenceSerializer._missing_evidence_value(
+            trace.missing_evidence
+        )
+
+    @staticmethod
+    def _missing_evidence_value(
+        value: CurrentCandleMissingEvidence | None,
+    ) -> dict[str, Any] | None:
         if value is None:
             return None
         return {

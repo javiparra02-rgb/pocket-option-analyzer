@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from math import isclose
 from threading import RLock
 
 from pocket_option_analyzer.vision.models.candle_detection_trace import (
@@ -14,6 +15,8 @@ from pocket_option_analyzer.vision.models.candle_series_membership import (
 )
 
 from .current_candle_identity import (
+    BootstrapConfirmationEvaluation,
+    BootstrapConfirmationRejectionReason,
     CurrentCandleFrameContext,
     CurrentCandleIdentityConfig,
     CurrentCandleIdentityEvidence,
@@ -28,7 +31,15 @@ from .current_candle_identity import (
     CurrentCandleMissingEvidence,
     CurrentCandleSequenceMatch,
     CurrentCandleTranslationHypothesis,
+    TemporalRolloverEvaluationStatus,
+    TemporalRolloverRejectionReason,
+    TerminalSeedEvaluation,
+    TerminalSeedEvaluationStatus,
+    TerminalSeedProvenance,
     TerminalSlotRegion,
+    TrackingTerminalDecisionReason,
+    TrackingTerminalEvaluation,
+    TrustedRolloverEvaluation,
     candle_center_x,
     pitches_are_compatible,
 )
@@ -53,6 +64,23 @@ class _ResolverState:
     pending_bootstrap: _PendingBootstrap | None = None
     last_trace: CurrentCandleIdentityTrace | None = None
     last_reset_reason: CurrentCandleIdentityResetReason | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class _ResolutionTelemetry:
+    trusted_rollover: TrustedRolloverEvaluation
+    terminal_seed: TerminalSeedEvaluation
+    bootstrap_confirmation: BootstrapConfirmationEvaluation
+    tracking_terminal: TrackingTerminalEvaluation
+
+    @classmethod
+    def empty(cls) -> _ResolutionTelemetry:
+        return cls(
+            trusted_rollover=TrustedRolloverEvaluation.not_evaluated(),
+            terminal_seed=TerminalSeedEvaluation.not_evaluated(),
+            bootstrap_confirmation=BootstrapConfirmationEvaluation.not_evaluated(),
+            tracking_terminal=TrackingTerminalEvaluation.not_evaluated(),
+        )
 
 
 class CurrentCandleIdentityResolver:
@@ -249,6 +277,7 @@ class CurrentCandleIdentityResolver:
                 lifecycle=CurrentCandleIdentityLifecycle.DEGRADED,
                 previous_context=None,
                 pending_bootstrap=None,
+                terminal_region=None,
                 last_reset_reason=(
                     CurrentCandleIdentityResetReason.MEMBERSHIP_UNAVAILABLE
                 ),
@@ -279,7 +308,10 @@ class CurrentCandleIdentityResolver:
                 reset_reason=discontinuity,
             )
 
-        if state.lifecycle is CurrentCandleIdentityLifecycle.DEGRADED:
+        if (
+            state.lifecycle is CurrentCandleIdentityLifecycle.DEGRADED
+            and state.terminal_region is None
+        ):
             reset_state = self._fresh_state(
                 generation=state.continuity_generation + 1,
                 active=True,
@@ -312,23 +344,81 @@ class CurrentCandleIdentityResolver:
     ) -> tuple[_ResolverState, CurrentCandleIdentityResolution]:
         pending = state.pending_bootstrap
         if pending is None:
-            if self._is_trusted_rollover(
+            trusted_rollover = self._evaluate_temporal_rollover(
                 state.previous_context,
                 context,
                 sequence_match,
-            ):
+            )
+            if trusted_rollover.temporal_rollover_trusted:
                 assert state.previous_context is not None
-                terminal = context.member_candles[-1]
-                if self._candidate_is_expiry_overlay(context, terminal.candidate_id):
-                    next_state = replace(state, previous_context=context)
+                terminal_seed = self._evaluate_terminal_seed(
+                    context=context,
+                    trusted_rollover=trusted_rollover,
+                )
+                if terminal_seed.status is not TerminalSeedEvaluationStatus.OBSERVED:
+                    next_state = replace(
+                        state,
+                        previous_context=context,
+                        terminal_region=None,
+                        pending_bootstrap=None,
+                    )
+                    is_absent = (
+                        terminal_seed.status is TerminalSeedEvaluationStatus.ABSENT
+                    )
+                    status = (
+                        CurrentCandleIdentityStatus.UNAVAILABLE
+                        if is_absent
+                        else CurrentCandleIdentityStatus.AMBIGUOUS
+                    )
+                    telemetry = _ResolutionTelemetry(
+                        trusted_rollover=trusted_rollover,
+                        terminal_seed=terminal_seed,
+                        bootstrap_confirmation=(
+                            BootstrapConfirmationEvaluation(
+                                evaluated=False,
+                                accepted=False,
+                                rejection_reason=(
+                                    BootstrapConfirmationRejectionReason.TERMINAL_SEED_ABSENT
+                                    if is_absent
+                                    else (
+                                        BootstrapConfirmationRejectionReason.TERMINAL_SEED_INVALID
+                                    )
+                                ),
+                                pending_before=False,
+                                pending_after=False,
+                                lifecycle_before=state.lifecycle,
+                                lifecycle_after=next_state.lifecycle,
+                                selected_stable=None,
+                                provisional_region=None,
+                                candidates_in_region=(),
+                                candidate_count=0,
+                                overlay_conflict=(
+                                    terminal_seed.status
+                                    is TerminalSeedEvaluationStatus.OVERLAY
+                                ),
+                                resulting_status=status,
+                            )
+                        ),
+                        tracking_terminal=(
+                            TrackingTerminalEvaluation.not_evaluated()
+                        ),
+                    )
+                    diagnostic = (
+                        "trusted_rollover_terminal_absent_bootstrap_waiting"
+                        if is_absent
+                        else "trusted_rollover_terminal_seed_not_usable"
+                    )
                     return next_state, self._nonconclusive_resolution(
-                        status=CurrentCandleIdentityStatus.AMBIGUOUS,
+                        status=status,
                         context=context,
                         state=next_state,
-                        diagnostic="rollover_terminal_conflicts_with_overlay",
+                        diagnostic=diagnostic,
                         sequence_match=sequence_match,
                         rollover_suspected=True,
+                        telemetry=telemetry,
                     )
+                assert terminal_seed.candidate_id is not None
+                terminal = self._member_by_id(context, terminal_seed.candidate_id)
                 region = self._learn_terminal_region(
                     candidate=terminal,
                     context=context,
@@ -343,6 +433,28 @@ class CurrentCandleIdentityResolver:
                         rollover_match=sequence_match,
                     ),
                 )
+                telemetry = _ResolutionTelemetry(
+                    trusted_rollover=trusted_rollover,
+                    terminal_seed=terminal_seed,
+                    bootstrap_confirmation=BootstrapConfirmationEvaluation(
+                        evaluated=False,
+                        accepted=False,
+                        rejection_reason=(
+                            BootstrapConfirmationRejectionReason.NOT_EVALUATED
+                        ),
+                        pending_before=False,
+                        pending_after=True,
+                        lifecycle_before=state.lifecycle,
+                        lifecycle_after=next_state.lifecycle,
+                        selected_stable=None,
+                        provisional_region=region,
+                        candidates_in_region=(terminal.candidate_id,),
+                        candidate_count=1,
+                        overlay_conflict=False,
+                        resulting_status=CurrentCandleIdentityStatus.UNAVAILABLE,
+                    ),
+                    tracking_terminal=TrackingTerminalEvaluation.not_evaluated(),
+                )
                 return next_state, self._unavailable_resolution(
                     context=context,
                     state=next_state,
@@ -350,6 +462,7 @@ class CurrentCandleIdentityResolver:
                     sequence_match=sequence_match,
                     terminal_region=region,
                     rollover_suspected=True,
+                    telemetry=telemetry,
                 )
             next_state = replace(state, previous_context=context)
             status = (
@@ -357,12 +470,39 @@ class CurrentCandleIdentityResolver:
                 if sequence_match.status is CurrentCandleMatchStatus.AMBIGUOUS
                 else CurrentCandleIdentityStatus.UNAVAILABLE
             )
+            telemetry = _ResolutionTelemetry(
+                trusted_rollover=trusted_rollover,
+                terminal_seed=TerminalSeedEvaluation.not_evaluated(),
+                bootstrap_confirmation=BootstrapConfirmationEvaluation(
+                    evaluated=False,
+                    accepted=False,
+                    rejection_reason=(
+                        BootstrapConfirmationRejectionReason.TEMPORAL_ROLLOVER_REJECTED
+                    ),
+                    pending_before=False,
+                    pending_after=False,
+                    lifecycle_before=state.lifecycle,
+                    lifecycle_after=next_state.lifecycle,
+                    selected_stable=None,
+                    provisional_region=None,
+                    candidates_in_region=(),
+                    candidate_count=0,
+                    overlay_conflict=False,
+                    resulting_status=status,
+                ),
+                tracking_terminal=TrackingTerminalEvaluation.not_evaluated(),
+            )
             return next_state, self._nonconclusive_resolution(
                 status=status,
                 context=context,
                 state=next_state,
                 diagnostic="bootstrap_waiting_for_trusted_rollover",
                 sequence_match=sequence_match,
+                rollover_suspected=(
+                    sequence_match.selected_hypothesis
+                    is CurrentCandleTranslationHypothesis.ROLLOVER
+                ),
+                telemetry=telemetry,
             )
 
         if (
@@ -379,11 +519,34 @@ class CurrentCandleIdentityResolver:
                     CurrentCandleIdentityResetReason.ROLL_OVER_INCONSISTENT
                 ),
             )
+            telemetry = _ResolutionTelemetry(
+                trusted_rollover=TrustedRolloverEvaluation.not_evaluated(),
+                terminal_seed=TerminalSeedEvaluation.not_evaluated(),
+                bootstrap_confirmation=BootstrapConfirmationEvaluation(
+                    evaluated=True,
+                    accepted=False,
+                    rejection_reason=(
+                        BootstrapConfirmationRejectionReason.STABLE_NOT_SELECTED
+                    ),
+                    pending_before=True,
+                    pending_after=False,
+                    lifecycle_before=state.lifecycle,
+                    lifecycle_after=reset_state.lifecycle,
+                    selected_stable=False,
+                    provisional_region=pending.terminal_region,
+                    candidates_in_region=(),
+                    candidate_count=0,
+                    overlay_conflict=False,
+                    resulting_status=CurrentCandleIdentityStatus.UNAVAILABLE,
+                ),
+                tracking_terminal=TrackingTerminalEvaluation.not_evaluated(),
+            )
             return self._seed_bootstrap(
                 reset_state,
                 context,
                 reset_reason=CurrentCandleIdentityResetReason.ROLL_OVER_INCONSISTENT,
                 sequence_match=sequence_match,
+                telemetry=telemetry,
             )
         terminal_candidates = self._terminal_members(
             context.member_candles,
@@ -391,6 +554,18 @@ class CurrentCandleIdentityResolver:
         )
         if len(terminal_candidates) != 1:
             next_state = replace(state, previous_context=context)
+            telemetry = self._bootstrap_confirmation_telemetry(
+                state=state,
+                next_state=next_state,
+                pending=pending,
+                candidates=terminal_candidates,
+                accepted=False,
+                rejection_reason=(
+                    BootstrapConfirmationRejectionReason.TERMINAL_CANDIDATE_NOT_UNIQUE
+                ),
+                overlay_conflict=False,
+                resulting_status=CurrentCandleIdentityStatus.AMBIGUOUS,
+            )
             return next_state, self._nonconclusive_resolution(
                 status=CurrentCandleIdentityStatus.AMBIGUOUS,
                 context=context,
@@ -399,10 +574,23 @@ class CurrentCandleIdentityResolver:
                 sequence_match=sequence_match,
                 terminal_region=pending.terminal_region,
                 rollover_suspected=True,
+                telemetry=telemetry,
             )
         candidate = terminal_candidates[0]
         if self._candidate_is_expiry_overlay(context, candidate.candidate_id):
             next_state = replace(state, previous_context=context)
+            telemetry = self._bootstrap_confirmation_telemetry(
+                state=state,
+                next_state=next_state,
+                pending=pending,
+                candidates=terminal_candidates,
+                accepted=False,
+                rejection_reason=(
+                    BootstrapConfirmationRejectionReason.OVERLAY_CONFLICT
+                ),
+                overlay_conflict=True,
+                resulting_status=CurrentCandleIdentityStatus.AMBIGUOUS,
+            )
             return next_state, self._nonconclusive_resolution(
                 status=CurrentCandleIdentityStatus.AMBIGUOUS,
                 context=context,
@@ -411,6 +599,7 @@ class CurrentCandleIdentityResolver:
                 sequence_match=sequence_match,
                 terminal_region=pending.terminal_region,
                 rollover_suspected=True,
+                telemetry=telemetry,
             )
         learned_region = self._learn_terminal_region(
             candidate=candidate,
@@ -428,6 +617,16 @@ class CurrentCandleIdentityResolver:
             terminal_region=learned_region,
             pending_bootstrap=None,
         )
+        telemetry = self._bootstrap_confirmation_telemetry(
+            state=state,
+            next_state=tracking,
+            pending=pending,
+            candidates=terminal_candidates,
+            accepted=True,
+            rejection_reason=None,
+            overlay_conflict=False,
+            resulting_status=CurrentCandleIdentityStatus.CONFIRMED,
+        )
         return tracking, self._confirmed_resolution(
             context=context,
             state=tracking,
@@ -437,6 +636,7 @@ class CurrentCandleIdentityResolver:
             rollover_suspected=True,
             rollover_confirmed=True,
             diagnostic="stable_frame_confirmed_bootstrap_terminal",
+            telemetry=telemetry,
         )
 
     def _resolve_tracking(
@@ -448,7 +648,26 @@ class CurrentCandleIdentityResolver:
         region = state.terminal_region
         assert region is not None
         if sequence_match.status is CurrentCandleMatchStatus.AMBIGUOUS:
-            next_state = replace(state, previous_context=context)
+            next_state = self._revalidation_state(state, context)
+            telemetry = self._tracking_telemetry(
+                trusted_rollover=self._evaluate_temporal_rollover(
+                    state.previous_context,
+                    context,
+                    sequence_match,
+                ),
+                terminal_seed=TerminalSeedEvaluation.not_evaluated(),
+                region_before=region,
+                region_after=region,
+                sequence_match=sequence_match,
+                candidates=(),
+                competitors=(),
+                overlay_conflict=False,
+                missing=None,
+                resulting_status=CurrentCandleIdentityStatus.AMBIGUOUS,
+                reason=(
+                    TrackingTerminalDecisionReason.REGION_PRESERVED_MATCH_AMBIGUOUS
+                ),
+            )
             return next_state, self._nonconclusive_resolution(
                 status=CurrentCandleIdentityStatus.AMBIGUOUS,
                 context=context,
@@ -456,29 +675,84 @@ class CurrentCandleIdentityResolver:
                 diagnostic="tracking_translation_ambiguous",
                 sequence_match=sequence_match,
                 terminal_region=region,
+                telemetry=telemetry,
             )
         if sequence_match.status is not CurrentCandleMatchStatus.SELECTED:
-            reset_state = self._fresh_state(
-                generation=state.continuity_generation + 1,
-                active=True,
-                source_key=context.source_key,
-                session_key=context.session_key,
-                reset_reason=(
-                    CurrentCandleIdentityResetReason.TRANSLATION_DISCONTINUITY
+            next_state = self._revalidation_state(state, context)
+            telemetry = self._tracking_telemetry(
+                trusted_rollover=self._evaluate_temporal_rollover(
+                    state.previous_context,
+                    context,
+                    sequence_match,
                 ),
-            )
-            return self._seed_bootstrap(
-                reset_state,
-                context,
-                reset_reason=(
-                    CurrentCandleIdentityResetReason.TRANSLATION_DISCONTINUITY
-                ),
+                terminal_seed=TerminalSeedEvaluation.not_evaluated(),
+                region_before=region,
+                region_after=region,
                 sequence_match=sequence_match,
+                candidates=(),
+                competitors=(),
+                overlay_conflict=False,
+                missing=None,
+                resulting_status=CurrentCandleIdentityStatus.UNAVAILABLE,
+                reason=(
+                    TrackingTerminalDecisionReason.REGION_PRESERVED_MATCH_UNAVAILABLE
+                ),
             )
+            return next_state, self._unavailable_resolution(
+                context=context,
+                state=next_state,
+                diagnostic="tracking_translation_unavailable_region_preserved",
+                sequence_match=sequence_match,
+                terminal_region=region,
+                telemetry=telemetry,
+            )
+        if (
+            sequence_match.selected_hypothesis
+            is CurrentCandleTranslationHypothesis.ROLLOVER
+        ):
+            return self._resolve_tracking_rollover(
+                state,
+                context,
+                sequence_match,
+                region,
+            )
+        return self._resolve_tracking_stable(
+            state,
+            context,
+            sequence_match,
+            region,
+        )
 
+    def _resolve_tracking_stable(
+        self,
+        state: _ResolverState,
+        context: CurrentCandleFrameContext,
+        sequence_match: CurrentCandleSequenceMatch,
+        region: TerminalSlotRegion,
+    ) -> tuple[_ResolverState, CurrentCandleIdentityResolution]:
+        trusted_rollover = self._evaluate_temporal_rollover(
+            state.previous_context,
+            context,
+            sequence_match,
+        )
         terminal_members = self._terminal_members(context.member_candles, region)
         if len(terminal_members) > 1:
-            next_state = replace(state, previous_context=context)
+            next_state = self._revalidation_state(state, context)
+            telemetry = self._tracking_telemetry(
+                trusted_rollover=trusted_rollover,
+                terminal_seed=TerminalSeedEvaluation.not_evaluated(),
+                region_before=region,
+                region_after=region,
+                sequence_match=sequence_match,
+                candidates=terminal_members,
+                competitors=(),
+                overlay_conflict=False,
+                missing=None,
+                resulting_status=CurrentCandleIdentityStatus.AMBIGUOUS,
+                reason=(
+                    TrackingTerminalDecisionReason.REGION_PRESERVED_MULTIPLE_CANDIDATES
+                ),
+            )
             return next_state, self._nonconclusive_resolution(
                 status=CurrentCandleIdentityStatus.AMBIGUOUS,
                 context=context,
@@ -486,10 +760,26 @@ class CurrentCandleIdentityResolver:
                 diagnostic="multiple_members_compete_for_terminal_slot",
                 sequence_match=sequence_match,
                 terminal_region=region,
+                telemetry=telemetry,
             )
         competitors = self._terminal_competitors(context, region)
         if competitors:
-            next_state = replace(state, previous_context=context)
+            next_state = self._revalidation_state(state, context)
+            telemetry = self._tracking_telemetry(
+                trusted_rollover=trusted_rollover,
+                terminal_seed=TerminalSeedEvaluation.not_evaluated(),
+                region_before=region,
+                region_after=region,
+                sequence_match=sequence_match,
+                candidates=terminal_members,
+                competitors=competitors,
+                overlay_conflict=False,
+                missing=None,
+                resulting_status=CurrentCandleIdentityStatus.AMBIGUOUS,
+                reason=(
+                    TrackingTerminalDecisionReason.REGION_PRESERVED_COMPETITOR
+                ),
+            )
             return next_state, self._nonconclusive_resolution(
                 status=CurrentCandleIdentityStatus.AMBIGUOUS,
                 context=context,
@@ -497,11 +787,25 @@ class CurrentCandleIdentityResolver:
                 diagnostic="excluded_candle_like_terminal_competitor",
                 sequence_match=sequence_match,
                 terminal_region=region,
+                telemetry=telemetry,
             )
         if terminal_members:
             candidate = terminal_members[0]
             if self._candidate_is_expiry_overlay(context, candidate.candidate_id):
-                next_state = replace(state, previous_context=context)
+                next_state = self._revalidation_state(state, context)
+                telemetry = self._tracking_telemetry(
+                    trusted_rollover=trusted_rollover,
+                    terminal_seed=TerminalSeedEvaluation.not_evaluated(),
+                    region_before=region,
+                    region_after=region,
+                    sequence_match=sequence_match,
+                    candidates=terminal_members,
+                    competitors=(),
+                    overlay_conflict=True,
+                    missing=None,
+                    resulting_status=CurrentCandleIdentityStatus.AMBIGUOUS,
+                    reason=TrackingTerminalDecisionReason.REGION_PRESERVED_OVERLAY,
+                )
                 return next_state, self._nonconclusive_resolution(
                     status=CurrentCandleIdentityStatus.AMBIGUOUS,
                     context=context,
@@ -509,30 +813,7 @@ class CurrentCandleIdentityResolver:
                     diagnostic="tracked_terminal_conflicts_with_overlay",
                     sequence_match=sequence_match,
                     terminal_region=region,
-                )
-            source = (
-                CurrentCandleIdentitySource.TRUSTED_ROLLOVER
-                if sequence_match.selected_hypothesis
-                is CurrentCandleTranslationHypothesis.ROLLOVER
-                else CurrentCandleIdentitySource.STABLE_TRACKING
-            )
-            if (
-                source is CurrentCandleIdentitySource.TRUSTED_ROLLOVER
-                and not self._is_trusted_rollover(
-                    state.previous_context,
-                    context,
-                    sequence_match,
-                )
-            ):
-                next_state = replace(state, previous_context=context)
-                return next_state, self._nonconclusive_resolution(
-                    status=CurrentCandleIdentityStatus.AMBIGUOUS,
-                    context=context,
-                    state=next_state,
-                    diagnostic="rollover_not_trusted_during_tracking",
-                    sequence_match=sequence_match,
-                    terminal_region=region,
-                    rollover_suspected=True,
+                    telemetry=telemetry,
                 )
             updated_region = self._learn_terminal_region(
                 candidate=candidate,
@@ -545,38 +826,85 @@ class CurrentCandleIdentityResolver:
             )
             next_state = replace(
                 state,
+                lifecycle=CurrentCandleIdentityLifecycle.TRACKING,
                 previous_context=context,
                 terminal_region=updated_region,
             )
-            is_rollover = source is CurrentCandleIdentitySource.TRUSTED_ROLLOVER
+            telemetry = self._tracking_telemetry(
+                trusted_rollover=trusted_rollover,
+                terminal_seed=TerminalSeedEvaluation.not_evaluated(),
+                region_before=region,
+                region_after=updated_region,
+                sequence_match=sequence_match,
+                candidates=terminal_members,
+                competitors=(),
+                overlay_conflict=False,
+                missing=None,
+                resulting_status=CurrentCandleIdentityStatus.CONFIRMED,
+                reason=(
+                    TrackingTerminalDecisionReason.REGION_UPDATED_FROM_STABLE
+                ),
+                region_moved=self._region_geometry_changed(
+                    region,
+                    updated_region,
+                ),
+            )
             return next_state, self._confirmed_resolution(
                 context=context,
                 state=next_state,
                 candidate=candidate,
-                source=source,
+                source=CurrentCandleIdentitySource.STABLE_TRACKING,
                 sequence_match=sequence_match,
-                rollover_suspected=is_rollover,
-                rollover_confirmed=is_rollover,
-                diagnostic=f"terminal_candidate_confirmed_by_{source.value}",
+                rollover_suspected=False,
+                rollover_confirmed=False,
+                diagnostic="terminal_candidate_confirmed_by_stable_tracking",
+                telemetry=telemetry,
             )
 
         missing = self._missing_evidence(context, region)
-        if (
-            sequence_match.selected_hypothesis
-            is CurrentCandleTranslationHypothesis.STABLE
-            and missing.sufficient
-        ):
-            next_state = replace(state, previous_context=context)
+        if missing.sufficient:
+            next_state = replace(
+                state,
+                lifecycle=CurrentCandleIdentityLifecycle.TRACKING,
+                previous_context=context,
+            )
+            telemetry = self._tracking_telemetry(
+                trusted_rollover=trusted_rollover,
+                terminal_seed=TerminalSeedEvaluation.not_evaluated(),
+                region_before=region,
+                region_after=region,
+                sequence_match=sequence_match,
+                candidates=(),
+                competitors=(),
+                overlay_conflict=False,
+                missing=missing,
+                resulting_status=CurrentCandleIdentityStatus.MISSING_FROM_VIEW,
+                reason=(
+                    TrackingTerminalDecisionReason.REGION_PRESERVED_MISSING_FROM_VIEW
+                ),
+            )
             return next_state, self._missing_resolution(
                 context=context,
                 state=next_state,
                 sequence_match=sequence_match,
                 missing_evidence=missing,
+                telemetry=telemetry,
             )
-        next_state = replace(
-            state,
-            lifecycle=CurrentCandleIdentityLifecycle.DEGRADED,
-            previous_context=context,
+        next_state = self._revalidation_state(state, context)
+        telemetry = self._tracking_telemetry(
+            trusted_rollover=trusted_rollover,
+            terminal_seed=TerminalSeedEvaluation.not_evaluated(),
+            region_before=region,
+            region_after=region,
+            sequence_match=sequence_match,
+            candidates=(),
+            competitors=(),
+            overlay_conflict=False,
+            missing=missing,
+            resulting_status=CurrentCandleIdentityStatus.AMBIGUOUS,
+            reason=(
+                TrackingTerminalDecisionReason.REGION_PRESERVED_MISSING_INSUFFICIENT
+            ),
         )
         return next_state, self._nonconclusive_resolution(
             status=CurrentCandleIdentityStatus.AMBIGUOUS,
@@ -586,6 +914,204 @@ class CurrentCandleIdentityResolver:
             sequence_match=sequence_match,
             terminal_region=region,
             missing_evidence=missing,
+            telemetry=telemetry,
+        )
+
+    def _resolve_tracking_rollover(
+        self,
+        state: _ResolverState,
+        context: CurrentCandleFrameContext,
+        sequence_match: CurrentCandleSequenceMatch,
+        region: TerminalSlotRegion,
+    ) -> tuple[_ResolverState, CurrentCandleIdentityResolution]:
+        trusted_rollover = self._evaluate_temporal_rollover(
+            state.previous_context,
+            context,
+            sequence_match,
+        )
+        terminal_members = self._terminal_members(context.member_candles, region)
+        competitors = self._terminal_competitors(context, region)
+        terminal_seed = (
+            self._evaluate_terminal_seed(
+                context=context,
+                trusted_rollover=trusted_rollover,
+            )
+            if trusted_rollover.temporal_rollover_trusted
+            else TerminalSeedEvaluation.not_evaluated()
+        )
+        if not trusted_rollover.temporal_rollover_trusted:
+            next_state = self._revalidation_state(state, context)
+            telemetry = self._tracking_telemetry(
+                trusted_rollover=trusted_rollover,
+                terminal_seed=terminal_seed,
+                region_before=region,
+                region_after=region,
+                sequence_match=sequence_match,
+                candidates=terminal_members,
+                competitors=competitors,
+                overlay_conflict=False,
+                missing=None,
+                resulting_status=CurrentCandleIdentityStatus.AMBIGUOUS,
+                reason=(
+                    TrackingTerminalDecisionReason.REGION_PRESERVED_ROLLOVER_REJECTED
+                ),
+            )
+            return next_state, self._nonconclusive_resolution(
+                status=CurrentCandleIdentityStatus.AMBIGUOUS,
+                context=context,
+                state=next_state,
+                diagnostic="rollover_not_trusted_during_tracking",
+                sequence_match=sequence_match,
+                terminal_region=region,
+                rollover_suspected=True,
+                telemetry=telemetry,
+            )
+        if terminal_seed.status is not TerminalSeedEvaluationStatus.OBSERVED:
+            missing = (
+                self._missing_evidence(context, region)
+                if not terminal_members and not competitors
+                else None
+            )
+            next_state = self._revalidation_state(state, context)
+            reason = (
+                TrackingTerminalDecisionReason.REGION_PRESERVED_OVERLAY
+                if terminal_seed.status is TerminalSeedEvaluationStatus.OVERLAY
+                else (
+                    TrackingTerminalDecisionReason.REGION_PRESERVED_ROLLOVER_TERMINAL_ABSENT
+                )
+            )
+            telemetry = self._tracking_telemetry(
+                trusted_rollover=trusted_rollover,
+                terminal_seed=terminal_seed,
+                region_before=region,
+                region_after=region,
+                sequence_match=sequence_match,
+                candidates=terminal_members,
+                competitors=competitors,
+                overlay_conflict=(
+                    terminal_seed.status is TerminalSeedEvaluationStatus.OVERLAY
+                ),
+                missing=missing,
+                resulting_status=CurrentCandleIdentityStatus.AMBIGUOUS,
+                reason=reason,
+            )
+            return next_state, self._nonconclusive_resolution(
+                status=CurrentCandleIdentityStatus.AMBIGUOUS,
+                context=context,
+                state=next_state,
+                diagnostic="trusted_rollover_terminal_not_observed_region_preserved",
+                sequence_match=sequence_match,
+                terminal_region=region,
+                rollover_suspected=True,
+                missing_evidence=missing,
+                telemetry=telemetry,
+            )
+        assert terminal_seed.candidate_id is not None
+        candidate = self._member_by_id(context, terminal_seed.candidate_id)
+        candidate_in_region = region.contains(candle_center_x(candidate))
+        only_observed_terminal = (
+            len(terminal_members) == 1
+            and terminal_members[0].candidate_id == candidate.candidate_id
+        )
+        if not candidate_in_region or not only_observed_terminal:
+            next_state = self._revalidation_state(state, context)
+            reason = (
+                TrackingTerminalDecisionReason.REGION_PRESERVED_ROLLOVER_TERMINAL_OUTSIDE
+                if not candidate_in_region
+                else TrackingTerminalDecisionReason.REGION_PRESERVED_MULTIPLE_CANDIDATES
+            )
+            telemetry = self._tracking_telemetry(
+                trusted_rollover=trusted_rollover,
+                terminal_seed=terminal_seed,
+                region_before=region,
+                region_after=region,
+                sequence_match=sequence_match,
+                candidates=terminal_members,
+                competitors=competitors,
+                overlay_conflict=False,
+                missing=None,
+                resulting_status=CurrentCandleIdentityStatus.AMBIGUOUS,
+                reason=reason,
+            )
+            return next_state, self._nonconclusive_resolution(
+                status=CurrentCandleIdentityStatus.AMBIGUOUS,
+                context=context,
+                state=next_state,
+                diagnostic="rollover_terminal_not_unique_in_confirmed_region",
+                sequence_match=sequence_match,
+                terminal_region=region,
+                rollover_suspected=True,
+                telemetry=telemetry,
+            )
+        if competitors:
+            next_state = self._revalidation_state(state, context)
+            telemetry = self._tracking_telemetry(
+                trusted_rollover=trusted_rollover,
+                terminal_seed=terminal_seed,
+                region_before=region,
+                region_after=region,
+                sequence_match=sequence_match,
+                candidates=terminal_members,
+                competitors=competitors,
+                overlay_conflict=False,
+                missing=None,
+                resulting_status=CurrentCandleIdentityStatus.AMBIGUOUS,
+                reason=TrackingTerminalDecisionReason.REGION_PRESERVED_COMPETITOR,
+            )
+            return next_state, self._nonconclusive_resolution(
+                status=CurrentCandleIdentityStatus.AMBIGUOUS,
+                context=context,
+                state=next_state,
+                diagnostic="excluded_candle_like_terminal_competitor",
+                sequence_match=sequence_match,
+                terminal_region=region,
+                rollover_suspected=True,
+                telemetry=telemetry,
+            )
+        updated_region = self._learn_terminal_region(
+            candidate=candidate,
+            context=context,
+            generation=state.continuity_generation,
+            frame_ids=self._append_frame_id(
+                region.learned_from_frame_ids,
+                context.frame_id,
+            ),
+        )
+        next_state = replace(
+            state,
+            lifecycle=CurrentCandleIdentityLifecycle.TRACKING,
+            previous_context=context,
+            terminal_region=updated_region,
+        )
+        telemetry = self._tracking_telemetry(
+            trusted_rollover=trusted_rollover,
+            terminal_seed=terminal_seed,
+            region_before=region,
+            region_after=updated_region,
+            sequence_match=sequence_match,
+            candidates=terminal_members,
+            competitors=(),
+            overlay_conflict=False,
+            missing=None,
+            resulting_status=CurrentCandleIdentityStatus.CONFIRMED,
+            reason=(
+                TrackingTerminalDecisionReason.REGION_UPDATED_FROM_ROLLOVER_TERMINAL
+            ),
+            region_moved=self._region_geometry_changed(
+                region,
+                updated_region,
+            ),
+        )
+        return next_state, self._confirmed_resolution(
+            context=context,
+            state=next_state,
+            candidate=candidate,
+            source=CurrentCandleIdentitySource.TRUSTED_ROLLOVER,
+            sequence_match=sequence_match,
+            rollover_suspected=True,
+            rollover_confirmed=True,
+            diagnostic="terminal_candidate_confirmed_by_trusted_rollover",
+            telemetry=telemetry,
         )
 
     def _seed_bootstrap(
@@ -595,6 +1121,7 @@ class CurrentCandleIdentityResolver:
         *,
         reset_reason: CurrentCandleIdentityResetReason | None = None,
         sequence_match: CurrentCandleSequenceMatch | None = None,
+        telemetry: _ResolutionTelemetry | None = None,
     ) -> tuple[_ResolverState, CurrentCandleIdentityResolution]:
         if not self._membership_available(context):
             degraded = replace(
@@ -610,6 +1137,7 @@ class CurrentCandleIdentityResolver:
                     or CurrentCandleIdentityResetReason.MEMBERSHIP_UNAVAILABLE
                 ),
                 sequence_match=sequence_match,
+                telemetry=telemetry,
             )
         seeded = replace(
             state,
@@ -624,6 +1152,7 @@ class CurrentCandleIdentityResolver:
             diagnostic="bootstrap_requires_trusted_rollover_then_stable_frame",
             reset_reason=reset_reason,
             sequence_match=sequence_match,
+            telemetry=telemetry,
         )
 
     def _confirmed_resolution(
@@ -637,6 +1166,7 @@ class CurrentCandleIdentityResolver:
         rollover_suspected: bool,
         rollover_confirmed: bool,
         diagnostic: str,
+        telemetry: _ResolutionTelemetry | None = None,
     ) -> CurrentCandleIdentityResolution:
         metrics = sequence_match.selected_metrics
         region = state.terminal_region
@@ -669,6 +1199,7 @@ class CurrentCandleIdentityResolver:
                 rollover_confirmed=rollover_confirmed,
                 chosen_candidate_id=candidate.candidate_id,
                 diagnostic=diagnostic,
+                telemetry=telemetry,
             ),
         )
 
@@ -679,6 +1210,7 @@ class CurrentCandleIdentityResolver:
         state: _ResolverState,
         sequence_match: CurrentCandleSequenceMatch,
         missing_evidence: CurrentCandleMissingEvidence,
+        telemetry: _ResolutionTelemetry | None = None,
     ) -> CurrentCandleIdentityResolution:
         metrics = sequence_match.selected_metrics
         region = state.terminal_region
@@ -710,6 +1242,7 @@ class CurrentCandleIdentityResolver:
                 terminal_region=region,
                 missing_evidence=missing_evidence,
                 diagnostic=diagnostic,
+                telemetry=telemetry,
             ),
         )
 
@@ -723,6 +1256,7 @@ class CurrentCandleIdentityResolver:
         sequence_match: CurrentCandleSequenceMatch | None = None,
         terminal_region: TerminalSlotRegion | None = None,
         rollover_suspected: bool = False,
+        telemetry: _ResolutionTelemetry | None = None,
     ) -> CurrentCandleIdentityResolution:
         return self._nonconclusive_resolution(
             status=CurrentCandleIdentityStatus.UNAVAILABLE,
@@ -733,6 +1267,7 @@ class CurrentCandleIdentityResolver:
             sequence_match=sequence_match,
             terminal_region=terminal_region,
             rollover_suspected=rollover_suspected,
+            telemetry=telemetry,
         )
 
     def _nonconclusive_resolution(
@@ -747,6 +1282,7 @@ class CurrentCandleIdentityResolver:
         terminal_region: TerminalSlotRegion | None = None,
         rollover_suspected: bool = False,
         missing_evidence: CurrentCandleMissingEvidence | None = None,
+        telemetry: _ResolutionTelemetry | None = None,
     ) -> CurrentCandleIdentityResolution:
         if status not in (
             CurrentCandleIdentityStatus.UNAVAILABLE,
@@ -776,6 +1312,7 @@ class CurrentCandleIdentityResolver:
                 missing_evidence=missing_evidence,
                 reset_reason=reset_reason,
                 diagnostic=diagnostic,
+                telemetry=telemetry,
             ),
         )
 
@@ -793,7 +1330,9 @@ class CurrentCandleIdentityResolver:
         chosen_candidate_id: str | None = None,
         missing_evidence: CurrentCandleMissingEvidence | None = None,
         reset_reason: CurrentCandleIdentityResetReason | None = None,
+        telemetry: _ResolutionTelemetry | None = None,
     ) -> CurrentCandleIdentityTrace:
+        effective_telemetry = telemetry or _ResolutionTelemetry.empty()
         legacy_latest = (
             context.membership.latest_candidate_id
             if context.membership is not None
@@ -827,6 +1366,16 @@ class CurrentCandleIdentityResolver:
                 context.expiry_vertical_line_start_y
             ),
             expiry_vertical_line_end_y=context.expiry_vertical_line_end_y,
+            trusted_rollover_evaluation=(
+                effective_telemetry.trusted_rollover
+            ),
+            terminal_seed_evaluation=effective_telemetry.terminal_seed,
+            bootstrap_confirmation_evaluation=(
+                effective_telemetry.bootstrap_confirmation
+            ),
+            tracking_terminal_evaluation=(
+                effective_telemetry.tracking_terminal
+            ),
         )
 
     def _missing_evidence(
@@ -904,32 +1453,348 @@ class CurrentCandleIdentityResolver:
             and evidence.status is CandleOverlayEvidenceStatus.EXPIRY_OVERLAY
         )
 
-    def _is_trusted_rollover(
+    def _evaluate_temporal_rollover(
         self,
         previous: CurrentCandleFrameContext | None,
         current: CurrentCandleFrameContext,
         sequence_match: CurrentCandleSequenceMatch,
-    ) -> bool:
-        if previous is None or not self._membership_available(previous):
-            return False
+    ) -> TrustedRolloverEvaluation:
+        if previous is None:
+            return TrustedRolloverEvaluation.not_evaluated(
+                TemporalRolloverRejectionReason.PREVIOUS_CONTEXT_UNAVAILABLE
+            )
+        if not self._membership_available(previous):
+            return TrustedRolloverEvaluation.not_evaluated(
+                TemporalRolloverRejectionReason.PREVIOUS_MEMBERSHIP_UNAVAILABLE
+            )
+        if not self._membership_available(current):
+            return TrustedRolloverEvaluation.not_evaluated(
+                TemporalRolloverRejectionReason.CURRENT_MEMBERSHIP_UNAVAILABLE
+            )
+        metrics = sequence_match.rollover
+        previous_ids = tuple(candle.candidate_id for candle in previous.member_candles)
+        current_ids = tuple(candle.candidate_id for candle in current.member_candles)
+        expected_previous = previous_ids[0]
+        expected_current = current_ids[-1]
+        unmatched_previous = metrics.unmatched_previous_candidate_ids
+        unmatched_current = metrics.unmatched_current_candidate_ids
+        previous_boundary_compatible = unmatched_previous in (
+            (),
+            (expected_previous,),
+        )
+        current_boundary_compatible = unmatched_current in (
+            (),
+            (expected_current,),
+        )
+        support_pass = (
+            metrics.matched_historical_member_count
+            >= self._config.minimum_historical_matches
+        )
+        type_ratio_pass = (
+            metrics.type_match_ratio >= self._config.minimum_type_match_ratio
+        )
+        pitch = current.estimated_pitch_px
+        assert pitch is not None
+        maximum_residual = (
+            pitch * self._config.maximum_match_residual_pitch_ratio
+        )
+        residual_pass = (
+            metrics.maximum_residual_px is not None
+            and metrics.maximum_residual_px <= maximum_residual
+        )
+        rejection_reason: TemporalRolloverRejectionReason | None = None
         if sequence_match.status is not CurrentCandleMatchStatus.SELECTED:
-            return False
-        if (
+            rejection_reason = TemporalRolloverRejectionReason.MATCH_NOT_SELECTED
+        elif (
             sequence_match.selected_hypothesis
             is not CurrentCandleTranslationHypothesis.ROLLOVER
         ):
-            return False
-        metrics = sequence_match.selected_metrics
-        previous_ids = tuple(candle.candidate_id for candle in previous.member_candles)
-        current_ids = tuple(candle.candidate_id for candle in current.member_candles)
-        return (
-            metrics.matched_historical_member_count
-            >= self._config.minimum_historical_matches
-            and metrics.type_match_ratio >= self._config.minimum_type_match_ratio
-            and len(metrics.unmatched_previous_candidate_ids) == 1
-            and metrics.unmatched_previous_candidate_ids[0] == previous_ids[0]
-            and len(metrics.unmatched_current_candidate_ids) == 1
-            and metrics.unmatched_current_candidate_ids[0] == current_ids[-1]
+            rejection_reason = (
+                TemporalRolloverRejectionReason.SELECTED_HYPOTHESIS_NOT_ROLLOVER
+            )
+        elif not support_pass:
+            rejection_reason = TemporalRolloverRejectionReason.SUPPORT_BELOW_MINIMUM
+        elif not type_ratio_pass:
+            rejection_reason = (
+                TemporalRolloverRejectionReason.TYPE_RATIO_BELOW_MINIMUM
+            )
+        elif metrics.maximum_residual_px is None:
+            rejection_reason = TemporalRolloverRejectionReason.RESIDUAL_UNAVAILABLE
+        elif not residual_pass:
+            rejection_reason = TemporalRolloverRejectionReason.RESIDUAL_ABOVE_MAXIMUM
+        elif not metrics.qualifies:
+            rejection_reason = TemporalRolloverRejectionReason.ROLLOVER_NOT_QUALIFIED
+        elif not previous_boundary_compatible:
+            rejection_reason = (
+                TemporalRolloverRejectionReason.PREVIOUS_BOUNDARY_INCOMPATIBLE
+            )
+        elif not current_boundary_compatible:
+            rejection_reason = (
+                TemporalRolloverRejectionReason.CURRENT_BOUNDARY_INCOMPATIBLE
+            )
+        elif not unmatched_previous and not unmatched_current:
+            rejection_reason = TemporalRolloverRejectionReason.NO_BOUNDARY_CHANGE
+        accepted = rejection_reason is None
+        return TrustedRolloverEvaluation(
+            status=(
+                TemporalRolloverEvaluationStatus.ACCEPTED
+                if accepted
+                else TemporalRolloverEvaluationStatus.REJECTED
+            ),
+            rejection_reason=rejection_reason,
+            match_status=sequence_match.status,
+            selected_hypothesis=sequence_match.selected_hypothesis,
+            rollover_qualifies=metrics.qualifies,
+            support_actual=metrics.matched_historical_member_count,
+            support_minimum=self._config.minimum_historical_matches,
+            support_pass=support_pass,
+            type_ratio_actual=metrics.type_match_ratio,
+            type_ratio_minimum=self._config.minimum_type_match_ratio,
+            type_ratio_pass=type_ratio_pass,
+            residual_actual_px=metrics.maximum_residual_px,
+            residual_maximum_px=maximum_residual,
+            residual_pass=residual_pass,
+            previous_member_count=len(previous_ids),
+            current_member_count=len(current_ids),
+            unmatched_previous_ids=unmatched_previous,
+            unmatched_current_ids=unmatched_current,
+            expected_previous_leftmost_id=expected_previous,
+            expected_current_rightmost_id=expected_current,
+            previous_boundary_compatible=previous_boundary_compatible,
+            current_boundary_compatible=current_boundary_compatible,
+            temporal_rollover_trusted=accepted,
+        )
+
+    def _evaluate_terminal_seed(
+        self,
+        *,
+        context: CurrentCandleFrameContext,
+        trusted_rollover: TrustedRolloverEvaluation,
+    ) -> TerminalSeedEvaluation:
+        if not trusted_rollover.temporal_rollover_trusted:
+            return TerminalSeedEvaluation.not_evaluated()
+        unmatched = trusted_rollover.unmatched_current_ids
+        if not unmatched:
+            return TerminalSeedEvaluation(
+                status=TerminalSeedEvaluationStatus.ABSENT,
+                candidate_id=None,
+                provenance=TerminalSeedProvenance.NONE,
+                is_unmatched_current=False,
+                is_current_rightmost=False,
+                membership_included=False,
+                geometry_valid=False,
+                close_observable=None,
+                overlay_status=None,
+                diagnostic="trusted_rollover_has_no_unmatched_current_terminal",
+            )
+        if len(unmatched) != 1:
+            return TerminalSeedEvaluation(
+                status=TerminalSeedEvaluationStatus.AMBIGUOUS,
+                candidate_id=None,
+                provenance=TerminalSeedProvenance.NONE,
+                is_unmatched_current=True,
+                is_current_rightmost=False,
+                membership_included=False,
+                geometry_valid=False,
+                close_observable=None,
+                overlay_status=None,
+                diagnostic="trusted_rollover_has_multiple_unmatched_current",
+            )
+        candidate_id = unmatched[0]
+        current_rightmost = context.member_candles[-1]
+        is_rightmost = candidate_id == current_rightmost.candidate_id
+        candidates = tuple(
+            candle
+            for candle in context.member_candles
+            if candle.candidate_id == candidate_id
+        )
+        membership_included = len(candidates) == 1
+        if not is_rightmost or not membership_included:
+            return TerminalSeedEvaluation(
+                status=TerminalSeedEvaluationStatus.AMBIGUOUS,
+                candidate_id=candidate_id,
+                provenance=TerminalSeedProvenance.NONE,
+                is_unmatched_current=True,
+                is_current_rightmost=is_rightmost,
+                membership_included=membership_included,
+                geometry_valid=False,
+                close_observable=None,
+                overlay_status=None,
+                diagnostic="unmatched_current_is_not_unique_membership_rightmost",
+            )
+        candidate = candidates[0]
+        center = candle_center_x(candidate)
+        geometry_valid = (
+            candidate.x >= 0
+            and candidate.width > 0
+            and 0 <= center <= context.roi_width
+        )
+        observability = candidate.observability
+        close_observable = (
+            observability.fully_observable_close_for(candidate.candle_type)
+            if observability is not None
+            else None
+        )
+        overlay = (
+            context.overlay_evidence.by_candidate_id().get(candidate_id)
+            if context.overlay_evidence is not None
+            else None
+        )
+        overlay_status = overlay.status if overlay is not None else None
+        if overlay_status is CandleOverlayEvidenceStatus.EXPIRY_OVERLAY:
+            return TerminalSeedEvaluation(
+                status=TerminalSeedEvaluationStatus.OVERLAY,
+                candidate_id=candidate_id,
+                provenance=TerminalSeedProvenance.UNMATCHED_CURRENT_RIGHTMOST,
+                is_unmatched_current=True,
+                is_current_rightmost=True,
+                membership_included=True,
+                geometry_valid=geometry_valid,
+                close_observable=close_observable,
+                overlay_status=overlay_status,
+                diagnostic="unmatched_current_terminal_is_expiry_overlay",
+            )
+        if not geometry_valid:
+            return TerminalSeedEvaluation(
+                status=TerminalSeedEvaluationStatus.INVALID_GEOMETRY,
+                candidate_id=candidate_id,
+                provenance=TerminalSeedProvenance.UNMATCHED_CURRENT_RIGHTMOST,
+                is_unmatched_current=True,
+                is_current_rightmost=True,
+                membership_included=True,
+                geometry_valid=False,
+                close_observable=close_observable,
+                overlay_status=overlay_status,
+                diagnostic="unmatched_current_terminal_geometry_invalid",
+            )
+        return TerminalSeedEvaluation(
+            status=TerminalSeedEvaluationStatus.OBSERVED,
+            candidate_id=candidate_id,
+            provenance=TerminalSeedProvenance.UNMATCHED_CURRENT_RIGHTMOST,
+            is_unmatched_current=True,
+            is_current_rightmost=True,
+            membership_included=True,
+            geometry_valid=True,
+            close_observable=close_observable,
+            overlay_status=overlay_status,
+            diagnostic="unmatched_current_rightmost_terminal_observed",
+        )
+
+    @staticmethod
+    def _member_by_id(
+        context: CurrentCandleFrameContext,
+        candidate_id: str,
+    ) -> FinalCandleTrace:
+        matches = tuple(
+            candle
+            for candle in context.member_candles
+            if candle.candidate_id == candidate_id
+        )
+        if len(matches) != 1:
+            raise ValueError("Terminal seed must identify exactly one member.")
+        return matches[0]
+
+    @staticmethod
+    def _revalidation_state(
+        state: _ResolverState,
+        context: CurrentCandleFrameContext,
+    ) -> _ResolverState:
+        return replace(
+            state,
+            lifecycle=CurrentCandleIdentityLifecycle.DEGRADED,
+            previous_context=context,
+        )
+
+    @staticmethod
+    def _bootstrap_confirmation_telemetry(
+        *,
+        state: _ResolverState,
+        next_state: _ResolverState,
+        pending: _PendingBootstrap,
+        candidates: tuple[FinalCandleTrace, ...],
+        accepted: bool,
+        rejection_reason: BootstrapConfirmationRejectionReason | None,
+        overlay_conflict: bool,
+        resulting_status: CurrentCandleIdentityStatus,
+    ) -> _ResolutionTelemetry:
+        return _ResolutionTelemetry(
+            trusted_rollover=TrustedRolloverEvaluation.not_evaluated(),
+            terminal_seed=TerminalSeedEvaluation.not_evaluated(),
+            bootstrap_confirmation=BootstrapConfirmationEvaluation(
+                evaluated=True,
+                accepted=accepted,
+                rejection_reason=rejection_reason,
+                pending_before=True,
+                pending_after=next_state.pending_bootstrap is not None,
+                lifecycle_before=state.lifecycle,
+                lifecycle_after=next_state.lifecycle,
+                selected_stable=True,
+                provisional_region=pending.terminal_region,
+                candidates_in_region=tuple(
+                    candidate.candidate_id for candidate in candidates
+                ),
+                candidate_count=len(candidates),
+                overlay_conflict=overlay_conflict,
+                resulting_status=resulting_status,
+            ),
+            tracking_terminal=TrackingTerminalEvaluation.not_evaluated(),
+        )
+
+    @staticmethod
+    def _tracking_telemetry(
+        *,
+        trusted_rollover: TrustedRolloverEvaluation,
+        terminal_seed: TerminalSeedEvaluation,
+        region_before: TerminalSlotRegion,
+        region_after: TerminalSlotRegion,
+        sequence_match: CurrentCandleSequenceMatch,
+        candidates: tuple[FinalCandleTrace, ...],
+        competitors: tuple[str, ...],
+        overlay_conflict: bool,
+        missing: CurrentCandleMissingEvidence | None,
+        resulting_status: CurrentCandleIdentityStatus,
+        reason: TrackingTerminalDecisionReason,
+        region_moved: bool = False,
+    ) -> _ResolutionTelemetry:
+        return _ResolutionTelemetry(
+            trusted_rollover=trusted_rollover,
+            terminal_seed=terminal_seed,
+            bootstrap_confirmation=BootstrapConfirmationEvaluation.not_evaluated(),
+            tracking_terminal=TrackingTerminalEvaluation(
+                evaluated=True,
+                region_before=region_before,
+                region_after=region_after,
+                selected_hypothesis=sequence_match.selected_hypothesis,
+                candidates_in_region=tuple(
+                    candidate.candidate_id for candidate in candidates
+                ),
+                rollover_terminal_status=terminal_seed.status,
+                candidate_provenance=terminal_seed.provenance,
+                competitor_ids=competitors,
+                overlay_conflict=overlay_conflict,
+                missing_evidence=missing,
+                resulting_status=resulting_status,
+                region_moved=region_moved,
+                decision_reason=reason,
+            ),
+        )
+
+    @staticmethod
+    def _region_geometry_changed(
+        before: TerminalSlotRegion,
+        after: TerminalSlotRegion,
+    ) -> bool:
+        """Return whether authoritative terminal geometry actually moved."""
+
+        return any(
+            not isclose(before_value, after_value, rel_tol=0.0, abs_tol=1e-9)
+            for before_value, after_value in (
+                (before.center_x_roi, after.center_x_roi),
+                (before.lower_x_roi, after.lower_x_roi),
+                (before.upper_x_roi, after.upper_x_roi),
+                (before.normalized_center_x, after.normalized_center_x),
+                (before.estimated_pitch_px, after.estimated_pitch_px),
+            )
         )
 
     def _learn_terminal_region(

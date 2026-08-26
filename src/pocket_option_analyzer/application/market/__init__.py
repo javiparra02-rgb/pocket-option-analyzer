@@ -6,6 +6,8 @@ from .candle_interval_indicator_cache_status import (
     CandleIntervalIndicatorCacheStatus,
 )
 from .current_candle_identity import (
+    BootstrapConfirmationEvaluation,
+    BootstrapConfirmationRejectionReason,
     CurrentCandleFrameContext,
     CurrentCandleIdentityConfig,
     CurrentCandleIdentityEvidence,
@@ -21,7 +23,15 @@ from .current_candle_identity import (
     CurrentCandleSequenceMatch,
     CurrentCandleSequenceMatchMetrics,
     CurrentCandleTranslationHypothesis,
+    TemporalRolloverEvaluationStatus,
+    TemporalRolloverRejectionReason,
+    TerminalSeedEvaluation,
+    TerminalSeedEvaluationStatus,
+    TerminalSeedProvenance,
     TerminalSlotRegion,
+    TrackingTerminalDecisionReason,
+    TrackingTerminalEvaluation,
+    TrustedRolloverEvaluation,
 )
 from .current_candle_identity_matcher import CurrentCandleIdentityMatcher
 from .current_candle_identity_resolver import CurrentCandleIdentityResolver
@@ -40,6 +50,8 @@ from .visual_indicator_snapshot_context import (
 from .visual_price_series_builder import VisualPriceSeriesBuilder
 
 __all__ = [
+    "BootstrapConfirmationEvaluation",
+    "BootstrapConfirmationRejectionReason",
     "CandleIntervalIndicatorCacheStatus",
     "CurrentCandleFrameContext",
     "CurrentCandleIdentityConfig",
@@ -62,7 +74,15 @@ __all__ = [
     "CurrentCandleSequenceMatch",
     "CurrentCandleSequenceMatchMetrics",
     "CurrentCandleTranslationHypothesis",
+    "TemporalRolloverEvaluationStatus",
+    "TemporalRolloverRejectionReason",
+    "TerminalSeedEvaluation",
+    "TerminalSeedEvaluationStatus",
+    "TerminalSeedProvenance",
     "TerminalSlotRegion",
+    "TrackingTerminalDecisionReason",
+    "TrackingTerminalEvaluation",
+    "TrustedRolloverEvaluation",
     "VisualIndicatorSnapshotBuilder",
     "VisualPriceSeriesBuilder",
     "VisualEntryContext",

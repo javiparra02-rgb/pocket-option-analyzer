@@ -16,7 +16,12 @@ class IdentityShadowEvidenceReader:
         self._directory = Path(directory)
 
     def read_frames(self) -> tuple[dict[str, Any], ...]:
-        return self._read_stream(self._directory / "identity_shadow/frames.jsonl")
+        records = self._read_stream(
+            self._directory / "identity_shadow/frames.jsonl"
+        )
+        for payload in records:
+            self._validate_decision_telemetry(payload)
+        return records
 
     def read_events(self) -> tuple[dict[str, Any], ...]:
         return self._read_stream(self._directory / "identity_shadow/events.jsonl")
@@ -58,3 +63,37 @@ class IdentityShadowEvidenceReader:
                 previous_hash = str(persisted_hash)
                 records.append(payload)
         return tuple(records)
+
+    @staticmethod
+    def _validate_decision_telemetry(payload: dict[str, Any]) -> None:
+        version = payload.get("identity_decision_telemetry_schema_version")
+        if version is None:
+            return
+        if version != (
+            IdentityShadowEvidenceSerializer.DECISION_TELEMETRY_SCHEMA_VERSION
+        ):
+            raise ValueError("Unsupported identity decision telemetry schema.")
+        required = {
+            "trusted_rollover_evaluation",
+            "terminal_seed_evaluation",
+            "bootstrap_confirmation_evaluation",
+            "tracking_terminal_evaluation",
+        }
+        if not required.issubset(payload):
+            raise ValueError("Identity decision telemetry is incomplete.")
+        structures = tuple(payload[name] for name in required)
+        if any(not isinstance(value, dict) for value in structures):
+            raise ValueError("Identity decision telemetry must contain objects.")
+        trusted = payload["trusted_rollover_evaluation"]
+        if trusted.get("status") not in {"not_evaluated", "accepted", "rejected"}:
+            raise ValueError("Invalid trusted rollover evaluation status.")
+        terminal = payload["terminal_seed_evaluation"]
+        if terminal.get("status") not in {
+            "not_evaluated",
+            "observed",
+            "absent",
+            "ambiguous",
+            "overlay",
+            "invalid_geometry",
+        }:
+            raise ValueError("Invalid terminal seed evaluation status.")

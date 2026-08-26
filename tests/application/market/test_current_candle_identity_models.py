@@ -5,6 +5,7 @@ from typing import get_type_hints
 import pytest
 
 from pocket_option_analyzer.application.market import (
+    BootstrapConfirmationEvaluation,
     CurrentCandleFrameContext,
     CurrentCandleIdentityConfig,
     CurrentCandleIdentityEvidence,
@@ -17,7 +18,10 @@ from pocket_option_analyzer.application.market import (
     CurrentCandleMissingEvidence,
     CurrentCandleSequenceMatch,
     CurrentCandleSequenceMatchMetrics,
+    TerminalSeedEvaluation,
     TerminalSlotRegion,
+    TrackingTerminalEvaluation,
+    TrustedRolloverEvaluation,
 )
 
 
@@ -172,6 +176,23 @@ def test_config_centralizes_and_validates_provisional_thresholds() -> None:
         CurrentCandleIdentityConfig(minimum_type_match_ratio=1.1)
 
 
+def test_decision_telemetry_contracts_are_frozen_and_explicit_when_unevaluated(
+) -> None:
+    trusted = TrustedRolloverEvaluation.not_evaluated()
+    terminal = TerminalSeedEvaluation.not_evaluated()
+    bootstrap = BootstrapConfirmationEvaluation.not_evaluated()
+    tracking = TrackingTerminalEvaluation.not_evaluated()
+
+    with pytest.raises(FrozenInstanceError):
+        trusted.temporal_rollover_trusted = True  # type: ignore[misc]
+
+    assert trusted.status.value == "not_evaluated"
+    assert terminal.status.value == "not_evaluated"
+    assert bootstrap.evaluated is False
+    assert tracking.evaluated is False
+    assert not hasattr(tracking, "__dict__")
+
+
 def test_frame_context_rejects_invalid_temporal_and_owner_values() -> None:
     with pytest.raises(ValueError, match="source_key"):
         CurrentCandleFrameContext(
@@ -189,6 +210,7 @@ def test_frame_context_rejects_invalid_temporal_and_owner_values() -> None:
 
 def test_public_type_hints_resolve_for_new_contracts_and_lifecycle_api() -> None:
     contracts = (
+        BootstrapConfirmationEvaluation,
         CurrentCandleFrameContext,
         CurrentCandleIdentityConfig,
         CurrentCandleIdentityEvidence,
@@ -198,6 +220,9 @@ def test_public_type_hints_resolve_for_new_contracts_and_lifecycle_api() -> None
         CurrentCandleMissingEvidence,
         CurrentCandleSequenceMatch,
         CurrentCandleSequenceMatchMetrics,
+        TerminalSeedEvaluation,
+        TrackingTerminalEvaluation,
+        TrustedRolloverEvaluation,
         TerminalSlotRegion,
     )
 

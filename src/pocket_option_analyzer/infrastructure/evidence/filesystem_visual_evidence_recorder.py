@@ -32,6 +32,9 @@ from pocket_option_analyzer.application.market import (
     CurrentCandleIdentitySource,
     CurrentCandleIdentityStatus,
     CurrentCandleIdentityTrace,
+    CurrentCandleTranslationHypothesis,
+    TemporalRolloverEvaluationStatus,
+    TerminalSeedEvaluationStatus,
 )
 
 from .identity_shadow_evidence_reader import IdentityShadowEvidenceReader
@@ -331,6 +334,28 @@ class FilesystemVisualEvidenceRecorder:
         result = evidence.resolution.result
         previous = self._identity_previous_trace
         events: list[IdentityShadowEventType] = []
+        trusted_rollover = trace.trusted_rollover_evaluation
+        terminal_seed = trace.terminal_seed_evaluation
+        if (
+            trusted_rollover.status
+            is TemporalRolloverEvaluationStatus.ACCEPTED
+        ):
+            events.append(IdentityShadowEventType.TRUSTED_ROLLOVER_ACCEPTED)
+        elif (
+            trusted_rollover.status
+            is TemporalRolloverEvaluationStatus.REJECTED
+            and trusted_rollover.selected_hypothesis
+            is CurrentCandleTranslationHypothesis.ROLLOVER
+        ):
+            events.append(IdentityShadowEventType.TRUSTED_ROLLOVER_REJECTED)
+        if terminal_seed.status is TerminalSeedEvaluationStatus.OBSERVED:
+            events.append(IdentityShadowEventType.TERMINAL_SEED_OBSERVED)
+        elif terminal_seed.status is TerminalSeedEvaluationStatus.ABSENT:
+            events.append(IdentityShadowEventType.TERMINAL_SEED_ABSENT)
+            if trace.internal_state is CurrentCandleIdentityLifecycle.BOOTSTRAPPING:
+                events.append(
+                    IdentityShadowEventType.BOOTSTRAP_WAITING_FOR_TERMINAL
+                )
         if (
             trace.internal_state is CurrentCandleIdentityLifecycle.BOOTSTRAPPING
             and result.status is not CurrentCandleIdentityStatus.CONFIRMED
@@ -384,6 +409,11 @@ class FilesystemVisualEvidenceRecorder:
         if self._identity_config.png_mode is IdentityShadowPngMode.ALL_FRAMES:
             return True
         relevant = {
+            IdentityShadowEventType.TRUSTED_ROLLOVER_ACCEPTED,
+            IdentityShadowEventType.TRUSTED_ROLLOVER_REJECTED,
+            IdentityShadowEventType.TERMINAL_SEED_OBSERVED,
+            IdentityShadowEventType.TERMINAL_SEED_ABSENT,
+            IdentityShadowEventType.BOOTSTRAP_WAITING_FOR_TERMINAL,
             IdentityShadowEventType.ROLLOVER_SUSPECTED,
             IdentityShadowEventType.ROLLOVER_CONFIRMED,
             IdentityShadowEventType.MISSING_FROM_VIEW,
@@ -476,6 +506,9 @@ class FilesystemVisualEvidenceRecorder:
             "recorded_at": self._aware_utc_now().isoformat(),
             "session_key": session_key,
             "frame_key": frame_key,
+            "visual_frame_key": (
+                frame_payload.get("visual_frame_key") if frame_payload else None
+            ),
             "frame_id": frame_payload.get("frame_id") if frame_payload else None,
             "wall_timestamp": (
                 frame_payload.get("wall_timestamp") if frame_payload else None

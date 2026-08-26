@@ -18,6 +18,8 @@ from pocket_option_analyzer.application.evidence import (
     VisualFrameEvidence,
 )
 from pocket_option_analyzer.application.market import (
+    BootstrapConfirmationEvaluation,
+    BootstrapConfirmationRejectionReason,
     CurrentCandleFrameContext,
     CurrentCandleIdentityEvidence,
     CurrentCandleIdentityLifecycle,
@@ -27,8 +29,18 @@ from pocket_option_analyzer.application.market import (
     CurrentCandleIdentitySource,
     CurrentCandleIdentityStatus,
     CurrentCandleIdentityTrace,
+    CurrentCandleMatchStatus,
     CurrentCandleMissingEvidence,
+    CurrentCandleTranslationHypothesis,
+    TemporalRolloverEvaluationStatus,
+    TemporalRolloverRejectionReason,
+    TerminalSeedEvaluation,
+    TerminalSeedEvaluationStatus,
+    TerminalSeedProvenance,
     TerminalSlotRegion,
+    TrackingTerminalDecisionReason,
+    TrackingTerminalEvaluation,
+    TrustedRolloverEvaluation,
 )
 from pocket_option_analyzer.application.strategy import (
     VisualPriceReferenceResult,
@@ -362,6 +374,272 @@ def test_compact_frame_schema_is_ordered_hashed_and_replayable(tmp_path) -> None
         "current_close_not_observable": True,
         "status": "current_close_not_observable",
     }
+
+
+def test_decision_telemetry_and_event_linkage_are_persisted(tmp_path) -> None:
+    trusted = TrustedRolloverEvaluation(
+        status=TemporalRolloverEvaluationStatus.ACCEPTED,
+        rejection_reason=None,
+        match_status=CurrentCandleMatchStatus.SELECTED,
+        selected_hypothesis=CurrentCandleTranslationHypothesis.ROLLOVER,
+        rollover_qualifies=True,
+        support_actual=6,
+        support_minimum=3,
+        support_pass=True,
+        type_ratio_actual=1.0,
+        type_ratio_minimum=0.75,
+        type_ratio_pass=True,
+        residual_actual_px=0.5,
+        residual_maximum_px=2.4,
+        residual_pass=True,
+        previous_member_count=8,
+        current_member_count=7,
+        unmatched_previous_ids=("previous_leftmost",),
+        unmatched_current_ids=(),
+        expected_previous_leftmost_id="previous_leftmost",
+        expected_current_rightmost_id="historical_rightmost",
+        previous_boundary_compatible=True,
+        current_boundary_compatible=True,
+        temporal_rollover_trusted=True,
+    )
+    terminal_seed = TerminalSeedEvaluation(
+        status=TerminalSeedEvaluationStatus.ABSENT,
+        candidate_id=None,
+        provenance=TerminalSeedProvenance.NONE,
+        is_unmatched_current=False,
+        is_current_rightmost=False,
+        membership_included=False,
+        geometry_valid=False,
+        close_observable=None,
+        overlay_status=None,
+        diagnostic="trusted_rollover_has_no_unmatched_current_terminal",
+    )
+    bootstrap = BootstrapConfirmationEvaluation(
+        evaluated=False,
+        accepted=False,
+        rejection_reason=(
+            BootstrapConfirmationRejectionReason.TERMINAL_SEED_ABSENT
+        ),
+        pending_before=False,
+        pending_after=False,
+        lifecycle_before=CurrentCandleIdentityLifecycle.BOOTSTRAPPING,
+        lifecycle_after=CurrentCandleIdentityLifecycle.BOOTSTRAPPING,
+        selected_stable=None,
+        provisional_region=None,
+        candidates_in_region=(),
+        candidate_count=0,
+        overlay_conflict=False,
+        resulting_status=CurrentCandleIdentityStatus.UNAVAILABLE,
+    )
+    resolution = _resolution(
+        1,
+        lifecycle=CurrentCandleIdentityLifecycle.BOOTSTRAPPING,
+        rollover_suspected=True,
+    )
+    resolution = replace(
+        resolution,
+        trace=replace(
+            resolution.trace,
+            trusted_rollover_evaluation=trusted,
+            terminal_seed_evaluation=terminal_seed,
+            bootstrap_confirmation_evaluation=bootstrap,
+        ),
+    )
+    recorder = FilesystemVisualEvidenceRecorder(
+        tmp_path,
+        identity_evidence_config=IdentityShadowEvidenceConfig(),
+    )
+    recorder.start_identity_session(session_key="session-a")
+
+    recorder.record_identity_shadow(_evidence(1, resolution=resolution))
+
+    frame = IdentityShadowEvidenceReader(tmp_path).read_frames()[0]
+    assert frame["identity_decision_telemetry_schema_version"] == 1
+    assert frame["trusted_rollover_evaluation"]["status"] == "accepted"
+    assert frame["trusted_rollover_evaluation"]["support"] == {
+        "actual": 6,
+        "minimum": 3,
+        "pass": True,
+    }
+    assert frame["terminal_seed_evaluation"]["status"] == "absent"
+    assert frame["bootstrap_confirmation_evaluation"]["pending_after"] is False
+    events = tuple(
+        event
+        for event in IdentityShadowEvidenceReader(tmp_path).read_events()
+        if event["frame_id"] == 1
+    )
+    event_types = {event["event_type"] for event in events}
+    assert {
+        "trusted_rollover_accepted",
+        "terminal_seed_absent",
+        "bootstrap_waiting_for_terminal",
+    }.issubset(event_types)
+    assert all(
+        event["visual_frame_key"] == frame["visual_frame_key"]
+        for event in events
+    )
+    png_names = {event["png"]["filename"] for event in events if event["png"]}
+    assert len(png_names) == 1
+    assert len(tuple((tmp_path / "identity_shadow/png").glob("*.png"))) == 1
+
+
+def test_rejected_rollover_persists_exact_gate_and_linked_event(tmp_path) -> None:
+    rejected = TrustedRolloverEvaluation(
+        status=TemporalRolloverEvaluationStatus.REJECTED,
+        rejection_reason=(
+            TemporalRolloverRejectionReason.CURRENT_BOUNDARY_INCOMPATIBLE
+        ),
+        match_status=CurrentCandleMatchStatus.SELECTED,
+        selected_hypothesis=CurrentCandleTranslationHypothesis.ROLLOVER,
+        rollover_qualifies=True,
+        support_actual=6,
+        support_minimum=3,
+        support_pass=True,
+        type_ratio_actual=1.0,
+        type_ratio_minimum=0.75,
+        type_ratio_pass=True,
+        residual_actual_px=0.5,
+        residual_maximum_px=2.4,
+        residual_pass=True,
+        previous_member_count=8,
+        current_member_count=8,
+        unmatched_previous_ids=(),
+        unmatched_current_ids=("current_interior",),
+        expected_previous_leftmost_id="previous_leftmost",
+        expected_current_rightmost_id="current_rightmost",
+        previous_boundary_compatible=True,
+        current_boundary_compatible=False,
+        temporal_rollover_trusted=False,
+    )
+    resolution = _resolution(1, rollover_suspected=True)
+    resolution = replace(
+        resolution,
+        trace=replace(
+            resolution.trace,
+            trusted_rollover_evaluation=rejected,
+        ),
+    )
+    recorder = FilesystemVisualEvidenceRecorder(
+        tmp_path,
+        identity_evidence_config=IdentityShadowEvidenceConfig(),
+    )
+    recorder.start_identity_session(session_key="session-a")
+
+    recorder.record_identity_shadow(_evidence(1, resolution=resolution))
+
+    reader = IdentityShadowEvidenceReader(tmp_path)
+    frame = reader.read_frames()[0]
+    gate = frame["trusted_rollover_evaluation"]
+    assert gate["status"] == "rejected"
+    assert gate["rejection_reason"] == "current_boundary_incompatible"
+    event = next(
+        item
+        for item in reader.read_events()
+        if item["event_type"] == "trusted_rollover_rejected"
+    )
+    assert event["visual_frame_key"] == frame["visual_frame_key"]
+
+
+def test_tracking_region_before_after_and_missing_gate_are_persisted(tmp_path) -> None:
+    missing = CurrentCandleMissingEvidence(
+        terminal_region_valid=True,
+        terminal_member_absent=True,
+        previous_slot_candidate_id="historical_rightmost",
+        previous_slot_fully_observable=False,
+        previous_slot_distance_in_pitch_units=1.0,
+        candle_like_competitor_ids=(),
+    )
+    tracking = TrackingTerminalEvaluation(
+        evaluated=True,
+        region_before=_terminal(1),
+        region_after=_terminal(1),
+        selected_hypothesis=CurrentCandleTranslationHypothesis.ROLLOVER,
+        candidates_in_region=(),
+        rollover_terminal_status=TerminalSeedEvaluationStatus.ABSENT,
+        candidate_provenance=TerminalSeedProvenance.NONE,
+        competitor_ids=(),
+        overlay_conflict=False,
+        missing_evidence=missing,
+        resulting_status=CurrentCandleIdentityStatus.AMBIGUOUS,
+        region_moved=False,
+        decision_reason=(
+            TrackingTerminalDecisionReason.REGION_PRESERVED_ROLLOVER_TERMINAL_ABSENT
+        ),
+    )
+    resolution = _resolution(1, status=CurrentCandleIdentityStatus.AMBIGUOUS)
+    resolution = replace(
+        resolution,
+        trace=replace(
+            resolution.trace,
+            terminal_region=_terminal(1),
+            missing_evidence=missing,
+            tracking_terminal_evaluation=tracking,
+        ),
+    )
+    recorder = FilesystemVisualEvidenceRecorder(
+        tmp_path,
+        identity_evidence_config=IdentityShadowEvidenceConfig(),
+    )
+    recorder.start_identity_session(session_key="session-a")
+
+    recorder.record_identity_shadow(_evidence(1, resolution=resolution))
+
+    persisted = IdentityShadowEvidenceReader(tmp_path).read_frames()[0]
+    evaluation = persisted["tracking_terminal_evaluation"]
+    assert evaluation["region_before"] == evaluation["region_after"]
+    assert evaluation["region_moved"] is False
+    assert evaluation["missing_evidence"]["sufficient"] is False
+    assert evaluation["decision_reason"] == (
+        "region_preserved_rollover_terminal_absent"
+    )
+
+
+def test_reader_rejects_unknown_decision_telemetry_schema(tmp_path) -> None:
+    recorder = FilesystemVisualEvidenceRecorder(
+        tmp_path,
+        identity_evidence_config=IdentityShadowEvidenceConfig(),
+    )
+    recorder.start_identity_session(session_key="session-a")
+    recorder.record_identity_shadow(_evidence(1))
+    path = tmp_path / "identity_shadow/frames.jsonl"
+    payload = json.loads(path.read_text())
+    payload["identity_decision_telemetry_schema_version"] = 999
+    payload.pop("record_sha256")
+    payload["record_sha256"] = IdentityShadowEvidenceSerializer.payload_sha256(
+        payload
+    )
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="decision telemetry schema"):
+        IdentityShadowEvidenceReader(tmp_path).read_frames()
+
+
+def test_reader_keeps_legacy_frames_without_decision_telemetry_compatible(
+    tmp_path,
+) -> None:
+    recorder = FilesystemVisualEvidenceRecorder(
+        tmp_path,
+        identity_evidence_config=IdentityShadowEvidenceConfig(),
+    )
+    recorder.start_identity_session(session_key="session-a")
+    recorder.record_identity_shadow(_evidence(1))
+    path = tmp_path / "identity_shadow/frames.jsonl"
+    payload = json.loads(path.read_text())
+    payload.pop("record_sha256")
+    payload.pop("identity_decision_telemetry_schema_version")
+    for key in (
+        "trusted_rollover_evaluation",
+        "terminal_seed_evaluation",
+        "bootstrap_confirmation_evaluation",
+        "tracking_terminal_evaluation",
+    ):
+        payload.pop(key)
+    payload["record_sha256"] = IdentityShadowEvidenceSerializer.payload_sha256(
+        payload
+    )
+    path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+
+    assert IdentityShadowEvidenceReader(tmp_path).read_frames()[0]["frame_id"] == 1
 
 
 def test_normal_mode_writes_png_only_for_relevant_events(tmp_path) -> None:

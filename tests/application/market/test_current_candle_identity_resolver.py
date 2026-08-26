@@ -484,6 +484,7 @@ def test_membership_unavailable_never_falls_back_to_raw_final_candles() -> None:
     assert resolution.result.status is CurrentCandleIdentityStatus.UNAVAILABLE
     assert resolution.result.candidate_id is None
     assert resolution.trace.internal_state is CurrentCandleIdentityLifecycle.DEGRADED
+    assert resolution.trace.terminal_region is None
     assert resolution.trace.reset_reason is (
         CurrentCandleIdentityResetReason.MEMBERSHIP_UNAVAILABLE
     )

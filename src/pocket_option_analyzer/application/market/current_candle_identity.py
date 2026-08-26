@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
 from math import isclose, isfinite
@@ -9,6 +9,7 @@ from pocket_option_analyzer.vision.models.candle_detection_trace import (
     FinalCandleTrace,
 )
 from pocket_option_analyzer.vision.models.candle_overlay_evidence import (
+    CandleOverlayEvidenceStatus,
     CandleOverlayEvidenceTrace,
 )
 from pocket_option_analyzer.vision.models.candle_series_membership import (
@@ -74,6 +75,95 @@ class CurrentCandleMatchStatus(StrEnum):
     SELECTED = "selected"
     UNAVAILABLE = "unavailable"
     AMBIGUOUS = "ambiguous"
+
+
+class TemporalRolloverEvaluationStatus(StrEnum):
+    """Outcome of the resolver-owned temporal rollover trust evaluation."""
+
+    NOT_EVALUATED = "not_evaluated"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+class TemporalRolloverRejectionReason(StrEnum):
+    """Deterministic gate that prevented temporal rollover trust."""
+
+    NOT_EVALUATED = "not_evaluated"
+    PREVIOUS_CONTEXT_UNAVAILABLE = "previous_context_unavailable"
+    PREVIOUS_MEMBERSHIP_UNAVAILABLE = "previous_membership_unavailable"
+    CURRENT_MEMBERSHIP_UNAVAILABLE = "current_membership_unavailable"
+    MATCH_NOT_SELECTED = "match_not_selected"
+    SELECTED_HYPOTHESIS_NOT_ROLLOVER = "selected_hypothesis_not_rollover"
+    SUPPORT_BELOW_MINIMUM = "support_below_minimum"
+    TYPE_RATIO_BELOW_MINIMUM = "type_ratio_below_minimum"
+    RESIDUAL_UNAVAILABLE = "residual_unavailable"
+    RESIDUAL_ABOVE_MAXIMUM = "residual_above_maximum"
+    ROLLOVER_NOT_QUALIFIED = "rollover_not_qualified"
+    PREVIOUS_BOUNDARY_INCOMPATIBLE = "previous_boundary_incompatible"
+    CURRENT_BOUNDARY_INCOMPATIBLE = "current_boundary_incompatible"
+    NO_BOUNDARY_CHANGE = "no_boundary_change"
+
+
+class TerminalSeedEvaluationStatus(StrEnum):
+    """Availability of positive terminal-current geometry for one rollover."""
+
+    NOT_EVALUATED = "not_evaluated"
+    OBSERVED = "observed"
+    ABSENT = "absent"
+    AMBIGUOUS = "ambiguous"
+    OVERLAY = "overlay"
+    INVALID_GEOMETRY = "invalid_geometry"
+
+
+class TerminalSeedProvenance(StrEnum):
+    """Only accepted provenance for a terminal seed in this shadow core."""
+
+    NONE = "none"
+    UNMATCHED_CURRENT_RIGHTMOST = "unmatched_current_rightmost"
+
+
+class BootstrapConfirmationRejectionReason(StrEnum):
+    """Reason a bootstrap frame did not establish confirmed tracking."""
+
+    NOT_EVALUATED = "not_evaluated"
+    TEMPORAL_ROLLOVER_REJECTED = "temporal_rollover_rejected"
+    TERMINAL_SEED_ABSENT = "terminal_seed_absent"
+    TERMINAL_SEED_INVALID = "terminal_seed_invalid"
+    STABLE_NOT_SELECTED = "stable_not_selected"
+    TERMINAL_CANDIDATE_NOT_UNIQUE = "terminal_candidate_not_unique"
+    OVERLAY_CONFLICT = "overlay_conflict"
+
+
+class TrackingTerminalDecisionReason(StrEnum):
+    """Auditable reason for moving or preserving a confirmed terminal region."""
+
+    NOT_EVALUATED = "not_evaluated"
+    REGION_UPDATED_FROM_STABLE = "region_updated_from_stable"
+    REGION_UPDATED_FROM_ROLLOVER_TERMINAL = (
+        "region_updated_from_rollover_terminal"
+    )
+    REGION_PRESERVED_MATCH_AMBIGUOUS = "region_preserved_match_ambiguous"
+    REGION_PRESERVED_MATCH_UNAVAILABLE = "region_preserved_match_unavailable"
+    REGION_PRESERVED_MULTIPLE_CANDIDATES = (
+        "region_preserved_multiple_candidates"
+    )
+    REGION_PRESERVED_COMPETITOR = "region_preserved_competitor"
+    REGION_PRESERVED_OVERLAY = "region_preserved_overlay"
+    REGION_PRESERVED_ROLLOVER_REJECTED = (
+        "region_preserved_rollover_rejected"
+    )
+    REGION_PRESERVED_ROLLOVER_TERMINAL_ABSENT = (
+        "region_preserved_rollover_terminal_absent"
+    )
+    REGION_PRESERVED_ROLLOVER_TERMINAL_OUTSIDE = (
+        "region_preserved_rollover_terminal_outside"
+    )
+    REGION_PRESERVED_MISSING_FROM_VIEW = (
+        "region_preserved_missing_from_view"
+    )
+    REGION_PRESERVED_MISSING_INSUFFICIENT = (
+        "region_preserved_missing_insufficient"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -361,8 +451,258 @@ class CurrentCandleMissingEvidence:
 
 
 @dataclass(frozen=True, slots=True)
+class TrustedRolloverEvaluation:
+    """Complete resolver-side proof for temporal rollover trust."""
+
+    status: TemporalRolloverEvaluationStatus
+    rejection_reason: TemporalRolloverRejectionReason | None
+    match_status: CurrentCandleMatchStatus | None
+    selected_hypothesis: CurrentCandleTranslationHypothesis | None
+    rollover_qualifies: bool | None
+    support_actual: int | None
+    support_minimum: int | None
+    support_pass: bool | None
+    type_ratio_actual: float | None
+    type_ratio_minimum: float | None
+    type_ratio_pass: bool | None
+    residual_actual_px: float | None
+    residual_maximum_px: float | None
+    residual_pass: bool | None
+    previous_member_count: int | None
+    current_member_count: int | None
+    unmatched_previous_ids: tuple[str, ...]
+    unmatched_current_ids: tuple[str, ...]
+    expected_previous_leftmost_id: str | None
+    expected_current_rightmost_id: str | None
+    previous_boundary_compatible: bool | None
+    current_boundary_compatible: bool | None
+    temporal_rollover_trusted: bool
+
+    @classmethod
+    def not_evaluated(
+        cls,
+        reason: TemporalRolloverRejectionReason = (
+            TemporalRolloverRejectionReason.NOT_EVALUATED
+        ),
+    ) -> TrustedRolloverEvaluation:
+        """Return an explicit immutable absence of rollover evaluation."""
+
+        return cls(
+            status=TemporalRolloverEvaluationStatus.NOT_EVALUATED,
+            rejection_reason=reason,
+            match_status=None,
+            selected_hypothesis=None,
+            rollover_qualifies=None,
+            support_actual=None,
+            support_minimum=None,
+            support_pass=None,
+            type_ratio_actual=None,
+            type_ratio_minimum=None,
+            type_ratio_pass=None,
+            residual_actual_px=None,
+            residual_maximum_px=None,
+            residual_pass=None,
+            previous_member_count=None,
+            current_member_count=None,
+            unmatched_previous_ids=(),
+            unmatched_current_ids=(),
+            expected_previous_leftmost_id=None,
+            expected_current_rightmost_id=None,
+            previous_boundary_compatible=None,
+            current_boundary_compatible=None,
+            temporal_rollover_trusted=False,
+        )
+
+    def __post_init__(self) -> None:
+        accepted = self.status is TemporalRolloverEvaluationStatus.ACCEPTED
+        if accepted != self.temporal_rollover_trusted:
+            raise ValueError("Only ACCEPTED can assert temporal rollover trust.")
+        if accepted and self.rejection_reason is not None:
+            raise ValueError("An accepted rollover cannot have a rejection reason.")
+        if not accepted and self.rejection_reason is None:
+            raise ValueError("A non-accepted rollover requires a reason.")
+        counts = (
+            self.support_actual,
+            self.support_minimum,
+            self.previous_member_count,
+            self.current_member_count,
+        )
+        if any(value is not None and value < 0 for value in counts):
+            raise ValueError("Rollover support and member counts cannot be negative.")
+        ratios = (self.type_ratio_actual, self.type_ratio_minimum)
+        if any(
+            value is not None and (not isfinite(value) or not 0 <= value <= 1)
+            for value in ratios
+        ):
+            raise ValueError("Rollover type ratios must be finite probabilities.")
+        residuals = (self.residual_actual_px, self.residual_maximum_px)
+        if any(
+            value is not None and (not isfinite(value) or value < 0)
+            for value in residuals
+        ):
+            raise ValueError("Rollover residuals must be finite and non-negative.")
+        ids = (*self.unmatched_previous_ids, *self.unmatched_current_ids)
+        if any(not candidate_id for candidate_id in ids):
+            raise ValueError("Unmatched candidate IDs cannot be empty.")
+
+
+@dataclass(frozen=True, slots=True)
+class TerminalSeedEvaluation:
+    """Positive, absent or rejected terminal-current evidence for a rollover."""
+
+    status: TerminalSeedEvaluationStatus
+    candidate_id: str | None
+    provenance: TerminalSeedProvenance
+    is_unmatched_current: bool | None
+    is_current_rightmost: bool | None
+    membership_included: bool | None
+    geometry_valid: bool | None
+    close_observable: bool | None
+    overlay_status: CandleOverlayEvidenceStatus | None
+    diagnostic: str
+
+    @classmethod
+    def not_evaluated(cls) -> TerminalSeedEvaluation:
+        """Return an explicit immutable absence of terminal evaluation."""
+
+        return cls(
+            status=TerminalSeedEvaluationStatus.NOT_EVALUATED,
+            candidate_id=None,
+            provenance=TerminalSeedProvenance.NONE,
+            is_unmatched_current=None,
+            is_current_rightmost=None,
+            membership_included=None,
+            geometry_valid=None,
+            close_observable=None,
+            overlay_status=None,
+            diagnostic="terminal_seed_not_evaluated",
+        )
+
+    def __post_init__(self) -> None:
+        if not self.diagnostic:
+            raise ValueError("Terminal seed diagnostics cannot be empty.")
+        observed = self.status is TerminalSeedEvaluationStatus.OBSERVED
+        if observed:
+            if self.candidate_id is None:
+                raise ValueError("An observed terminal seed requires a candidate.")
+            if self.provenance is not (
+                TerminalSeedProvenance.UNMATCHED_CURRENT_RIGHTMOST
+            ):
+                raise ValueError("Observed terminal provenance must be explicit.")
+            if not all(
+                value is True
+                for value in (
+                    self.is_unmatched_current,
+                    self.is_current_rightmost,
+                    self.membership_included,
+                    self.geometry_valid,
+                )
+            ):
+                raise ValueError("Observed terminal seed requires positive geometry.")
+            if self.overlay_status is CandleOverlayEvidenceStatus.EXPIRY_OVERLAY:
+                raise ValueError("An expiry overlay cannot be an observed terminal.")
+        if self.candidate_id is not None and not self.candidate_id:
+            raise ValueError("Terminal seed candidate_id cannot be empty.")
+
+
+@dataclass(frozen=True, slots=True)
+class BootstrapConfirmationEvaluation:
+    """Before/after audit of the two-frame bootstrap confirmation contract."""
+
+    evaluated: bool
+    accepted: bool
+    rejection_reason: BootstrapConfirmationRejectionReason | None
+    pending_before: bool
+    pending_after: bool
+    lifecycle_before: CurrentCandleIdentityLifecycle | None
+    lifecycle_after: CurrentCandleIdentityLifecycle | None
+    selected_stable: bool | None
+    provisional_region: TerminalSlotRegion | None
+    candidates_in_region: tuple[str, ...]
+    candidate_count: int
+    overlay_conflict: bool
+    resulting_status: CurrentCandleIdentityStatus | None
+
+    @classmethod
+    def not_evaluated(cls) -> BootstrapConfirmationEvaluation:
+        """Return an explicit immutable absence of confirmation evaluation."""
+
+        return cls(
+            evaluated=False,
+            accepted=False,
+            rejection_reason=BootstrapConfirmationRejectionReason.NOT_EVALUATED,
+            pending_before=False,
+            pending_after=False,
+            lifecycle_before=None,
+            lifecycle_after=None,
+            selected_stable=None,
+            provisional_region=None,
+            candidates_in_region=(),
+            candidate_count=0,
+            overlay_conflict=False,
+            resulting_status=None,
+        )
+
+    def __post_init__(self) -> None:
+        if self.candidate_count != len(self.candidates_in_region):
+            raise ValueError("Bootstrap candidate count must match candidate IDs.")
+        if self.accepted and (not self.evaluated or self.rejection_reason is not None):
+            raise ValueError("Accepted bootstrap confirmation must be evaluated.")
+        if self.evaluated and not self.accepted and self.rejection_reason is None:
+            raise ValueError("Rejected bootstrap confirmation requires a reason.")
+
+
+@dataclass(frozen=True, slots=True)
+class TrackingTerminalEvaluation:
+    """Region-preservation proof for one tracking or revalidation frame."""
+
+    evaluated: bool
+    region_before: TerminalSlotRegion | None
+    region_after: TerminalSlotRegion | None
+    selected_hypothesis: CurrentCandleTranslationHypothesis | None
+    candidates_in_region: tuple[str, ...]
+    rollover_terminal_status: TerminalSeedEvaluationStatus
+    candidate_provenance: TerminalSeedProvenance
+    competitor_ids: tuple[str, ...]
+    overlay_conflict: bool
+    missing_evidence: CurrentCandleMissingEvidence | None
+    resulting_status: CurrentCandleIdentityStatus | None
+    region_moved: bool
+    decision_reason: TrackingTerminalDecisionReason
+
+    @classmethod
+    def not_evaluated(cls) -> TrackingTerminalEvaluation:
+        """Return an explicit immutable absence of tracking evaluation."""
+
+        return cls(
+            evaluated=False,
+            region_before=None,
+            region_after=None,
+            selected_hypothesis=None,
+            candidates_in_region=(),
+            rollover_terminal_status=TerminalSeedEvaluationStatus.NOT_EVALUATED,
+            candidate_provenance=TerminalSeedProvenance.NONE,
+            competitor_ids=(),
+            overlay_conflict=False,
+            missing_evidence=None,
+            resulting_status=None,
+            region_moved=False,
+            decision_reason=TrackingTerminalDecisionReason.NOT_EVALUATED,
+        )
+
+    def __post_init__(self) -> None:
+        if self.region_moved and (
+            self.region_before is None or self.region_after is None
+        ):
+            raise ValueError("A moved region requires before and after geometry.")
+        ids = (*self.candidates_in_region, *self.competitor_ids)
+        if any(not candidate_id for candidate_id in ids):
+            raise ValueError("Tracking candidate IDs cannot be empty.")
+
+
+@dataclass(frozen=True, slots=True)
 class CurrentCandleIdentityTrace:
-    """Rich non-persisted diagnostic trace for later b15b2 stages."""
+    """Rich diagnostic trace persisted by the opt-in shadow evidence path."""
 
     frame_id: int
     wall_timestamp: datetime
@@ -387,6 +727,18 @@ class CurrentCandleIdentityTrace:
     diagnostics: tuple[str, ...]
     expiry_vertical_line_start_y: int | None = None
     expiry_vertical_line_end_y: int | None = None
+    trusted_rollover_evaluation: TrustedRolloverEvaluation = field(
+        default_factory=TrustedRolloverEvaluation.not_evaluated
+    )
+    terminal_seed_evaluation: TerminalSeedEvaluation = field(
+        default_factory=TerminalSeedEvaluation.not_evaluated
+    )
+    bootstrap_confirmation_evaluation: BootstrapConfirmationEvaluation = field(
+        default_factory=BootstrapConfirmationEvaluation.not_evaluated
+    )
+    tracking_terminal_evaluation: TrackingTerminalEvaluation = field(
+        default_factory=TrackingTerminalEvaluation.not_evaluated
+    )
 
     def __post_init__(self) -> None:
         if self.frame_id < 0 or self.continuity_generation < 1:
