@@ -295,4 +295,6 @@ def test_session_04_snapshot_three_resolves_breakout_pair_up() -> None:
     assert comparison.status is CurrentVisualPriceComparisonStatus.AVAILABLE
     assert comparison.entry_anchored_value == pytest.approx(1.022765000758287)
     assert comparison.exit_anchored_value == pytest.approx(1.0696517412935322)
-    assert comparison.delta == pytest.approx(0.04688674053524533)
+    assert comparison.delta == pytest.approx(
+        comparison.exit_anchored_value - comparison.entry_anchored_value
+    )

@@ -55,6 +55,7 @@ from pocket_option_analyzer.vision.services import (
     MarketAnalysisPipeline,
     PocketOptionCandleMaskBuilder,
     PocketOptionCurrentVisualPriceExtractor,
+    PocketOptionCurrentVisualPriceSearchWindowResolver,
     PocketOptionExpiryOverlayEvidenceResolver,
     TrendDetector,
 )
@@ -372,7 +373,9 @@ class SignalPipelineFactory:
             trend_detector=TrendDetector(),
             current_visual_price_extractor=(
                 PocketOptionCurrentVisualPriceExtractor(
-                    effective_chart_right_x=1062,
+                    search_window_resolver=(
+                        PocketOptionCurrentVisualPriceSearchWindowResolver()
+                    ),
                 )
             ),
         )

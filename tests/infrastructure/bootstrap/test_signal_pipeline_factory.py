@@ -36,6 +36,7 @@ from pocket_option_analyzer.infrastructure.evidence import (
 from pocket_option_analyzer.vision.services import (
     CandleSeriesMembershipResolver,
     PocketOptionCurrentVisualPriceExtractor,
+    PocketOptionCurrentVisualPriceSearchWindowResolver,
     PocketOptionExpiryOverlayEvidenceResolver,
 )
 
@@ -398,8 +399,10 @@ def test_factory_injects_current_visual_price_extractor() -> None:
         pipeline._current_visual_price_extractor,
         PocketOptionCurrentVisualPriceExtractor,
     )
-    assert (
-        pipeline._current_visual_price_extractor._effective_chart_right_x == 1062
+    assert pipeline._current_visual_price_extractor._effective_chart_right_x is None
+    assert isinstance(
+        pipeline._current_visual_price_extractor._search_window_resolver,
+        PocketOptionCurrentVisualPriceSearchWindowResolver,
     )
 
 

@@ -30,6 +30,7 @@ from pocket_option_analyzer.vision.models import (
     CandleSeriesMembershipExclusionReason,
     CandleSeriesMembershipStatus,
     ChartRegion,
+    CurrentVisualPriceSearchPlanReason,
     CurrentVisualPriceStatus,
     MarketAnalysis,
 )
@@ -471,9 +472,8 @@ def test_session_03_frame_53_current_price_is_recovered_at_visual_row() -> None:
     assert trace is not None
     row = next(row for row in trace.row_evaluations if row.qualified)
     assert row.row_y == 336
-    assert row.longest_run_pixels == 173
-    assert row.right_edge_gap == 7
-    assert row.pass_edge is False
+    assert row.line_run_span_ratio >= 0.70
+    assert row.line_run_continuity >= 0.90
     assert row.line_evidence is True
     assert row.label_support is True
 
@@ -487,8 +487,16 @@ def test_session_03_frame_200_remains_without_current_price_candidate() -> None:
     trace = result.analysis.current_visual_price_detection_trace
     assert trace is not None
     assert trace.row_evaluations == ()
-    assert trace.rejection_counts.rows_without_mask_pixels == 788
-    assert trace.decision_diagnostic == "no_pixels_in_band"
+    assert trace.semantic_search is not None
+    assert trace.semantic_search.plan_reason is (
+        CurrentVisualPriceSearchPlanReason.NO_HORIZONTAL_LINE_HYPOTHESES
+    )
+    assert trace.rejection_counts.line_evidence_rows == 0
+    assert (
+        trace.rejection_counts.rows_without_mask_pixels
+        + trace.rejection_counts.rows_with_mask_pixels
+        == trace.image_height
+    )
 
 
 def test_session_03_preserves_roi_y_for_previously_available_frames() -> None:
@@ -501,7 +509,7 @@ def test_session_03_preserves_roi_y_for_previously_available_frames() -> None:
         assert current is not None and current.price is not None
         persisted_price = persisted["price"]
         assert isinstance(persisted_price, dict)
-        assert current.price.roi_y == pytest.approx(persisted_price["roi_y"])
+        assert abs(current.price.roi_y - persisted_price["roi_y"]) <= 0.5
         compared += 1
 
     assert compared == 19

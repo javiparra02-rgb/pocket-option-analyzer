@@ -17,12 +17,30 @@ from pocket_option_analyzer.vision.models import (
     CurrentVisualPriceRejectionCounts,
     CurrentVisualPriceRowEvaluationTrace,
     CurrentVisualPriceRowRejectionReason,
+    CurrentVisualPriceSearchConstraints,
+    CurrentVisualPriceSearchPlan,
+    CurrentVisualPriceSearchPlanReason,
+    CurrentVisualPriceSearchPlanStatus,
+    CurrentVisualPriceSearchWindow,
+    CurrentVisualPriceSearchWindowEvaluationTrace,
+    CurrentVisualPriceSearchWindowOrigin,
+    CurrentVisualPriceSemanticCandidateGroupTrace,
+    CurrentVisualPriceSemanticResolutionReason,
+    CurrentVisualPriceSemanticResolutionStatus,
+    CurrentVisualPriceSemanticSearchMode,
+    CurrentVisualPriceSemanticSearchTrace,
     CurrentVisualPriceStatus,
 )
 from pocket_option_analyzer.vision.preprocessing import FrameValidator
 
+from .current_visual_price_search_window_resolver import (
+    CurrentVisualPriceSearchWindowResolver,
+)
 from .pocket_option_current_price_mask_builder import (
     PocketOptionCurrentPriceMaskBuilder,
+)
+from .pocket_option_current_visual_price_search_window_resolver import (
+    PocketOptionCurrentVisualPriceSearchWindowResolver,
 )
 
 
@@ -80,6 +98,43 @@ class _CandidateSearch:
     decision_diagnostic: str
 
 
+@dataclass(frozen=True, slots=True)
+class _QualifiedSemanticCandidate:
+    semantic_candidate_id: str
+    candidate: _Candidate
+    window: CurrentVisualPriceSearchWindow
+    line_hypothesis_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class _SemanticCandidateGroup:
+    group_id: str
+    members: tuple[_QualifiedSemanticCandidate, ...]
+    line_hypothesis_ids: tuple[str, ...]
+    representative: _QualifiedSemanticCandidate
+
+
+class _DisjointSet:
+    def __init__(self, size: int) -> None:
+        self._parents = list(range(size))
+
+    def find(self, item: int) -> int:
+        parent = self._parents[item]
+        if parent != item:
+            self._parents[item] = self.find(parent)
+        return self._parents[item]
+
+    def union(self, left: int, right: int) -> None:
+        left_root = self.find(left)
+        right_root = self.find(right)
+        if left_root == right_root:
+            return
+        if left_root < right_root:
+            self._parents[right_root] = left_root
+        else:
+            self._parents[left_root] = right_root
+
+
 # El score refleja las dos señales del detector: geometría/continuidad de línea
 # y soporte de etiqueta cercano. Los pesos suman uno para conservar [0, 1].
 _LINE_SPAN_SCORE_WEIGHT = 0.45
@@ -121,6 +176,7 @@ class PocketOptionCurrentVisualPriceExtractor:
         source: str = "pocket_option_right_band_v1",
         effective_chart_right_x: int | None = None,
         mask_builder: _MaskBuilder | None = None,
+        search_window_resolver: CurrentVisualPriceSearchWindowResolver | None = None,
     ) -> None:
         ratios = {
             "right_band_ratio": right_band_ratio,
@@ -189,6 +245,10 @@ class PocketOptionCurrentVisualPriceExtractor:
         self._source = source
         self._effective_chart_right_x = effective_chart_right_x
         self._mask_builder = mask_builder or PocketOptionCurrentPriceMaskBuilder()
+        self._search_window_resolver = (
+            search_window_resolver
+            or PocketOptionCurrentVisualPriceSearchWindowResolver()
+        )
 
     def extract(self, image: np.ndarray) -> CurrentVisualPriceExtraction:
         return self.extract_with_trace(image).extraction
@@ -224,32 +284,371 @@ class PocketOptionCurrentVisualPriceExtractor:
 
         bgr = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR) if image.shape[2] == 4 else image
         height, width = bgr.shape[:2]
-        if self._effective_chart_right_x is None:
-            effective_chart_right_x = width
-            effective_chart_right_source = "image_width_fallback"
-        else:
-            effective_chart_right_x = self._effective_chart_right_x
-            effective_chart_right_source = "configured"
-            if effective_chart_right_x > width:
-                raise ValueError(
-                    "effective_chart_right_x debe ser menor o igual que image_width."
-                )
-        band_end = effective_chart_right_x
-        band_width = max(1, ceil(effective_chart_right_x * self._right_band_ratio))
-        band_start = max(0, band_end - band_width)
         mask = self._mask_builder.build(bgr)
-        if mask.shape != (height, width):
+        if mask.dtype != np.uint8 or mask.shape != (height, width):
             raise ValueError(
-                "mask_builder debe devolver una máscara 2D del tamaño del ROI."
+                "mask_builder debe devolver una máscara uint8 2D del tamaño del ROI."
             )
-
         masked_pixel_count = int(np.count_nonzero(mask))
         safe_top = max(ceil(height * self._safe_top_ratio), self._min_safe_top_px)
         safe_bottom = max(
             ceil(height * self._safe_bottom_ratio), self._min_safe_bottom_px
         )
+        if self._effective_chart_right_x is not None:
+            return self._extract_fixed_override(
+                mask=mask,
+                image_width=width,
+                image_height=height,
+                masked_pixel_count=masked_pixel_count,
+                safe_top=safe_top,
+                safe_bottom=safe_bottom,
+            )
+        constraints = CurrentVisualPriceSearchConstraints(
+            image_width=width,
+            image_height=height,
+            right_band_ratio=self._right_band_ratio,
+            max_line_gap_ratio=self._max_line_gap_ratio,
+            max_line_start_offset_ratio=self._max_line_start_offset_ratio,
+            min_line_run_ratio=self._min_line_run_ratio,
+            label_zone_ratio=self._label_zone_ratio,
+            label_vertical_radius_ratio=self._label_vertical_radius_ratio,
+            max_row_gap_px=self._max_row_gap_px,
+            max_candidate_height_px=self._max_candidate_height_px,
+        )
+        plan = self._search_window_resolver.resolve(
+            mask=mask,
+            constraints=constraints,
+        )
+        return self._extract_dynamic(
+            mask=mask,
+            plan=plan,
+            image_width=width,
+            image_height=height,
+            masked_pixel_count=masked_pixel_count,
+            safe_top=safe_top,
+            safe_bottom=safe_bottom,
+        )
+
+    def _extract_fixed_override(
+        self,
+        *,
+        mask: np.ndarray,
+        image_width: int,
+        image_height: int,
+        masked_pixel_count: int,
+        safe_top: int,
+        safe_bottom: int,
+    ) -> CurrentVisualPriceAnalysis:
+        effective_chart_right_x = self._effective_chart_right_x
+        assert effective_chart_right_x is not None
+        if effective_chart_right_x > image_width:
+            raise ValueError(
+                "effective_chart_right_x debe ser menor o igual que image_width."
+            )
+        band_end = effective_chart_right_x
+        band_width = max(1, ceil(effective_chart_right_x * self._right_band_ratio))
+        band_start = max(0, band_end - band_width)
+        window = CurrentVisualPriceSearchWindow(
+            window_id="fixed_override_window_000",
+            start_x=band_start,
+            end_x=band_end,
+            origin=CurrentVisualPriceSearchWindowOrigin.FIXED_OVERRIDE,
+        )
         search = self._search_candidates(mask, band_start, band_end, band_width)
-        candidates = list(search.candidates)
+        semantic_trace = CurrentVisualPriceSemanticSearchTrace(
+            mode=CurrentVisualPriceSemanticSearchMode.FIXED_OVERRIDE,
+            plan_status=CurrentVisualPriceSearchPlanStatus.AVAILABLE,
+            plan_reason=CurrentVisualPriceSearchPlanReason.FIXED_OVERRIDE,
+            total_proposed_window_count=1,
+            evaluated_window_count=1,
+            windows=(window,),
+            window_evaluations=(
+                CurrentVisualPriceSearchWindowEvaluationTrace(
+                    window_id=window.window_id,
+                    decision_diagnostic=search.decision_diagnostic,
+                    candidate_count=len(search.candidates),
+                    semantic_candidate_ids=tuple(
+                        f"fixed_candidate_{index:03d}"
+                        for index in range(len(search.candidates))
+                    ),
+                ),
+            ),
+            semantic_groups=(),
+            resolution_status=CurrentVisualPriceSemanticResolutionStatus.BYPASSED,
+            resolution_reason=CurrentVisualPriceSemanticResolutionReason.FIXED_OVERRIDE,
+        )
+        return self._resolve_candidates(
+            candidates=tuple(
+                sorted(
+                    search.candidates,
+                    key=lambda candidate: (-candidate.score, candidate.y),
+                )
+            ),
+            search=search,
+            image_width=image_width,
+            image_height=image_height,
+            effective_chart_right_x=effective_chart_right_x,
+            effective_chart_right_source="configured",
+            band_start=band_start,
+            band_end=band_end,
+            band_width=band_width,
+            safe_top=safe_top,
+            safe_bottom=safe_bottom,
+            masked_pixel_count=masked_pixel_count,
+            semantic_search=semantic_trace,
+            semantic_ambiguity=False,
+        )
+
+    def _extract_dynamic(
+        self,
+        *,
+        mask: np.ndarray,
+        plan: CurrentVisualPriceSearchPlan,
+        image_width: int,
+        image_height: int,
+        masked_pixel_count: int,
+        safe_top: int,
+        safe_bottom: int,
+    ) -> CurrentVisualPriceAnalysis:
+        if plan.status is CurrentVisualPriceSearchPlanStatus.UNAVAILABLE:
+            semantic_trace = CurrentVisualPriceSemanticSearchTrace(
+                mode=CurrentVisualPriceSemanticSearchMode.DYNAMIC,
+                plan_status=plan.status,
+                plan_reason=plan.reason,
+                total_proposed_window_count=plan.total_proposed_window_count,
+                evaluated_window_count=0,
+                windows=plan.windows,
+                window_evaluations=(),
+                semantic_groups=(),
+                resolution_status=(
+                    CurrentVisualPriceSemanticResolutionStatus.UNAVAILABLE
+                ),
+                resolution_reason=(
+                    CurrentVisualPriceSemanticResolutionReason.SEARCH_PLAN_UNAVAILABLE
+                ),
+                full_window_set_sha256=plan.full_window_set_sha256,
+            )
+            extraction = CurrentVisualPriceExtraction(
+                price=None,
+                status=CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE,
+                diagnostic=(
+                    "semantic_search_unavailable; "
+                    f"plan_reason={plan.reason.value}; "
+                    f"masked_pixel_count={masked_pixel_count}"
+                ),
+            )
+            return self._analysis(
+                extraction=extraction,
+                image_width=image_width,
+                image_height=image_height,
+                effective_chart_right_x=None,
+                effective_chart_right_source="semantic_resolver",
+                band_start=None,
+                band_end=None,
+                band_width=None,
+                safe_top=safe_top,
+                safe_bottom=safe_bottom,
+                masked_pixel_count=masked_pixel_count,
+                candidates=(),
+                selected=None,
+                rejection_counts=self._whole_image_rejection_counts(mask),
+                row_evaluations=(),
+                decision_diagnostic=plan.reason.value,
+                semantic_search=semantic_trace,
+            )
+
+        searches: dict[str, _CandidateSearch] = {}
+        qualified: list[_QualifiedSemanticCandidate] = []
+        evaluations: list[CurrentVisualPriceSearchWindowEvaluationTrace] = []
+        for window in plan.windows:
+            search = self._search_candidates(
+                mask,
+                window.start_x,
+                window.end_x,
+                window.width,
+            )
+            searches[window.window_id] = search
+            ids: list[str] = []
+            for index, candidate in enumerate(search.candidates):
+                line_ids = self._candidate_line_hypothesis_ids(
+                    candidate=candidate,
+                    search=search,
+                    plan=plan,
+                )
+                if not line_ids:
+                    continue
+                candidate_id = f"{window.window_id}:candidate_{index:03d}"
+                ids.append(candidate_id)
+                qualified.append(
+                    _QualifiedSemanticCandidate(
+                        semantic_candidate_id=candidate_id,
+                        candidate=candidate,
+                        window=window,
+                        line_hypothesis_ids=line_ids,
+                    )
+                )
+            evaluations.append(
+                CurrentVisualPriceSearchWindowEvaluationTrace(
+                    window_id=window.window_id,
+                    decision_diagnostic=search.decision_diagnostic,
+                    candidate_count=len(ids),
+                    semantic_candidate_ids=tuple(ids),
+                )
+            )
+
+        groups = self._semantic_candidate_groups(tuple(qualified))
+        group_traces = tuple(self._semantic_group_trace(group) for group in groups)
+        if not groups:
+            representative_window = max(
+                plan.windows,
+                key=lambda window: (window.end_x, window.start_x, window.window_id),
+            )
+            representative_search = searches[representative_window.window_id]
+            semantic_trace = CurrentVisualPriceSemanticSearchTrace(
+                mode=CurrentVisualPriceSemanticSearchMode.DYNAMIC,
+                plan_status=plan.status,
+                plan_reason=plan.reason,
+                total_proposed_window_count=plan.total_proposed_window_count,
+                evaluated_window_count=len(evaluations),
+                windows=plan.windows,
+                window_evaluations=tuple(evaluations),
+                semantic_groups=(),
+                resolution_status=(
+                    CurrentVisualPriceSemanticResolutionStatus.UNAVAILABLE
+                ),
+                resolution_reason=(
+                    CurrentVisualPriceSemanticResolutionReason.NO_QUALIFYING_CANDIDATES
+                ),
+            )
+            extraction = CurrentVisualPriceExtraction(
+                price=None,
+                status=CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE,
+                diagnostic=(
+                    "semantic_windows_without_qualifying_candidate; "
+                    f"windows={len(plan.windows)}"
+                ),
+            )
+            counts = representative_search.rejection_counts
+            semantic_counts = CurrentVisualPriceRejectionCounts(
+                rows_without_mask_pixels=counts.rows_without_mask_pixels,
+                rows_with_mask_pixels=counts.rows_with_mask_pixels,
+                rejected_by_coverage=counts.rejected_by_coverage,
+                rejected_by_span=counts.rejected_by_span,
+                rejected_by_right_edge_gap=counts.rejected_by_right_edge_gap,
+                qualifying_rows=counts.qualifying_rows,
+                candidate_groups=0,
+                rejected_by_group_height=0,
+                line_evidence_rows=counts.line_evidence_rows,
+                rejected_by_label_support=counts.rejected_by_label_support,
+            )
+            return self._analysis(
+                extraction=extraction,
+                image_width=image_width,
+                image_height=image_height,
+                effective_chart_right_x=representative_window.end_x,
+                effective_chart_right_source="semantic_resolver",
+                band_start=representative_window.start_x,
+                band_end=representative_window.end_x,
+                band_width=representative_window.width,
+                safe_top=safe_top,
+                safe_bottom=safe_bottom,
+                masked_pixel_count=masked_pixel_count,
+                candidates=(),
+                selected=None,
+                rejection_counts=semantic_counts,
+                row_evaluations=representative_search.row_evaluations,
+                decision_diagnostic="semantic_windows_without_qualifying_candidate",
+                semantic_search=semantic_trace,
+            )
+
+        representatives = tuple(group.representative.candidate for group in groups)
+        representative_group = groups[0]
+        representative_window = representative_group.representative.window
+        representative_search = searches[representative_window.window_id]
+        if len(groups) > 1:
+            semantic_trace = CurrentVisualPriceSemanticSearchTrace(
+                mode=CurrentVisualPriceSemanticSearchMode.DYNAMIC,
+                plan_status=plan.status,
+                plan_reason=plan.reason,
+                total_proposed_window_count=plan.total_proposed_window_count,
+                evaluated_window_count=len(evaluations),
+                windows=plan.windows,
+                window_evaluations=tuple(evaluations),
+                semantic_groups=group_traces,
+                resolution_status=(
+                    CurrentVisualPriceSemanticResolutionStatus.AMBIGUOUS
+                ),
+                resolution_reason=(
+                    CurrentVisualPriceSemanticResolutionReason.MULTIPLE_SEMANTIC_PRICES
+                ),
+            )
+            return self._resolve_candidates(
+                candidates=representatives,
+                search=representative_search,
+                image_width=image_width,
+                image_height=image_height,
+                effective_chart_right_x=representative_window.end_x,
+                effective_chart_right_source="semantic_resolver",
+                band_start=representative_window.start_x,
+                band_end=representative_window.end_x,
+                band_width=representative_window.width,
+                safe_top=safe_top,
+                safe_bottom=safe_bottom,
+                masked_pixel_count=masked_pixel_count,
+                semantic_search=semantic_trace,
+                semantic_ambiguity=True,
+            )
+
+        semantic_trace = CurrentVisualPriceSemanticSearchTrace(
+            mode=CurrentVisualPriceSemanticSearchMode.DYNAMIC,
+            plan_status=plan.status,
+            plan_reason=plan.reason,
+            total_proposed_window_count=plan.total_proposed_window_count,
+            evaluated_window_count=len(evaluations),
+            windows=plan.windows,
+            window_evaluations=tuple(evaluations),
+            semantic_groups=group_traces,
+            resolution_status=CurrentVisualPriceSemanticResolutionStatus.AVAILABLE,
+            resolution_reason=(
+                CurrentVisualPriceSemanticResolutionReason.UNIQUE_SEMANTIC_PRICE
+            ),
+            selected_group_id=representative_group.group_id,
+        )
+        return self._resolve_candidates(
+            candidates=representatives,
+            search=representative_search,
+            image_width=image_width,
+            image_height=image_height,
+            effective_chart_right_x=representative_window.end_x,
+            effective_chart_right_source="semantic_resolver",
+            band_start=representative_window.start_x,
+            band_end=representative_window.end_x,
+            band_width=representative_window.width,
+            safe_top=safe_top,
+            safe_bottom=safe_bottom,
+            masked_pixel_count=masked_pixel_count,
+            semantic_search=semantic_trace,
+            semantic_ambiguity=False,
+        )
+
+    def _resolve_candidates(
+        self,
+        *,
+        candidates: tuple[_Candidate, ...],
+        search: _CandidateSearch,
+        image_width: int,
+        image_height: int,
+        effective_chart_right_x: int,
+        effective_chart_right_source: str,
+        band_start: int,
+        band_end: int,
+        band_width: int,
+        safe_top: int,
+        safe_bottom: int,
+        masked_pixel_count: int,
+        semantic_search: CurrentVisualPriceSemanticSearchTrace,
+        semantic_ambiguity: bool,
+    ) -> CurrentVisualPriceAnalysis:
         if not candidates:
             extraction = CurrentVisualPriceExtraction(
                 price=None,
@@ -258,7 +657,7 @@ class PocketOptionCurrentVisualPriceExtractor:
                     band_start=band_start,
                     band_end=band_end,
                     band_width=band_width,
-                    image_width=width,
+                    image_width=image_width,
                     effective_chart_right_x=effective_chart_right_x,
                     effective_chart_right_source=effective_chart_right_source,
                     masked_pixel_count=masked_pixel_count,
@@ -270,8 +669,8 @@ class PocketOptionCurrentVisualPriceExtractor:
             )
             return self._analysis(
                 extraction=extraction,
-                image_width=width,
-                image_height=height,
+                image_width=image_width,
+                image_height=image_height,
                 effective_chart_right_x=effective_chart_right_x,
                 effective_chart_right_source=effective_chart_right_source,
                 band_start=band_start,
@@ -285,15 +684,15 @@ class PocketOptionCurrentVisualPriceExtractor:
                 rejection_counts=search.rejection_counts,
                 row_evaluations=search.row_evaluations,
                 decision_diagnostic=search.decision_diagnostic,
+                semantic_search=semantic_search,
             )
 
-        candidates.sort(key=lambda candidate: (-candidate.score, candidate.y))
         selected = candidates[0]
         diagnostic = self._diagnostic(
             band_start=band_start,
             band_end=band_end,
             band_width=band_width,
-            image_width=width,
+            image_width=image_width,
             effective_chart_right_x=effective_chart_right_x,
             effective_chart_right_source=effective_chart_right_source,
             masked_pixel_count=masked_pixel_count,
@@ -302,41 +701,49 @@ class PocketOptionCurrentVisualPriceExtractor:
             selected=selected,
             reason=None,
         )
-        common = {
-            "price": None,
-            "candidate_count": len(candidates),
-            "selected_x": selected.x,
-            "selected_y": selected.y,
-            "confidence": selected.score,
-            "diagnostic": diagnostic,
-        }
-
-        if len(candidates) > 1 and (
-            selected.score - candidates[1].score <= self._ambiguity_score_delta
+        if semantic_ambiguity or (
+            semantic_search.mode is CurrentVisualPriceSemanticSearchMode.FIXED_OVERRIDE
+            and len(candidates) > 1
+            and selected.score - candidates[1].score <= self._ambiguity_score_delta
         ):
-            decision_diagnostic = "ambiguous_candidates"
-            extraction = CurrentVisualPriceExtraction(
-                status=CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE,
-                **common,
+            decision_diagnostic = (
+                "multiple_semantic_prices"
+                if semantic_ambiguity
+                else "ambiguous_candidates"
             )
+            extraction = CurrentVisualPriceExtraction(
+                price=None,
+                status=CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE,
+                candidate_count=len(candidates),
+                selected_x=None if semantic_ambiguity else selected.x,
+                selected_y=None if semantic_ambiguity else selected.y,
+                confidence=None if semantic_ambiguity else selected.score,
+                diagnostic=diagnostic,
+            )
+            trace_selected = None if semantic_ambiguity else selected
         elif selected.score < self._min_confidence:
             decision_diagnostic = "candidate_low_confidence"
             extraction = CurrentVisualPriceExtraction(
+                price=None,
                 status=CurrentVisualPriceStatus.LOW_CONFIDENCE,
-                **common,
+                candidate_count=len(candidates),
+                selected_x=selected.x,
+                selected_y=selected.y,
+                confidence=selected.score,
+                diagnostic=diagnostic,
             )
+            trace_selected = selected
         else:
             decision_diagnostic = "candidate_available"
-            price = CurrentVisualPrice(
-                roi_y=selected.y,
-                normalized_roi_y=1.0 - selected.y / (height - 1),
-                roi_width=width,
-                roi_height=height,
-                source=self._source,
-                confidence=selected.score,
-            )
             extraction = CurrentVisualPriceExtraction(
-                price=price,
+                price=CurrentVisualPrice(
+                    roi_y=selected.y,
+                    normalized_roi_y=1.0 - selected.y / (image_height - 1),
+                    roi_width=image_width,
+                    roi_height=image_height,
+                    source=self._source,
+                    confidence=selected.score,
+                ),
                 status=CurrentVisualPriceStatus.OK,
                 candidate_count=len(candidates),
                 selected_x=selected.x,
@@ -344,10 +751,25 @@ class PocketOptionCurrentVisualPriceExtractor:
                 confidence=selected.score,
                 diagnostic=diagnostic,
             )
+            trace_selected = selected
+        counts = search.rejection_counts
+        if semantic_search.mode is CurrentVisualPriceSemanticSearchMode.DYNAMIC:
+            counts = CurrentVisualPriceRejectionCounts(
+                rows_without_mask_pixels=counts.rows_without_mask_pixels,
+                rows_with_mask_pixels=counts.rows_with_mask_pixels,
+                rejected_by_coverage=counts.rejected_by_coverage,
+                rejected_by_span=counts.rejected_by_span,
+                rejected_by_right_edge_gap=counts.rejected_by_right_edge_gap,
+                qualifying_rows=counts.qualifying_rows,
+                candidate_groups=len(candidates),
+                rejected_by_group_height=0,
+                line_evidence_rows=counts.line_evidence_rows,
+                rejected_by_label_support=counts.rejected_by_label_support,
+            )
         return self._analysis(
             extraction=extraction,
-            image_width=width,
-            image_height=height,
+            image_width=image_width,
+            image_height=image_height,
             effective_chart_right_x=effective_chart_right_x,
             effective_chart_right_source=effective_chart_right_source,
             band_start=band_start,
@@ -356,11 +778,122 @@ class PocketOptionCurrentVisualPriceExtractor:
             safe_top=safe_top,
             safe_bottom=safe_bottom,
             masked_pixel_count=masked_pixel_count,
-            candidates=tuple(candidates),
-            selected=selected,
-            rejection_counts=search.rejection_counts,
+            candidates=candidates,
+            selected=trace_selected,
+            rejection_counts=counts,
             row_evaluations=search.row_evaluations,
             decision_diagnostic=decision_diagnostic,
+            semantic_search=semantic_search,
+        )
+
+    @staticmethod
+    def _whole_image_rejection_counts(
+        mask: np.ndarray,
+    ) -> CurrentVisualPriceRejectionCounts:
+        rows_with_pixels = int(np.count_nonzero(np.any(mask != 0, axis=1)))
+        return CurrentVisualPriceRejectionCounts(
+            rows_without_mask_pixels=mask.shape[0] - rows_with_pixels,
+            rows_with_mask_pixels=rows_with_pixels,
+        )
+
+    @staticmethod
+    def _candidate_line_hypothesis_ids(
+        *,
+        candidate: _Candidate,
+        search: _CandidateSearch,
+        plan: CurrentVisualPriceSearchPlan,
+    ) -> tuple[str, ...]:
+        qualified_rows = tuple(
+            row
+            for row in search.row_evaluations
+            if candidate.row_start <= row.row_y <= candidate.row_end and row.qualified
+        )
+        identifiers: list[str] = []
+        for hypothesis in plan.line_hypotheses:
+            if any(
+                run.row_y == row.row_y
+                and max(run.start_x, row.line_run_start_x)
+                < min(run.end_x, row.line_run_end_x + 1)
+                for run in hypothesis.runs
+                for row in qualified_rows
+            ):
+                identifiers.append(hypothesis.hypothesis_id)
+        return tuple(identifiers)
+
+    @staticmethod
+    def _semantic_candidate_groups(
+        candidates: tuple[_QualifiedSemanticCandidate, ...],
+    ) -> tuple[_SemanticCandidateGroup, ...]:
+        if not candidates:
+            return ()
+        ordered = tuple(
+            sorted(candidates, key=lambda candidate: candidate.semantic_candidate_id)
+        )
+        disjoint = _DisjointSet(len(ordered))
+        for left_index, left in enumerate(ordered):
+            left_ids = frozenset(left.line_hypothesis_ids)
+            for right_index in range(left_index + 1, len(ordered)):
+                if left_ids.intersection(ordered[right_index].line_hypothesis_ids):
+                    disjoint.union(left_index, right_index)
+        grouped: dict[int, list[_QualifiedSemanticCandidate]] = {}
+        for index, candidate in enumerate(ordered):
+            grouped.setdefault(disjoint.find(index), []).append(candidate)
+        member_groups = sorted(
+            (tuple(members) for members in grouped.values()),
+            key=lambda members: tuple(
+                member.semantic_candidate_id for member in members
+            ),
+        )
+        result: list[_SemanticCandidateGroup] = []
+        for index, members in enumerate(member_groups):
+            representative_window = max(
+                (member.window for member in members),
+                key=lambda window: (window.end_x, window.start_x, window.window_id),
+            )
+            representative = min(
+                (
+                    member
+                    for member in members
+                    if member.window.window_id == representative_window.window_id
+                ),
+                key=lambda member: (
+                    member.candidate.row_start,
+                    member.candidate.row_end,
+                    member.semantic_candidate_id,
+                ),
+            )
+            result.append(
+                _SemanticCandidateGroup(
+                    group_id=f"semantic_price_{index:03d}",
+                    members=members,
+                    line_hypothesis_ids=tuple(
+                        sorted(
+                            {
+                                line_id
+                                for member in members
+                                for line_id in member.line_hypothesis_ids
+                            }
+                        )
+                    ),
+                    representative=representative,
+                )
+            )
+        return tuple(result)
+
+    @staticmethod
+    def _semantic_group_trace(
+        group: _SemanticCandidateGroup,
+    ) -> CurrentVisualPriceSemanticCandidateGroupTrace:
+        return CurrentVisualPriceSemanticCandidateGroupTrace(
+            group_id=group.group_id,
+            semantic_candidate_ids=tuple(
+                member.semantic_candidate_id for member in group.members
+            ),
+            line_hypothesis_ids=group.line_hypothesis_ids,
+            window_ids=tuple(
+                sorted({member.window.window_id for member in group.members})
+            ),
+            representative_window_id=group.representative.window.window_id,
         )
 
     @staticmethod
@@ -369,11 +902,11 @@ class PocketOptionCurrentVisualPriceExtractor:
         extraction: CurrentVisualPriceExtraction,
         image_width: int,
         image_height: int,
-        effective_chart_right_x: int,
-        effective_chart_right_source: str,
-        band_start: int,
-        band_end: int,
-        band_width: int,
+        effective_chart_right_x: int | None,
+        effective_chart_right_source: str | None,
+        band_start: int | None,
+        band_end: int | None,
+        band_width: int | None,
         safe_top: int,
         safe_bottom: int,
         masked_pixel_count: int,
@@ -382,6 +915,7 @@ class PocketOptionCurrentVisualPriceExtractor:
         rejection_counts: CurrentVisualPriceRejectionCounts,
         row_evaluations: tuple[CurrentVisualPriceRowEvaluationTrace, ...],
         decision_diagnostic: str,
+        semantic_search: CurrentVisualPriceSemanticSearchTrace | None = None,
     ) -> CurrentVisualPriceAnalysis:
         candidate_traces = tuple(
             CurrentVisualPriceCandidateTrace(
@@ -416,6 +950,7 @@ class PocketOptionCurrentVisualPriceExtractor:
                 rejection_counts=rejection_counts,
                 row_evaluations=row_evaluations,
                 decision_diagnostic=decision_diagnostic,
+                semantic_search=semantic_search,
             ),
         )
 

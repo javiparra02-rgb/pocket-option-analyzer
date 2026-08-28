@@ -108,6 +108,7 @@ def test_current_visual_price_trace_is_immutable_and_runtime_typed() -> None:
         get_type_hints(CurrentVisualPriceDetectionTrace)["candidates"]
         == (tuple[CurrentVisualPriceCandidateTrace, ...])
     )
+    assert trace.semantic_search is None
     with pytest.raises(FrozenInstanceError):
         trace.masked_pixel_count = 2  # type: ignore[misc]
 
@@ -164,6 +165,28 @@ def test_trace_requires_one_selected_candidate_when_candidates_exist() -> None:
             candidates=(_candidate(selected=False),),
             rejection_counts=CurrentVisualPriceRejectionCounts(),
         )
+
+
+def test_ambiguous_semantic_trace_can_explicitly_have_no_winner() -> None:
+    trace = CurrentVisualPriceDetectionTrace(
+        status=CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE,
+        image_width=100,
+        image_height=None,
+        effective_chart_right_x=100,
+        effective_chart_right_source="semantic_resolver",
+        band_start=80,
+        band_end=100,
+        band_width=20,
+        safe_top=12,
+        safe_bottom=12,
+        masked_pixel_count=20,
+        candidates=(_candidate(selected=False),),
+        rejection_counts=CurrentVisualPriceRejectionCounts(
+            candidate_groups=1,
+        ),
+    )
+
+    assert not any(candidate.selected for candidate in trace.candidates)
 
 
 def test_analysis_rejects_extraction_trace_status_mismatch() -> None:

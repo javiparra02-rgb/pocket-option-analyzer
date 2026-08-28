@@ -113,15 +113,15 @@ def test_effective_chart_right_detects_blue_line_before_side_panel() -> None:
     assert result.selected_x == 955.0
 
 
-def test_image_width_fallback_does_not_treat_side_panel_as_chart() -> None:
+def test_dynamic_resolver_finds_marker_before_side_panel() -> None:
     frame = image(height=800, width=1161)
     marker(frame, 400, effective_right=1062)
 
     result = PocketOptionCurrentVisualPriceExtractor().extract(frame)
 
-    assert result.status is CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
+    assert result.status is CurrentVisualPriceStatus.OK
     assert result.diagnostic is not None
-    assert "effective_chart_right_source=image_width_fallback" in result.diagnostic
+    assert "effective_chart_right_source=semantic_resolver" in result.diagnostic
 
 
 def test_effective_chart_band_geometry_is_exact() -> None:
@@ -293,15 +293,15 @@ def test_equal_candidates_are_ambiguous() -> None:
     assert result.candidate_count == 2
 
 
-def test_clearly_better_candidate_is_selected() -> None:
+def test_distinct_semantic_prices_are_ambiguous_despite_score_difference() -> None:
     frame = image()
     marker(frame, 40)
     line(frame, 60, start=80, end=94)
     frame[59, 99] = CURRENT_PRICE_BLUE
     frame[61, 99] = CURRENT_PRICE_BLUE
     result = PocketOptionCurrentVisualPriceExtractor().extract(frame)
-    assert result.status is CurrentVisualPriceStatus.OK
-    assert result.selected_y == 40.0
+    assert result.status is CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE
+    assert result.selected_y is None
 
 
 def test_valid_marker_can_be_low_confidence_with_strict_threshold() -> None:
@@ -411,6 +411,9 @@ def test_trace_preserves_ok_candidate_and_effective_configuration() -> None:
     assert selected_row.label_support is True
     assert selected_row.longest_run_ratio == 1.0
     assert selected_row.label_support_trace is not None
+    assert analysis.trace.semantic_search is not None
+    assert analysis.trace.semantic_search.mode.value == "fixed_override"
+    assert analysis.trace.semantic_search.windows[0].line_hypothesis_ids == ()
 
 
 def test_trace_preserves_all_candidates_and_exact_selected_one() -> None:
@@ -426,9 +429,10 @@ def test_trace_preserves_all_candidates_and_exact_selected_one() -> None:
     assert len(analysis.trace.candidates) == 2
     assert [candidate.y for candidate in analysis.trace.candidates] == [40.0, 60.0]
     assert [candidate.selected for candidate in analysis.trace.candidates] == [
-        True,
+        False,
         False,
     ]
+    assert analysis.extraction.selected_y is None
 
 
 def test_no_qualifying_rows_trace_distinguishes_row_rejections() -> None:
@@ -444,11 +448,10 @@ def test_no_qualifying_rows_trace_distinguishes_row_rejections() -> None:
     counts = analysis.trace.rejection_counts
     assert counts.rows_with_mask_pixels == 61
     assert counts.rows_without_mask_pixels == 39
-    assert counts.rejected_by_coverage == 61
-    assert counts.rejected_by_span == 61
-    assert counts.rejected_by_right_edge_gap == 0
-    assert counts.qualifying_rows == 0
-    assert counts.candidate_groups == 0
+    assert analysis.trace.semantic_search is not None
+    assert analysis.trace.semantic_search.plan_reason.value == (
+        "no_horizontal_line_hypotheses"
+    )
 
 
 def test_no_candidate_trace_counts_right_edge_and_group_height_rejections() -> None:
@@ -463,6 +466,7 @@ def test_no_candidate_trace_counts_right_edge_and_group_height_rejections() -> N
     analysis = PocketOptionCurrentVisualPriceExtractor(
         mask_builder=RejectionMaskBuilder(),
         label_vertical_radius_ratio=0.20,
+        effective_chart_right_x=100,
     ).extract_with_trace(image())
 
     assert analysis.extraction.status is (
@@ -473,6 +477,10 @@ def test_no_candidate_trace_counts_right_edge_and_group_height_rejections() -> N
     assert counts.candidate_groups == 1
     assert counts.rejected_by_group_height == 1
     assert analysis.trace.decision_diagnostic == "candidate_groups_rejected"
+    assert analysis.trace.semantic_search is not None
+    assert analysis.trace.semantic_search.window_evaluations[0].decision_diagnostic == (
+        "candidate_groups_rejected"
+    )
 
 
 def test_invalid_image_trace_belongs_to_returned_extraction() -> None:

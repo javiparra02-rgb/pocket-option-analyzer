@@ -17,6 +17,7 @@ from pocket_option_analyzer.vision.models import (
     ChartRegion,
     CurrentVisualPriceDetectionTrace,
     CurrentVisualPriceExtraction,
+    CurrentVisualPriceSemanticSearchTrace,
     FinalCandleTrace,
     MarketAnalysis,
 )
@@ -455,6 +456,9 @@ class VisualEvidenceSerializer:
             "safe_bottom": trace.safe_bottom,
             "masked_pixel_count": trace.masked_pixel_count,
             "decision_diagnostic": trace.decision_diagnostic,
+            "semantic_search": VisualEvidenceSerializer._semantic_search_to_dict(
+                trace.semantic_search
+            ),
             "rejection_counts": {
                 "rows_without_mask_pixels": counts.rows_without_mask_pixels,
                 "rows_with_mask_pixels": counts.rows_with_mask_pixels,
@@ -532,5 +536,54 @@ class VisualEvidenceSerializer:
                     "selected": candidate.selected,
                 }
                 for candidate in trace.candidates
+            ],
+        }
+
+    @staticmethod
+    def _semantic_search_to_dict(
+        trace: CurrentVisualPriceSemanticSearchTrace | None,
+    ) -> dict[str, Any] | None:
+        if trace is None:
+            return None
+        return {
+            "mode": trace.mode.value,
+            "plan_status": trace.plan_status.value,
+            "plan_reason": trace.plan_reason.value,
+            "total_proposed_window_count": trace.total_proposed_window_count,
+            "evaluated_window_count": trace.evaluated_window_count,
+            "full_window_set_sha256": trace.full_window_set_sha256,
+            "resolution_status": trace.resolution_status.value,
+            "resolution_reason": trace.resolution_reason.value,
+            "selected_group_id": trace.selected_group_id,
+            "windows": [
+                {
+                    "window_id": window.window_id,
+                    "start_x": window.start_x,
+                    "end_x": window.end_x,
+                    "width": window.width,
+                    "origin": window.origin.value,
+                    "line_hypothesis_ids": list(window.line_hypothesis_ids),
+                    "label_component_ids": list(window.label_component_ids),
+                }
+                for window in trace.windows
+            ],
+            "window_evaluations": [
+                {
+                    "window_id": evaluation.window_id,
+                    "decision_diagnostic": evaluation.decision_diagnostic,
+                    "candidate_count": evaluation.candidate_count,
+                    "semantic_candidate_ids": list(evaluation.semantic_candidate_ids),
+                }
+                for evaluation in trace.window_evaluations
+            ],
+            "semantic_groups": [
+                {
+                    "group_id": group.group_id,
+                    "semantic_candidate_ids": list(group.semantic_candidate_ids),
+                    "line_hypothesis_ids": list(group.line_hypothesis_ids),
+                    "window_ids": list(group.window_ids),
+                    "representative_window_id": (group.representative_window_id),
+                }
+                for group in trace.semantic_groups
             ],
         }

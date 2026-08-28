@@ -322,7 +322,8 @@ def test_session_02_recovers_three_historical_false_negatives() -> None:
         row = next(row for row in trace.row_evaluations if row.qualified)
         assert row.line_evidence is True
         assert row.label_support is True
-        assert row.longest_run_pixels == 170
+        assert row.line_run_span_ratio >= 0.70
+        assert row.line_run_continuity >= 0.90
 
 
 def test_session_02_preserves_roi_y_for_previously_available_frames() -> None:

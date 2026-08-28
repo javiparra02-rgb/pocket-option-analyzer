@@ -17,6 +17,9 @@ from .candle_series_membership_resolver import CandleSeriesMembershipResolver
 from .chart_locator import ChartLocator
 from .chart_region_extractor import ChartRegionExtractor
 from .current_visual_price_extractor import CurrentVisualPriceExtractor
+from .current_visual_price_search_window_resolver import (
+    CurrentVisualPriceSearchWindowResolver,
+)
 from .dataset_capture_service import DatasetCaptureService
 from .dataset_directory_manager import DatasetDirectoryManager
 from .dataset_filename_generator import DatasetFilenameGenerator
@@ -33,6 +36,9 @@ from .pocket_option_current_price_mask_builder import (
 )
 from .pocket_option_current_visual_price_extractor import (
     PocketOptionCurrentVisualPriceExtractor,
+)
+from .pocket_option_current_visual_price_search_window_resolver import (
+    PocketOptionCurrentVisualPriceSearchWindowResolver,
 )
 from .pocket_option_expiry_overlay_evidence_resolver import (
     PocketOptionExpiryOverlayEvidenceResolver,
@@ -62,6 +68,7 @@ __all__ = [
     "ChartLocator",
     "ChartRegionExtractor",
     "CurrentVisualPriceExtractor",
+    "CurrentVisualPriceSearchWindowResolver",
     "DatasetCaptureService",
     "DatasetDirectoryManager",
     "DatasetFilenameGenerator",
@@ -74,6 +81,7 @@ __all__ = [
     "PocketOptionCurrentPriceMaskBuilder",
     "PocketOptionChartRegionExtractor",
     "PocketOptionCurrentVisualPriceExtractor",
+    "PocketOptionCurrentVisualPriceSearchWindowResolver",
     "PocketOptionPriceObservationRegionExtractor",
     "PriceObservationRegionExtractor",
     "RoiDebugRenderer",

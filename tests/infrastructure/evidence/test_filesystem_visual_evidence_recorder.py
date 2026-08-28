@@ -57,6 +57,12 @@ from pocket_option_analyzer.vision.models import (
     CurrentVisualPriceRejectionCounts,
     CurrentVisualPriceRowEvaluationTrace,
     CurrentVisualPriceRowRejectionReason,
+    CurrentVisualPriceSearchPlanReason,
+    CurrentVisualPriceSearchPlanStatus,
+    CurrentVisualPriceSemanticResolutionReason,
+    CurrentVisualPriceSemanticResolutionStatus,
+    CurrentVisualPriceSemanticSearchMode,
+    CurrentVisualPriceSemanticSearchTrace,
     CurrentVisualPriceStatus,
     FinalCandleTrace,
     MarketAnalysis,
@@ -982,6 +988,51 @@ def test_current_visual_price_trace_preserves_no_qualifying_rows(
     assert trace["rejection_counts"]["rows_without_mask_pixels"] == 20
     assert trace["rejection_counts"]["qualifying_rows"] == 0
     assert trace["row_evaluations"] == []
+    assert trace["semantic_search"] is None
+
+
+def test_current_visual_price_trace_persists_additive_semantic_search(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "evidence"
+    semantic_search = CurrentVisualPriceSemanticSearchTrace(
+        mode=CurrentVisualPriceSemanticSearchMode.DYNAMIC,
+        plan_status=CurrentVisualPriceSearchPlanStatus.UNAVAILABLE,
+        plan_reason=CurrentVisualPriceSearchPlanReason.NO_MASK_PIXELS,
+        total_proposed_window_count=0,
+        evaluated_window_count=0,
+        windows=(),
+        window_evaluations=(),
+        semantic_groups=(),
+        resolution_status=CurrentVisualPriceSemanticResolutionStatus.UNAVAILABLE,
+        resolution_reason=(
+            CurrentVisualPriceSemanticResolutionReason.SEARCH_PLAN_UNAVAILABLE
+        ),
+    )
+    trace = replace(_price_trace(), semantic_search=semantic_search)
+
+    _store(directory).record_frame(
+        _evidence(price_trace_override=trace),
+        (_entry(),),
+    )
+
+    persisted = _read_json(_frame_directory(directory) / "frame.json")["analysis"][
+        "current_visual_price_detection_trace"
+    ]["semantic_search"]
+    assert persisted == {
+        "mode": "dynamic",
+        "plan_status": "unavailable",
+        "plan_reason": "no_mask_pixels",
+        "total_proposed_window_count": 0,
+        "evaluated_window_count": 0,
+        "full_window_set_sha256": None,
+        "resolution_status": "unavailable",
+        "resolution_reason": "search_plan_unavailable",
+        "selected_group_id": None,
+        "windows": [],
+        "window_evaluations": [],
+        "semantic_groups": [],
+    }
 
 
 def test_current_visual_price_trace_persists_two_stage_row_evidence(

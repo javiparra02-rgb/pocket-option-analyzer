@@ -55,7 +55,7 @@ def test_long_horizontal_line_without_label_is_rejected() -> None:
     mask = np.zeros((100, 100), dtype=np.uint8)
     mask[50, 80:100] = 255
 
-    analysis = _analyze(mask)
+    analysis = _analyze(mask, effective_chart_right_x=100)
 
     assert analysis.extraction.status is (
         CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
@@ -73,7 +73,7 @@ def test_label_without_horizontal_line_is_rejected() -> None:
     mask = np.zeros((100, 100), dtype=np.uint8)
     mask[47:54, 95:100] = 255
 
-    analysis = _analyze(mask)
+    analysis = _analyze(mask, effective_chart_right_x=100)
 
     assert analysis.extraction.status is (
         CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
@@ -86,7 +86,7 @@ def test_multiple_isolated_grid_lines_are_rejected() -> None:
     mask = np.zeros((100, 100), dtype=np.uint8)
     mask[[30, 50, 70], 80:100] = 255
 
-    analysis = _analyze(mask)
+    analysis = _analyze(mask, effective_chart_right_x=100)
 
     assert analysis.extraction.status is (
         CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
@@ -100,7 +100,7 @@ def test_short_fragment_and_disperse_large_span_are_rejected() -> None:
     mask[30, 96:100] = 255
     mask[60, [80, 85, 90, 95, 99]] = 255
 
-    analysis = _analyze(mask)
+    analysis = _analyze(mask, effective_chart_right_x=100)
 
     assert analysis.extraction.status is (
         CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
@@ -225,7 +225,7 @@ def test_two_supported_marker_lines_remain_ambiguous() -> None:
     assert analysis.extraction.status is (
         CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE
     )
-    assert analysis.trace.decision_diagnostic == "ambiguous_candidates"
+    assert analysis.trace.decision_diagnostic == "multiple_semantic_prices"
     assert len(analysis.trace.candidates) == 2
 
 
@@ -375,7 +375,10 @@ def test_label_support_density_boundary_is_explicit() -> None:
 
 
 def test_empty_band_does_not_serialize_empty_row_objects() -> None:
-    analysis = _analyze(np.zeros((100, 100), dtype=np.uint8))
+    analysis = _analyze(
+        np.zeros((100, 100), dtype=np.uint8),
+        effective_chart_right_x=100,
+    )
 
     assert analysis.trace.row_evaluations == ()
     assert analysis.trace.rejection_counts.rows_without_mask_pixels == 100

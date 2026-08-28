@@ -8,6 +8,7 @@ from .current_visual_price_extraction import (
     CurrentVisualPriceExtraction,
     CurrentVisualPriceStatus,
 )
+from .current_visual_price_search import CurrentVisualPriceSemanticSearchTrace
 
 
 class CurrentVisualPriceRowRejectionReason(StrEnum):
@@ -244,6 +245,7 @@ class CurrentVisualPriceDetectionTrace:
     rejection_counts: CurrentVisualPriceRejectionCounts
     row_evaluations: tuple[CurrentVisualPriceRowEvaluationTrace, ...] = ()
     decision_diagnostic: str | None = None
+    semantic_search: CurrentVisualPriceSemanticSearchTrace | None = None
 
     def __post_init__(self) -> None:
         optional_dimensions = (
@@ -271,7 +273,11 @@ class CurrentVisualPriceDetectionTrace:
         selected_count = sum(candidate.selected for candidate in self.candidates)
         if selected_count > 1:
             raise ValueError("Como máximo un candidato puede estar seleccionado.")
-        if self.candidates and selected_count != 1:
+        if (
+            self.candidates
+            and selected_count != 1
+            and self.status is not CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE
+        ):
             raise ValueError(
                 "Una traza con candidatos debe identificar el seleccionado."
             )

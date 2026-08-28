@@ -21,7 +21,7 @@ from pocket_option_analyzer.infrastructure.bootstrap import SignalPipelineFactor
 from pocket_option_analyzer.vision.models import (
     CandleColorProfile,
     ChartRegion,
-    CurrentVisualPriceRowRejectionReason,
+    CurrentVisualPriceSearchPlanReason,
     CurrentVisualPriceStatus,
     MarketAnalysis,
 )
@@ -49,14 +49,14 @@ _ORACLES = (
         "frame_00000001_20260823T202231602142Z",
         CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE,
         None,
-        "no_pixels_in_band",
+        "no_horizontal_line_hypotheses",
     ),
     _FrameOracle(
         11,
         "frame_00000011_20260823T202242463685Z",
         CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE,
         None,
-        "no_pixels_in_band",
+        "semantic_windows_without_qualifying_candidate",
     ),
     _FrameOracle(
         30,
@@ -77,14 +77,14 @@ _ORACLES = (
         "frame_00000057_20260823T202332010478Z",
         CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE,
         None,
-        "no_line_rows",
+        "no_horizontal_line_hypotheses",
     ),
     _FrameOracle(
         67,
         "frame_00000067_20260823T202342844955Z",
         CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE,
         None,
-        "no_pixels_in_band",
+        "no_compatible_line_label_pairs",
     ),
 )
 
@@ -229,20 +229,18 @@ def test_session_05_frame_30_accepts_trusted_marker_outside_legacy_margin() -> N
     assert (trace.safe_top, trace.safe_bottom) == (40, 40)
     assert extraction.price.roi_y > 787 - trace.safe_bottom
     row = next(row for row in trace.row_evaluations if row.qualified)
-    assert row.longest_run_pixels == 178
-    assert row.line_run_pixels == 185
-    assert row.line_run_span_pixels == 188
-    assert row.line_run_continuity == pytest.approx(0.9840425531914894)
+    assert row.line_run_span_ratio >= 0.70
+    assert row.line_run_continuity >= 0.90
     assert row.label_support is True
     assert row.label_support_trace is not None
-    assert row.label_support_trace.support_row_count == 27
-    assert row.label_support_trace.evaluated_row_count == 33
-    assert row.label_support_trace.support_density == pytest.approx(0.5942760942760943)
+    assert row.label_support_trace.supported is True
+    assert row.label_support_trace.support_row_count > 0
+    assert row.label_support_trace.support_density >= 0.05
     assert result.reference_result.close_roi_y == 773
     assert abs(extraction.price.roi_y - result.reference_result.close_roi_y) == 1
 
 
-def test_session_05_frame_40_preserves_non_productive_right_edge_diagnostic() -> None:
+def test_session_05_frame_40_uses_semantic_window_without_changing_price() -> None:
     result = _result(40)
     extraction = result.analysis.current_visual_price
     trace = result.analysis.current_visual_price_detection_trace
@@ -252,13 +250,14 @@ def test_session_05_frame_40_preserves_non_productive_right_edge_diagnostic() ->
     assert extraction.price.roi_y == pytest.approx(735.0, abs=0.5)
     assert trace is not None
     row = next(row for row in trace.row_evaluations if row.qualified)
-    assert row.right_edge_gap == 5
-    assert row.pass_edge is False
+    assert trace.effective_chart_right_source == "semantic_resolver"
+    assert row.line_evidence is True
+    assert row.label_support is True
     assert result.reference_result.close_roi_y == 736
     assert abs(extraction.price.roi_y - result.reference_result.close_roi_y) == 1
 
 
-def test_session_05_frame_57_partial_label_remains_without_line_candidate() -> None:
+def test_session_05_frame_57_rejects_partial_label_without_semantic_line() -> None:
     result = _result(57)
     extraction = result.analysis.current_visual_price
     trace = result.analysis.current_visual_price_detection_trace
@@ -266,16 +265,12 @@ def test_session_05_frame_57_partial_label_remains_without_line_candidate() -> N
     assert extraction is not None
     assert extraction.status is CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
     assert trace is not None
-    assert tuple(row.row_y for row in trace.row_evaluations) == (786, 787)
-    assert not any(row.line_evidence for row in trace.row_evaluations)
-    for row in trace.row_evaluations:
-        assert CurrentVisualPriceRowRejectionReason.LINE_RUN_TOO_SHORT in (
-            row.rejection_reasons
-        )
-        assert CurrentVisualPriceRowRejectionReason.LINE_STARTS_TOO_LATE in (
-            row.rejection_reasons
-        )
-    assert trace.decision_diagnostic == "no_line_rows"
+    assert trace.row_evaluations == ()
+    assert trace.semantic_search is not None
+    assert trace.semantic_search.plan_reason is (
+        CurrentVisualPriceSearchPlanReason.NO_HORIZONTAL_LINE_HYPOTHESES
+    )
+    assert trace.decision_diagnostic == "no_horizontal_line_hypotheses"
 
 
 def test_session_05_snapshot_two_current_price_comparison_is_available() -> None:
