@@ -25,6 +25,12 @@ from pocket_option_analyzer.vision.services import (
     PocketOptionCurrentVisualPriceExtractor,
     PocketOptionCurrentVisualPriceSearchWindowResolver,
 )
+from pocket_option_analyzer.vision.services import (
+    pocket_option_current_visual_price_extractor as extractor_module,
+)
+
+_Candidate = extractor_module._Candidate
+_QualifiedSemanticCandidate = extractor_module._QualifiedSemanticCandidate
 
 
 class _FixedMaskBuilder:
@@ -141,6 +147,67 @@ class _RecordingExtractor(PocketOptionCurrentVisualPriceExtractor):
         return super()._search_candidates(mask, band_start, band_end, band_width)
 
 
+class _FragmentedLineResolver:
+    def __init__(self, *, gap: int) -> None:
+        self._gap = gap
+
+    def resolve(
+        self,
+        *,
+        mask: np.ndarray,
+        constraints: CurrentVisualPriceSearchConstraints,
+    ) -> CurrentVisualPriceSearchPlan:
+        if mask.shape[1] == 1154:
+            left_start, left_end = 500, 600
+            right_start, right_end = left_end + self._gap, 1000
+            windows = ((500, 620), (840, 1062))
+        else:
+            left_start, left_end = 437, 523
+            right_start, right_end = left_end + self._gap, 757
+            windows = ((437, 547), (644, 805))
+        return CurrentVisualPriceSearchPlan(
+            status=CurrentVisualPriceSearchPlanStatus.AVAILABLE,
+            reason=CurrentVisualPriceSearchPlanReason.SEMANTIC_WINDOWS_AVAILABLE,
+            constraints=constraints,
+            windows=tuple(
+                CurrentVisualPriceSearchWindow(
+                    window_id=f"search_window_{index:03d}",
+                    start_x=start,
+                    end_x=end,
+                    origin=(
+                        CurrentVisualPriceSearchWindowOrigin.SEMANTIC_LINE_LABEL_PAIR
+                    ),
+                    line_hypothesis_ids=(f"line_hypothesis_{index:03d}",),
+                    label_component_ids=(f"label_component_{index:03d}",),
+                )
+                for index, (start, end) in enumerate(windows)
+            ),
+            line_hypotheses=(
+                CurrentVisualPriceLineHypothesis(
+                    hypothesis_id="line_hypothesis_000",
+                    runs=(
+                        CurrentVisualPriceLineRun(
+                            row_y=mask.shape[0] // 2,
+                            start_x=left_start,
+                            end_x=left_end,
+                        ),
+                    ),
+                ),
+                CurrentVisualPriceLineHypothesis(
+                    hypothesis_id="line_hypothesis_001",
+                    runs=(
+                        CurrentVisualPriceLineRun(
+                            row_y=mask.shape[0] // 2,
+                            start_x=right_start,
+                            end_x=right_end,
+                        ),
+                    ),
+                ),
+            ),
+            total_proposed_window_count=2,
+        )
+
+
 def _marker(
     mask: np.ndarray,
     *,
@@ -176,6 +243,66 @@ def _analyze(
     )
     image = np.zeros((*mask.shape, 3), dtype=np.uint8)
     return extractor.extract_with_trace(image), builder
+
+
+def _fragmented_marker_mask(*, height: int, width: int, gap: int) -> np.ndarray:
+    mask = np.zeros((height, width), dtype=np.uint8)
+    y = height // 2
+    if width == 1154:
+        left_line = (500, 600)
+        left_label = (600, 620)
+        right_line = (600 + gap, 1000)
+        right_label = (1000, 1062)
+    else:
+        left_line = (437, 523)
+        left_label = (523, 547)
+        right_line = (523 + gap, 757)
+        right_label = (757, 805)
+    for line_start, line_end in (left_line, right_line):
+        mask[y, line_start:line_end] = 255
+    for label_start, label_end in (left_label, right_label):
+        mask[y - 6 : y, label_start:label_end] = 255
+        mask[y + 1 : y + 7, label_start:label_end] = 255
+    return mask
+
+
+def _semantic_candidate(
+    candidate_id: str,
+    *,
+    row_ids: tuple[int, ...],
+    line_ids: tuple[str, ...],
+    y: float | None = None,
+    window_start: int = 0,
+    window_end: int = 100,
+    score: float = 0.5,
+    label_id: str = "label_component_000",
+) -> _QualifiedSemanticCandidate:
+    candidate_y = float(row_ids[0] if row_ids else 0) if y is None else y
+    row_start = min(row_ids, default=int(candidate_y))
+    row_end = max(row_ids, default=int(candidate_y))
+    return _QualifiedSemanticCandidate(
+        semantic_candidate_id=candidate_id,
+        candidate=_Candidate(
+            y=candidate_y,
+            x=float((window_start + window_end) / 2),
+            score=score,
+            row_start=row_start,
+            row_end=row_end,
+            coverage=1.0,
+            span=1.0,
+            right_edge_gap=0,
+        ),
+        window=CurrentVisualPriceSearchWindow(
+            window_id=f"window_{candidate_id}",
+            start_x=window_start,
+            end_x=window_end,
+            origin=CurrentVisualPriceSearchWindowOrigin.SEMANTIC_LINE_LABEL_PAIR,
+            line_hypothesis_ids=line_ids,
+            label_component_ids=(label_id,),
+        ),
+        line_hypothesis_ids=line_ids,
+        qualified_row_ids=row_ids,
+    )
 
 
 @pytest.mark.parametrize(
@@ -285,6 +412,222 @@ def test_same_price_under_multiple_windows_deduplicates_transitively() -> None:
     assert trace.semantic_groups[0].representative_window_id == (
         max(trace.windows, key=lambda window: window.end_x).window_id
     )
+
+
+@pytest.mark.parametrize(
+    ("height", "width", "gap"),
+    [
+        pytest.param(788, 1154, 22, id="nominal-gap-22"),
+        pytest.param(640, 941, 22, id="resized-gap-22"),
+        pytest.param(640, 941, 23, id="resized-gap-23"),
+    ],
+)
+def test_exact_raster_support_deduplicates_fragmented_horizontal_line(
+    height: int,
+    width: int,
+    gap: int,
+) -> None:
+    mask = _fragmented_marker_mask(height=height, width=width, gap=gap)
+
+    analysis, _ = _analyze(mask, resolver=_FragmentedLineResolver(gap=gap))
+
+    semantic = analysis.trace.semantic_search
+    assert analysis.extraction.status is CurrentVisualPriceStatus.OK
+    assert analysis.extraction.selected_y == height // 2
+    assert semantic is not None
+    assert semantic.evaluated_window_count == 2
+    assert len(semantic.semantic_groups) == 1
+    assert semantic.semantic_groups[0].line_hypothesis_ids == (
+        "line_hypothesis_000",
+        "line_hypothesis_001",
+    )
+    assert semantic.semantic_groups[0].representative_window_id == ("search_window_001")
+
+
+def test_exact_multi_row_signature_merges_disjoint_provenance() -> None:
+    candidates = (
+        _semantic_candidate(
+            "candidate_a",
+            row_ids=(100, 101),
+            line_ids=("line_a",),
+        ),
+        _semantic_candidate(
+            "candidate_b",
+            row_ids=(100, 101),
+            line_ids=("line_b",),
+            window_start=200,
+            window_end=300,
+            label_id="label_b",
+        ),
+    )
+
+    groups = PocketOptionCurrentVisualPriceExtractor._semantic_candidate_groups(
+        candidates
+    )
+
+    assert len(groups) == 1
+    assert groups[0].line_hypothesis_ids == ("line_a", "line_b")
+
+
+@pytest.mark.parametrize(
+    ("left_rows", "right_rows"),
+    [
+        pytest.param((100, 101), (101, 102), id="partial-overlap"),
+        pytest.param((100,), (101,), id="adjacent-rows"),
+        pytest.param((), (), id="empty-signatures"),
+    ],
+)
+def test_raster_support_fallback_requires_exact_non_empty_signature(
+    left_rows: tuple[int, ...],
+    right_rows: tuple[int, ...],
+) -> None:
+    candidates = (
+        _semantic_candidate(
+            "candidate_a",
+            row_ids=left_rows,
+            line_ids=("line_a",),
+            y=100.5,
+        ),
+        _semantic_candidate(
+            "candidate_b",
+            row_ids=right_rows,
+            line_ids=("line_b",),
+            y=100.5,
+        ),
+    )
+
+    groups = PocketOptionCurrentVisualPriceExtractor._semantic_candidate_groups(
+        candidates
+    )
+
+    assert len(groups) == 2
+
+
+def test_exact_raster_support_ignores_x_label_score_and_rightmost_position() -> None:
+    candidates = (
+        _semantic_candidate(
+            "candidate_a",
+            row_ids=(100,),
+            line_ids=("line_a",),
+            window_start=0,
+            window_end=50,
+            score=0.99,
+            label_id="label_a",
+        ),
+        _semantic_candidate(
+            "candidate_b",
+            row_ids=(100,),
+            line_ids=("line_b",),
+            window_start=500,
+            window_end=600,
+            score=0.01,
+            label_id="label_b",
+        ),
+    )
+
+    groups = PocketOptionCurrentVisualPriceExtractor._semantic_candidate_groups(
+        candidates
+    )
+
+    assert len(groups) == 1
+    assert groups[0].representative.semantic_candidate_id == "candidate_b"
+
+
+def test_mixed_provenance_and_raster_equivalence_is_transitive() -> None:
+    candidates = (
+        _semantic_candidate(
+            "candidate_a",
+            row_ids=(99,),
+            line_ids=("shared_line",),
+        ),
+        _semantic_candidate(
+            "candidate_b",
+            row_ids=(100,),
+            line_ids=("shared_line",),
+        ),
+        _semantic_candidate(
+            "candidate_c",
+            row_ids=(100,),
+            line_ids=("fragmented_line",),
+        ),
+    )
+
+    normal = PocketOptionCurrentVisualPriceExtractor._semantic_candidate_groups(
+        candidates
+    )
+    reversed_order = PocketOptionCurrentVisualPriceExtractor._semantic_candidate_groups(
+        tuple(reversed(candidates))
+    )
+
+    assert len(normal) == 1
+    assert normal == reversed_order
+    assert tuple(member.semantic_candidate_id for member in normal[0].members) == (
+        "candidate_a",
+        "candidate_b",
+        "candidate_c",
+    )
+
+
+def test_same_selected_y_does_not_merge_different_raster_signatures() -> None:
+    candidates = (
+        _semantic_candidate(
+            "candidate_a",
+            row_ids=(100,),
+            line_ids=("line_a",),
+            y=100.5,
+        ),
+        _semantic_candidate(
+            "candidate_b",
+            row_ids=(101,),
+            line_ids=("line_b",),
+            y=100.5,
+        ),
+    )
+
+    groups = PocketOptionCurrentVisualPriceExtractor._semantic_candidate_groups(
+        candidates
+    )
+
+    assert len(groups) == 2
+
+
+def test_f1021_equivalent_distinct_rows_remain_ambiguous() -> None:
+    candidates = (
+        _semantic_candidate(
+            "candidate_a",
+            row_ids=(121,),
+            line_ids=("line_a",),
+        ),
+        _semantic_candidate(
+            "candidate_b",
+            row_ids=(398,),
+            line_ids=("line_b",),
+        ),
+    )
+
+    groups = PocketOptionCurrentVisualPriceExtractor._semantic_candidate_groups(
+        candidates
+    )
+
+    assert len(groups) == 2
+
+
+def test_f1067_equivalent_merges_only_duplicate_vertical_coordinate() -> None:
+    candidates = tuple(
+        _semantic_candidate(
+            f"candidate_{index}",
+            row_ids=(row_y,),
+            line_ids=(f"line_{index}",),
+        )
+        for index, row_y in enumerate((121, 116, 171, 171))
+    )
+
+    groups = PocketOptionCurrentVisualPriceExtractor._semantic_candidate_groups(
+        candidates
+    )
+
+    assert len(groups) == 3
+    assert sorted(len(group.members) for group in groups) == [1, 1, 2]
 
 
 def test_semantic_dedup_is_independent_of_window_iteration_order() -> None:

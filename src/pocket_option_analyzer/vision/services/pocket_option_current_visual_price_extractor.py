@@ -104,6 +104,7 @@ class _QualifiedSemanticCandidate:
     candidate: _Candidate
     window: CurrentVisualPriceSearchWindow
     line_hypothesis_ids: tuple[str, ...]
+    qualified_row_ids: tuple[int, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -470,6 +471,10 @@ class PocketOptionCurrentVisualPriceExtractor:
             searches[window.window_id] = search
             ids: list[str] = []
             for index, candidate in enumerate(search.candidates):
+                qualified_row_ids = self._candidate_qualified_row_ids(
+                    candidate=candidate,
+                    search=search,
+                )
                 line_ids = self._candidate_line_hypothesis_ids(
                     candidate=candidate,
                     search=search,
@@ -485,6 +490,7 @@ class PocketOptionCurrentVisualPriceExtractor:
                         candidate=candidate,
                         window=window,
                         line_hypothesis_ids=line_ids,
+                        qualified_row_ids=qualified_row_ids,
                     )
                 )
             evaluations.append(
@@ -797,6 +803,23 @@ class PocketOptionCurrentVisualPriceExtractor:
         )
 
     @staticmethod
+    def _candidate_qualified_row_ids(
+        *,
+        candidate: _Candidate,
+        search: _CandidateSearch,
+    ) -> tuple[int, ...]:
+        return tuple(
+            sorted(
+                {
+                    row.row_y
+                    for row in search.row_evaluations
+                    if candidate.row_start <= row.row_y <= candidate.row_end
+                    and row.qualified
+                }
+            )
+        )
+
+    @staticmethod
     def _candidate_line_hypothesis_ids(
         *,
         candidate: _Candidate,
@@ -833,7 +856,18 @@ class PocketOptionCurrentVisualPriceExtractor:
         for left_index, left in enumerate(ordered):
             left_ids = frozenset(left.line_hypothesis_ids)
             for right_index in range(left_index + 1, len(ordered)):
-                if left_ids.intersection(ordered[right_index].line_hypothesis_ids):
+                right = ordered[right_index]
+                shared_line_provenance = bool(
+                    left_ids.intersection(right.line_hypothesis_ids)
+                )
+                # CurrentVisualPrice represents a vertical coordinate. Two
+                # qualified detections with the same exact, non-empty raster-row
+                # support therefore cannot represent distinct vertical prices,
+                # even when a horizontal occlusion fragmented their provenance.
+                shared_exact_raster_support = bool(left.qualified_row_ids) and (
+                    left.qualified_row_ids == right.qualified_row_ids
+                )
+                if shared_line_provenance or shared_exact_raster_support:
                     disjoint.union(left_index, right_index)
         grouped: dict[int, list[_QualifiedSemanticCandidate]] = {}
         for index, candidate in enumerate(ordered):
