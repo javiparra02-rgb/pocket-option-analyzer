@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
@@ -30,6 +30,7 @@ from scripts.current_visual_price_burst_harness import (
     CurrentVisualPriceBurstHarness,
     GitProvenance,
     HarnessConfig,
+    PreflightPhysicalCadenceStatus,
     TechnicalFailureReason,
     build_productive_extractor,
     replay_current_visual_price_frame,
@@ -240,6 +241,47 @@ def run_one_burst(
         expected_commit=COMMIT,
     )
     return output, harness, capture, clock
+
+
+def preflight_payload(
+    items: list[Frame | None | BaseException],
+    *,
+    capture_duration_ns: int = 0,
+) -> dict[str, object]:
+    clock = FakeClock(current_ns=0)
+    capture = FakeCaptureService(
+        items,
+        clock=clock,
+        duration_ns=capture_duration_ns,
+    )
+    harness = build_harness(capture=capture, clock=clock)
+    config = HarnessConfig(preflight_frames=max(5, len(items)))
+    batch = harness._capture_preflight(  # noqa: SLF001 - contract audit.
+        frame_count=len(items),
+        period_ns=config.period_ns,
+    )
+    return cast(
+        dict[str, object],
+        harness._preflight_payload(batch, config),  # noqa: SLF001
+    )
+
+
+def frames_with_physical_timestamps(
+    timestamps: list[int | None],
+    *,
+    start_frame_id: int = 1,
+    source: str | None = "win32_hwnd:123",
+) -> list[Frame]:
+    return [
+        replace(
+            make_frame(frame_id, source=source),
+            monotonic_timestamp_ns=timestamp,
+        )
+        for frame_id, timestamp in enumerate(
+            timestamps,
+            start=start_frame_id,
+        )
+    ]
 
 
 def test_each_sample_calls_capture_once_without_fabricating_frames(
@@ -701,13 +743,404 @@ def test_preflight_reports_measurements_without_acceptance_policy(
     output, _, _, _ = run_one_burst(tmp_path)
 
     preflight = json.loads((output / "preflight.json").read_text("utf-8"))
+    accounting = preflight["accounting"]
+    scheduler = preflight["scheduler"]
+    physical = preflight["physical_capture"]
 
+    assert preflight["schema_version"] == 2
     assert preflight["measurement_only"] is True
     assert preflight["campaign_acceptance_policy_applied"] is False
-    assert preflight["requested_frames"] == 5
-    assert preflight["available_frames"] == 5
-    assert preflight["effective_fps"] == pytest.approx(8.0)
-    assert preflight["five_frame_span_ns"]["median"] == 500_000_000
+    assert accounting == {
+        "attempt_outcome_invariant_holds": True,
+        "attempted_capture_calls": 5,
+        "capture_exception_count": 0,
+        "capture_unavailable_count": 0,
+        "interrupted_before_attempt_count": 0,
+        "requested_capture_slots": 5,
+        "successful_physical_captures": 5,
+    }
+    assert scheduler["attempt_effective_fps"] == pytest.approx(8.0)
+    assert scheduler["attempt_spacing_ns"]["median"] == 125_000_000
+    assert physical["status"] == (
+        PreflightPhysicalCadenceStatus.SUFFICIENT_FOR_CADENCE_ASSESSMENT.value
+    )
+    assert physical["longest_consecutive_success_run"] == 5
+    assert physical["five_frame_span_ns"]["median"] == 400
+    assert "effective_fps" not in preflight
+    assert "spacing_ns" not in preflight
+
+
+def test_preflight_thirty_unavailable_separates_scheduler_from_physical() -> None:
+    preflight = preflight_payload([None] * 30)
+    accounting = cast(dict[str, object], preflight["accounting"])
+    scheduler = cast(dict[str, object], preflight["scheduler"])
+    physical = cast(dict[str, object], preflight["physical_capture"])
+
+    assert accounting == {
+        "requested_capture_slots": 30,
+        "attempted_capture_calls": 30,
+        "successful_physical_captures": 0,
+        "capture_unavailable_count": 30,
+        "capture_exception_count": 0,
+        "interrupted_before_attempt_count": 0,
+        "attempt_outcome_invariant_holds": True,
+    }
+    assert scheduler["attempt_effective_fps"] == pytest.approx(8.0)
+    assert cast(dict[str, object], scheduler["attempt_spacing_ns"])[
+        "median"
+    ] == 125_000_000
+    assert physical["effective_fps"] is None
+    assert physical["spacing_ns"] is None
+    assert physical["five_frame_span_ns"] is None
+    assert physical["longest_consecutive_success_run"] == 0
+    assert physical["status"] == (
+        PreflightPhysicalCadenceStatus.
+        INSUFFICIENT_NO_PHYSICAL_CAPTURES.value
+    )
+    assert {
+        cast(dict[str, object], attempt)["outcome"]
+        for attempt in cast(list[object], preflight["attempts"])
+    } == {"capture_unavailable"}
+
+
+def test_preflight_one_success_has_no_physical_cadence() -> None:
+    items: list[Frame | None | BaseException] = [
+        *frames_with_physical_timestamps([1_000_000_000]),
+        None,
+        None,
+        None,
+        None,
+    ]
+
+    preflight = preflight_payload(items)
+    physical = cast(dict[str, object], preflight["physical_capture"])
+
+    assert physical["successful_captures"] == 1
+    assert physical["effective_fps"] is None
+    assert physical["spacing_ns"] is None
+    assert physical["five_frame_span_ns"] is None
+    assert physical["status"] == (
+        PreflightPhysicalCadenceStatus.INSUFFICIENT_SINGLE_CAPTURE.value
+    )
+
+
+@pytest.mark.parametrize("success_count", [2, 3, 4])
+def test_preflight_two_to_four_consecutive_successes_remain_insufficient(
+    success_count: int,
+) -> None:
+    timestamps = [
+        1_000_000_000 + index * 125_000_000
+        for index in range(success_count)
+    ]
+    items: list[Frame | None | BaseException] = [
+        *frames_with_physical_timestamps(timestamps),
+        *([None] * (5 - success_count)),
+    ]
+
+    preflight = preflight_payload(items)
+    physical = cast(dict[str, object], preflight["physical_capture"])
+
+    assert physical["successful_captures"] == success_count
+    assert physical["effective_fps"] == pytest.approx(8.0)
+    assert cast(dict[str, object], physical["spacing_ns"])["count"] == (
+        success_count - 1
+    )
+    assert physical["five_frame_span_ns"] is None
+    assert physical["longest_consecutive_success_run"] == success_count
+    assert physical["status"] == (
+        PreflightPhysicalCadenceStatus.
+        INSUFFICIENT_FEWER_THAN_FIVE_CONSECUTIVE.value
+    )
+
+
+def test_preflight_five_compatible_successes_are_sufficient_for_assessment() -> (
+    None
+):
+    frames = frames_with_physical_timestamps(
+        [
+            1_000_000_000,
+            1_125_000_000,
+            1_250_000_000,
+            1_375_000_000,
+            1_500_000_000,
+        ]
+    )
+
+    preflight = preflight_payload(list(frames))
+    physical = cast(dict[str, object], preflight["physical_capture"])
+
+    assert physical["effective_fps"] == pytest.approx(8.0)
+    assert cast(dict[str, object], physical["spacing_ns"])["count"] == 4
+    assert cast(dict[str, object], physical["five_frame_span_ns"])[
+        "median"
+    ] == 500_000_000
+    assert physical["longest_consecutive_success_run"] == 5
+    assert physical["status"] == (
+        PreflightPhysicalCadenceStatus.SUFFICIENT_FOR_CADENCE_ASSESSMENT.value
+    )
+    assert physical["status_is_campaign_acceptance"] is False
+
+
+def test_preflight_five_total_successes_with_gap_have_no_continuous_span() -> None:
+    frames = frames_with_physical_timestamps(
+        [
+            1_000_000_000,
+            1_125_000_000,
+            1_375_000_000,
+            1_500_000_000,
+            1_625_000_000,
+        ]
+    )
+    items: list[Frame | None | BaseException] = [
+        frames[0],
+        frames[1],
+        None,
+        frames[2],
+        frames[3],
+        frames[4],
+    ]
+
+    preflight = preflight_payload(items)
+    physical = cast(dict[str, object], preflight["physical_capture"])
+
+    assert physical["successful_captures"] == 5
+    assert physical["longest_consecutive_success_run"] == 3
+    assert physical["five_frame_span_ns"] is None
+    assert physical["status"] == (
+        PreflightPhysicalCadenceStatus.
+        INSUFFICIENT_FEWER_THAN_FIVE_CONSECUTIVE.value
+    )
+    assert cast(dict[str, int], physical["run_boundary_counts"])[
+        "capture_unavailable"
+    ] == 1
+
+
+def test_preflight_accounting_distinguishes_none_exception_and_success() -> None:
+    frames = frames_with_physical_timestamps([1_000_000_000, 1_500_000_000])
+    items: list[Frame | None | BaseException] = [
+        frames[0],
+        None,
+        RuntimeError("capture boom"),
+        frames[1],
+        None,
+    ]
+
+    preflight = preflight_payload(items)
+    accounting = cast(dict[str, object], preflight["accounting"])
+    attempts = cast(list[dict[str, object]], preflight["attempts"])
+
+    assert accounting["attempted_capture_calls"] == 5
+    assert accounting["successful_physical_captures"] == 2
+    assert accounting["capture_unavailable_count"] == 2
+    assert accounting["capture_exception_count"] == 1
+    assert [attempt["outcome"] for attempt in attempts] == [
+        "capture_success",
+        "capture_unavailable",
+        "capture_exception",
+        "capture_success",
+        "capture_unavailable",
+    ]
+    assert attempts[2]["capture_error"] == "RuntimeError: capture boom"
+
+
+def test_preflight_all_exceptions_have_no_physical_metrics() -> None:
+    preflight = preflight_payload(
+        [RuntimeError(f"boom {index}") for index in range(5)]
+    )
+    accounting = cast(dict[str, object], preflight["accounting"])
+    physical = cast(dict[str, object], preflight["physical_capture"])
+
+    assert accounting["capture_exception_count"] == 5
+    assert accounting["capture_unavailable_count"] == 0
+    assert physical["effective_fps"] is None
+    assert physical["five_frame_span_ns"] is None
+
+
+def test_physical_metrics_use_frame_timestamp_not_attempt_start() -> None:
+    frames = frames_with_physical_timestamps(
+        [100, 300, 600, 1_000, 1_500]
+    )
+
+    preflight = preflight_payload(list(frames))
+    scheduler = cast(dict[str, object], preflight["scheduler"])
+    physical = cast(dict[str, object], preflight["physical_capture"])
+
+    assert cast(dict[str, object], scheduler["attempt_spacing_ns"])[
+        "median"
+    ] == 125_000_000
+    assert cast(dict[str, object], physical["spacing_ns"])["median"] == 350
+    assert cast(dict[str, object], physical["five_frame_span_ns"])[
+        "median"
+    ] == 1_400
+    assert physical["timestamp_source"] == "Frame.monotonic_timestamp_ns"
+
+
+def test_missing_physical_timestamp_is_not_used_for_cadence() -> None:
+    frames = frames_with_physical_timestamps(
+        [100, 200, None, 400, 500]
+    )
+
+    preflight = preflight_payload(list(frames))
+    physical = cast(dict[str, object], preflight["physical_capture"])
+    boundaries = cast(dict[str, int], physical["run_boundary_counts"])
+
+    assert physical["successful_captures"] == 5
+    assert physical["temporally_usable_captures"] == 4
+    assert physical["longest_consecutive_success_run"] == 2
+    assert physical["five_frame_span_ns"] is None
+    assert boundaries["invalid_physical_timestamp"] == 1
+
+
+@pytest.mark.parametrize(
+    "timestamps",
+    [
+        [100, 200, 200, 300, 400],
+        [100, 200, 150, 300, 400],
+    ],
+    ids=["repeated", "regressive"],
+)
+def test_non_monotonic_physical_timestamp_breaks_the_run(
+    timestamps: list[int],
+) -> None:
+    preflight = preflight_payload(
+        list(frames_with_physical_timestamps(timestamps))
+    )
+    physical = cast(dict[str, object], preflight["physical_capture"])
+    boundaries = cast(dict[str, int], physical["run_boundary_counts"])
+
+    assert physical["five_frame_span_ns"] is None
+    assert physical["longest_consecutive_success_run"] == 3
+    assert boundaries["non_monotonic_physical_timestamp"] == 1
+
+
+def test_source_change_breaks_the_physical_run() -> None:
+    first = frames_with_physical_timestamps(
+        [100, 200, 300],
+        source="win32_hwnd:1",
+    )
+    second = frames_with_physical_timestamps(
+        [400, 500, 600],
+        start_frame_id=4,
+        source="win32_hwnd:2",
+    )
+
+    preflight = preflight_payload([*first, *second])
+    physical = cast(dict[str, object], preflight["physical_capture"])
+
+    assert physical["longest_consecutive_success_run"] == 3
+    assert physical["five_frame_span_ns"] is None
+    assert cast(dict[str, int], physical["run_boundary_counts"])[
+        "source_changed"
+    ] == 1
+
+
+def test_chart_geometry_change_breaks_the_physical_run() -> None:
+    frames = frames_with_physical_timestamps([100, 200, 300, 400, 500, 600])
+    changed_region = ChartRegion(x=1, y=10, width=8, height=6)
+    frames[3:] = [
+        replace(frame, chart_region=changed_region) for frame in frames[3:]
+    ]
+
+    preflight = preflight_payload(list(frames))
+    physical = cast(dict[str, object], preflight["physical_capture"])
+
+    assert physical["longest_consecutive_success_run"] == 3
+    assert physical["five_frame_span_ns"] is None
+    assert cast(dict[str, int], physical["run_boundary_counts"])[
+        "chart_geometry_changed"
+    ] == 1
+
+
+def test_price_geometry_change_breaks_the_physical_run() -> None:
+    frames = frames_with_physical_timestamps([100, 200, 300, 400, 500, 600])
+    changed_region = ChartRegion(x=2, y=10, width=8, height=6)
+    frames[3:] = [
+        replace(frame, price_observation_region=changed_region)
+        for frame in frames[3:]
+    ]
+
+    preflight = preflight_payload(list(frames))
+    physical = cast(dict[str, object], preflight["physical_capture"])
+
+    assert physical["longest_consecutive_success_run"] == 3
+    assert physical["five_frame_span_ns"] is None
+    assert cast(dict[str, int], physical["run_boundary_counts"])[
+        "price_observation_geometry_changed"
+    ] == 1
+
+
+def test_run_restarts_after_unavailable_and_spans_stay_inside_valid_run() -> None:
+    first = frames_with_physical_timestamps([100, 200, 300])
+    second = frames_with_physical_timestamps(
+        [500, 600, 700, 800, 900],
+        start_frame_id=4,
+    )
+    items: list[Frame | None | BaseException] = [*first, None, *second]
+
+    preflight = preflight_payload(items)
+    physical = cast(dict[str, object], preflight["physical_capture"])
+    spans = cast(dict[str, object], physical["five_frame_span_ns"])
+
+    assert physical["longest_consecutive_success_run"] == 5
+    assert physical["compatible_run_count"] == 2
+    assert spans["count"] == 1
+    assert spans["median"] == 400
+    assert physical["status"] == (
+        PreflightPhysicalCadenceStatus.SUFFICIENT_FOR_CADENCE_ASSESSMENT.value
+    )
+
+
+def test_five_frame_spans_never_cross_source_boundary() -> None:
+    first = frames_with_physical_timestamps(
+        [100, 200, 300, 400, 500],
+        source="win32_hwnd:1",
+    )
+    second = frames_with_physical_timestamps(
+        [600, 700, 800, 900, 1_000],
+        start_frame_id=6,
+        source="win32_hwnd:2",
+    )
+
+    preflight = preflight_payload([*first, *second])
+    physical = cast(dict[str, object], preflight["physical_capture"])
+    spans = cast(dict[str, object], physical["five_frame_span_ns"])
+
+    assert spans["count"] == 2
+    assert spans["minimum"] == 400
+    assert spans["maximum"] == 400
+
+
+def test_preflight_schema_v2_is_deterministically_json_serializable() -> None:
+    preflight = preflight_payload(
+        list(frames_with_physical_timestamps([100, 200, 300, 400, 500]))
+    )
+
+    first = json.dumps(preflight, sort_keys=True, separators=(",", ":"))
+    second = json.dumps(preflight, sort_keys=True, separators=(",", ":"))
+
+    assert preflight["schema_version"] == 2
+    assert first == second
+    assert "effective_fps" not in preflight
+
+
+def test_preflight_interruption_accounts_attempted_exception_and_remaining() -> None:
+    items: list[Frame | None | BaseException] = [
+        KeyboardInterrupt(),
+        None,
+        None,
+        None,
+        None,
+    ]
+
+    preflight = preflight_payload(items)
+    accounting = cast(dict[str, object], preflight["accounting"])
+
+    assert preflight["interrupted"] is True
+    assert accounting["requested_capture_slots"] == 5
+    assert accounting["attempted_capture_calls"] == 1
+    assert accounting["capture_exception_count"] == 1
+    assert accounting["interrupted_before_attempt_count"] == 4
+    assert accounting["attempt_outcome_invariant_holds"] is True
 
 
 def test_critical_burst_section_does_not_extract_or_publish_png(

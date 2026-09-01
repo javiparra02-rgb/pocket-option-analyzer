@@ -6,7 +6,9 @@ from pathlib import Path
 
 import pytest
 
+import scripts.capture_current_visual_price_bursts as cli_module
 from scripts.capture_current_visual_price_bursts import build_parser, main
+from scripts.current_visual_price_burst_harness import CalibrationSessionResult
 
 COMMIT = "8f5e68afa92d54686662e324b17136e30997a708"
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -93,3 +95,54 @@ def test_all_required_cli_switches_are_exposed() -> None:
         "--inter-burst-delay",
     ):
         assert switch in help_text
+
+
+def test_cli_summary_never_claims_physical_fps(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    class FakeHarness:
+        def __init__(self, **kwargs: object) -> None:
+            pass
+
+        def run(self, **kwargs: object) -> CalibrationSessionResult:
+            return CalibrationSessionResult(
+                session_id="test_session",
+                output_directory=tmp_path / "evidence",
+                captured_bursts=1,
+                valid_technical_bursts=0,
+                interrupted=False,
+                source_commit=COMMIT,
+            )
+
+    monkeypatch.setattr(
+        cli_module,
+        "build_productive_capture_service",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "build_productive_extractor",
+        lambda: object(),
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "CurrentVisualPriceBurstHarness",
+        FakeHarness,
+    )
+
+    exit_code = main(
+        [
+            "--output-dir",
+            str(tmp_path / "evidence"),
+            "--expected-commit",
+            COMMIT,
+        ]
+    )
+    output = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "physical_fps=" not in output
+    assert "effective_fps=" not in output
+    assert "ground_truth_classification=not_performed" in output

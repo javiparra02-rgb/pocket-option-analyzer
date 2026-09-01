@@ -32,6 +32,7 @@ from pocket_option_analyzer.infrastructure.bootstrap import (
 )
 from pocket_option_analyzer.infrastructure.capture.models import Frame
 from pocket_option_analyzer.vision.models import (
+    ChartRegion,
     CurrentVisualPriceAnalysis,
     CurrentVisualPriceDetectionTrace,
 )
@@ -71,6 +72,21 @@ class BurstTechnicalStatus(StrEnum):
     VALID_TECHNICAL = "valid_technical"
     INVALID_TECHNICAL = "invalid_technical"
     INCOMPLETE = "incomplete"
+
+
+class PreflightPhysicalCadenceStatus(StrEnum):
+    """Suficiencia descriptiva de la evidencia física del preflight."""
+
+    INSUFFICIENT_NO_PHYSICAL_CAPTURES = (
+        "insufficient_no_physical_captures"
+    )
+    INSUFFICIENT_SINGLE_CAPTURE = "insufficient_single_capture"
+    INSUFFICIENT_FEWER_THAN_FIVE_CONSECUTIVE = (
+        "insufficient_fewer_than_five_consecutive"
+    )
+    SUFFICIENT_FOR_CADENCE_ASSESSMENT = (
+        "sufficient_for_cadence_assessment"
+    )
 
 
 class FrameCaptureService(Protocol):
@@ -172,17 +188,36 @@ class CaptureBatch:
 
 
 @dataclass(frozen=True, slots=True)
+class _PreflightImageGeometry:
+    array_shape: tuple[int, ...] | None
+    region: tuple[int, int, int, int] | None
+
+
+@dataclass(frozen=True, slots=True)
+class _PreflightFrameMetadata:
+    frame_id: int
+    monotonic_timestamp_ns: int | None
+    source_key: str | None
+    chart_geometry: _PreflightImageGeometry
+    price_observation_geometry: _PreflightImageGeometry
+
+
+@dataclass(frozen=True, slots=True)
 class _PreflightSlot:
     sequence: int
     deadline_ns: int
     capture_started_ns: int
     capture_completed_ns: int
-    frame_available: bool
+    frame_metadata: _PreflightFrameMetadata | None
     capture_error: str | None
 
     @property
     def lateness_ns(self) -> int:
         return max(0, self.capture_started_ns - self.deadline_ns)
+
+    @property
+    def frame_available(self) -> bool:
+        return self.frame_metadata is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -378,6 +413,7 @@ class CurrentVisualPriceBurstHarness:
     """Adquiere candidate bursts sin clasificarlos como S0/S1/M."""
 
     SCHEMA_VERSION = 1
+    PREFLIGHT_SCHEMA_VERSION = 2
 
     def __init__(
         self,
@@ -640,13 +676,31 @@ class CurrentVisualPriceBurstHarness:
                 self._wait_until(deadline_ns)
                 capture_started_ns = self._monotonic_clock_ns()
                 try:
-                    frame_available = self._capture_service.capture_once() is not None
+                    frame = self._capture_service.capture_once()
+                    frame_metadata = (
+                        self._preflight_frame_metadata(frame)
+                        if frame is not None
+                        else None
+                    )
                     capture_error = None
                 except KeyboardInterrupt:
+                    capture_completed_ns = self._monotonic_clock_ns()
+                    slots.append(
+                        _PreflightSlot(
+                            sequence=sequence,
+                            deadline_ns=deadline_ns,
+                            capture_started_ns=capture_started_ns,
+                            capture_completed_ns=capture_completed_ns,
+                            frame_metadata=None,
+                            capture_error=(
+                                "KeyboardInterrupt: captura preflight interrumpida"
+                            ),
+                        )
+                    )
                     interrupted = True
                     break
                 except Exception as error:  # noqa: BLE001 - diagnostic preflight.
-                    frame_available = False
+                    frame_metadata = None
                     capture_error = f"{type(error).__name__}: {error}"
                 capture_completed_ns = self._monotonic_clock_ns()
             except KeyboardInterrupt:
@@ -658,7 +712,7 @@ class CurrentVisualPriceBurstHarness:
                     deadline_ns=deadline_ns,
                     capture_started_ns=capture_started_ns,
                     capture_completed_ns=capture_completed_ns,
-                    frame_available=frame_available,
+                    frame_metadata=frame_metadata,
                     capture_error=capture_error,
                 )
             )
@@ -988,44 +1042,298 @@ class CurrentVisualPriceBurstHarness:
         config: HarnessConfig,
     ) -> dict[str, Any]:
         starts = [slot.capture_started_ns for slot in batch.slots]
-        spacings = [
+        attempt_spacings = [
             right - left for left, right in zip(starts, starts[1:], strict=False)
         ]
-        five_frame_spans = [
-            starts[index + 4] - starts[index]
-            for index in range(max(0, len(starts) - 4))
-        ]
-        elapsed_ns = starts[-1] - starts[0] if len(starts) > 1 else 0
-        effective_fps = (
-            (len(starts) - 1) * _NANOSECONDS_PER_SECOND / elapsed_ns
-            if elapsed_ns > 0
+        attempt_elapsed_ns = starts[-1] - starts[0] if len(starts) > 1 else 0
+        attempt_effective_fps = (
+            (len(starts) - 1) * _NANOSECONDS_PER_SECOND / attempt_elapsed_ns
+            if attempt_elapsed_ns > 0
             else None
         )
+        successful = sum(slot.frame_available for slot in batch.slots)
+        exceptions = sum(slot.capture_error is not None for slot in batch.slots)
+        unavailable = sum(
+            not slot.frame_available and slot.capture_error is None
+            for slot in batch.slots
+        )
+        attempted = len(batch.slots)
+        if attempted != successful + unavailable + exceptions:
+            raise CalibrationHarnessError(
+                "El accounting del preflight no conserva su invariancia."
+            )
         return {
-            "schema_version": self.SCHEMA_VERSION,
+            "schema_version": self.PREFLIGHT_SCHEMA_VERSION,
             "measurement_only": True,
             "campaign_acceptance_policy_applied": False,
-            "requested_frames": batch.requested_count,
-            "attempted_frames": len(batch.slots),
-            "available_frames": sum(slot.frame_available for slot in batch.slots),
-            "capture_errors": sum(
-                slot.capture_error is not None for slot in batch.slots
+            "accounting": {
+                "requested_capture_slots": batch.requested_count,
+                "attempted_capture_calls": attempted,
+                "successful_physical_captures": successful,
+                "capture_unavailable_count": unavailable,
+                "capture_exception_count": exceptions,
+                "interrupted_before_attempt_count": max(
+                    0,
+                    batch.requested_count - attempted,
+                ),
+                "attempt_outcome_invariant_holds": True,
+            },
+            "scheduler": {
+                "target_fps": config.target_fps,
+                "period_ns": config.period_ns,
+                "attempt_elapsed_ns": attempt_elapsed_ns,
+                "attempt_effective_fps": attempt_effective_fps,
+                "attempt_spacing_ns": self._distribution(attempt_spacings),
+                "capture_call_duration_ns": self._distribution(
+                    [
+                        slot.capture_completed_ns - slot.capture_started_ns
+                        for slot in batch.slots
+                    ]
+                ),
+                "lateness_ns": self._distribution(
+                    [slot.lateness_ns for slot in batch.slots]
+                ),
+                "missed_deadlines": sum(
+                    slot.lateness_ns >= config.period_ns for slot in batch.slots
+                ),
+            },
+            "physical_capture": self._physical_capture_payload(
+                batch=batch,
+                successful=successful,
+                unavailable=unavailable,
+                exceptions=exceptions,
             ),
-            "elapsed_ns": elapsed_ns,
-            "effective_fps": effective_fps,
-            "target_fps": config.target_fps,
-            "period_ns": config.period_ns,
-            "spacing_ns": self._distribution(spacings),
-            "five_frame_span_ns": self._distribution(five_frame_spans),
-            "missed_deadlines": sum(
-                slot.lateness_ns >= config.period_ns for slot in batch.slots
-            ),
-            "max_lateness_ns": max(
-                (slot.lateness_ns for slot in batch.slots),
-                default=None,
-            ),
+            "attempts": [
+                self._preflight_attempt_payload(slot) for slot in batch.slots
+            ],
             "interrupted": batch.interrupted,
         }
+
+    def _physical_capture_payload(
+        self,
+        *,
+        batch: _PreflightBatch,
+        successful: int,
+        unavailable: int,
+        exceptions: int,
+    ) -> dict[str, Any]:
+        runs, boundary_counts = self._compatible_physical_runs(batch)
+        spacings: list[int] = []
+        five_frame_spans: list[int] = []
+        run_payloads: list[dict[str, Any]] = []
+        for run in runs:
+            timestamps = [
+                cast(int, metadata.monotonic_timestamp_ns)
+                for _, metadata in run
+            ]
+            run_spacings = [
+                right - left
+                for left, right in zip(
+                    timestamps,
+                    timestamps[1:],
+                    strict=False,
+                )
+            ]
+            run_five_frame_spans = [
+                timestamps[index + 4] - timestamps[index]
+                for index in range(max(0, len(timestamps) - 4))
+            ]
+            spacings.extend(run_spacings)
+            five_frame_spans.extend(run_five_frame_spans)
+            first_metadata = run[0][1]
+            run_payloads.append(
+                {
+                    "start_attempt_sequence": run[0][0],
+                    "end_attempt_sequence": run[-1][0],
+                    "successful_capture_count": len(run),
+                    "first_physical_timestamp_ns": timestamps[0],
+                    "last_physical_timestamp_ns": timestamps[-1],
+                    "source_key": first_metadata.source_key,
+                    "chart_geometry": _json_value(
+                        first_metadata.chart_geometry
+                    ),
+                    "price_observation_geometry": _json_value(
+                        first_metadata.price_observation_geometry
+                    ),
+                    "spacing_ns": self._distribution(run_spacings),
+                    "five_frame_span_ns": self._distribution(
+                        run_five_frame_spans
+                    ),
+                }
+            )
+
+        longest_run = max((len(run) for run in runs), default=0)
+        status_type = PreflightPhysicalCadenceStatus
+        if successful == 0:
+            status = status_type.INSUFFICIENT_NO_PHYSICAL_CAPTURES
+        elif successful == 1:
+            status = status_type.INSUFFICIENT_SINGLE_CAPTURE
+        elif longest_run < 5:
+            status = status_type.INSUFFICIENT_FEWER_THAN_FIVE_CONSECUTIVE
+        else:
+            status = status_type.SUFFICIENT_FOR_CADENCE_ASSESSMENT
+
+        total_spacing_ns = sum(spacings)
+        effective_fps = (
+            len(spacings) * _NANOSECONDS_PER_SECOND / total_spacing_ns
+            if total_spacing_ns > 0
+            else None
+        )
+        attempted = len(batch.slots)
+        return {
+            "status": status.value,
+            "status_is_campaign_acceptance": False,
+            "timestamp_source": "Frame.monotonic_timestamp_ns",
+            "successful_captures": successful,
+            "unavailable": unavailable,
+            "exceptions": exceptions,
+            "success_rate": successful / attempted if attempted else None,
+            "temporally_usable_captures": sum(len(run) for run in runs),
+            "effective_fps": effective_fps,
+            "effective_fps_basis": "compatible_consecutive_intervals",
+            "spacing_ns": self._distribution(spacings),
+            "five_frame_span_ns": self._distribution(five_frame_spans),
+            "longest_consecutive_success_run": longest_run,
+            "compatible_run_count": len(runs),
+            "compatible_runs": run_payloads,
+            "run_boundary_counts": boundary_counts,
+        }
+
+    @staticmethod
+    def _compatible_physical_runs(
+        batch: _PreflightBatch,
+    ) -> tuple[
+        list[list[tuple[int, _PreflightFrameMetadata]]],
+        dict[str, int],
+    ]:
+        runs: list[list[tuple[int, _PreflightFrameMetadata]]] = []
+        current: list[tuple[int, _PreflightFrameMetadata]] = []
+        boundary_counts = {
+            "capture_unavailable": 0,
+            "capture_exception": 0,
+            "invalid_physical_timestamp": 0,
+            "non_monotonic_physical_timestamp": 0,
+            "source_unavailable": 0,
+            "source_changed": 0,
+            "chart_geometry_changed": 0,
+            "price_observation_geometry_changed": 0,
+            "attempt_sequence_gap": 0,
+        }
+
+        def close_current() -> None:
+            nonlocal current
+            if current:
+                runs.append(current)
+                current = []
+
+        for slot in batch.slots:
+            metadata = slot.frame_metadata
+            if metadata is None:
+                boundary = (
+                    "capture_exception"
+                    if slot.capture_error is not None
+                    else "capture_unavailable"
+                )
+                boundary_counts[boundary] += 1
+                close_current()
+                continue
+
+            timestamp = metadata.monotonic_timestamp_ns
+            if timestamp is None or timestamp < 0:
+                boundary_counts["invalid_physical_timestamp"] += 1
+                close_current()
+                continue
+            if not metadata.source_key:
+                boundary_counts["source_unavailable"] += 1
+                close_current()
+                continue
+
+            if current:
+                previous_sequence, previous = current[-1]
+                incompatible = False
+                if slot.sequence != previous_sequence + 1:
+                    boundary_counts["attempt_sequence_gap"] += 1
+                    incompatible = True
+                previous_timestamp = cast(
+                    int,
+                    previous.monotonic_timestamp_ns,
+                )
+                if timestamp <= previous_timestamp:
+                    boundary_counts["non_monotonic_physical_timestamp"] += 1
+                    incompatible = True
+                if metadata.source_key != previous.source_key:
+                    boundary_counts["source_changed"] += 1
+                    incompatible = True
+                if metadata.chart_geometry != previous.chart_geometry:
+                    boundary_counts["chart_geometry_changed"] += 1
+                    incompatible = True
+                if (
+                    metadata.price_observation_geometry
+                    != previous.price_observation_geometry
+                ):
+                    boundary_counts["price_observation_geometry_changed"] += 1
+                    incompatible = True
+                if incompatible:
+                    close_current()
+            current.append((slot.sequence, metadata))
+
+        close_current()
+        return runs, boundary_counts
+
+    @staticmethod
+    def _preflight_attempt_payload(slot: _PreflightSlot) -> dict[str, Any]:
+        if slot.frame_metadata is not None:
+            outcome = "capture_success"
+        elif slot.capture_error is not None:
+            outcome = "capture_exception"
+        else:
+            outcome = "capture_unavailable"
+        return {
+            "attempt_sequence": slot.sequence,
+            "outcome": outcome,
+            "deadline_monotonic_ns": slot.deadline_ns,
+            "capture_started_monotonic_ns": slot.capture_started_ns,
+            "capture_completed_monotonic_ns": slot.capture_completed_ns,
+            "lateness_ns": slot.lateness_ns,
+            "capture_error": slot.capture_error,
+            "frame": _json_value(slot.frame_metadata),
+        }
+
+    @classmethod
+    def _preflight_frame_metadata(
+        cls,
+        frame: Frame,
+    ) -> _PreflightFrameMetadata:
+        return _PreflightFrameMetadata(
+            frame_id=frame.frame_id,
+            monotonic_timestamp_ns=frame.monotonic_timestamp_ns,
+            source_key=frame.source_key,
+            chart_geometry=_PreflightImageGeometry(
+                array_shape=tuple(int(value) for value in frame.image.shape),
+                region=cls._region_coordinates(frame.chart_region),
+            ),
+            price_observation_geometry=_PreflightImageGeometry(
+                array_shape=(
+                    tuple(
+                        int(value)
+                        for value in frame.price_observation_image.shape
+                    )
+                    if frame.price_observation_image is not None
+                    else None
+                ),
+                region=cls._region_coordinates(
+                    frame.price_observation_region
+                ),
+            ),
+        )
+
+    @staticmethod
+    def _region_coordinates(
+        region: ChartRegion | None,
+    ) -> tuple[int, int, int, int] | None:
+        if region is None:
+            return None
+        return (region.x, region.y, region.width, region.height)
 
     @staticmethod
     def _distribution(values: Sequence[int]) -> dict[str, float | int] | None:
