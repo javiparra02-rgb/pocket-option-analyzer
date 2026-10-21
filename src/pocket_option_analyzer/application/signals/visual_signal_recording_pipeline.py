@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
 
 import numpy as np
@@ -13,11 +14,16 @@ from pocket_option_analyzer.application.evidence import (
     VisualEvidenceRecorder,
     VisualFrameEvidence,
 )
+from pocket_option_analyzer.application.signals.accepted_signal_evidence import (
+    AcceptedSignalEvidenceRecorder,
+    dataclass_payload,
+    price_payload,
+)
 from pocket_option_analyzer.application.signals.actionable_signal_gate import (
     ActionableSignalGate,
 )
 from pocket_option_analyzer.application.signals.contracts import (
-    SignalRecordWriter,
+    AcceptedSignalRecordWriter,
 )
 from pocket_option_analyzer.application.signals.signal_recorder import (
     SignalRecorder,
@@ -34,7 +40,7 @@ from pocket_option_analyzer.application.strategy import (
     VisualPriceReference,
     VisualReferenceResolution,
 )
-from pocket_option_analyzer.domain.signals import SignalRecord
+from pocket_option_analyzer.domain.signals import SignalRecord, SignalRecordDisposition
 from pocket_option_analyzer.vision.models import (
     ChartRegion,
     CurrentVisualPriceExtraction,
@@ -56,11 +62,13 @@ class VisualSignalRecordingPipeline:
         self,
         analysis_pipeline: VisualStrategySignalAnalysisPipeline,
         recorder: SignalRecorder,
-        record_writer: SignalRecordWriter | None = None,
+        record_writer: AcceptedSignalRecordWriter | None = None,
         actionable_signal_gate: ActionableSignalGate | None = None,
         observation_recorder: StrategyObservationRecorder | None = None,
         visual_evidence_recorder: VisualEvidenceRecorder | None = None,
         identity_evidence_recorder: IdentityShadowEvidenceRecorder | None = None,
+        clock: Callable[[], datetime] | None = None,
+        application_version: str | None = None,
     ) -> None:
         self._analysis_pipeline = analysis_pipeline
         self._recorder = recorder
@@ -69,6 +77,9 @@ class VisualSignalRecordingPipeline:
         self._observation_recorder = observation_recorder
         self._visual_evidence_recorder = visual_evidence_recorder
         self._identity_evidence_recorder = identity_evidence_recorder
+        self.accepted_evidence = AcceptedSignalEvidenceRecorder()
+        self._clock = clock or (lambda: datetime.now(UTC))
+        self._application_version = application_version
 
     def start_session(self, *, session_key: str) -> None:
         """Start session-scoped shadow state in the analysis pipeline."""
@@ -115,6 +126,7 @@ class VisualSignalRecordingPipeline:
             UTC,
         )
 
+        analysis_started_at = self._clock()
         signal = self._analysis_pipeline.analyze(
             image=image,
             price_observation_image=price_observation_image,
@@ -126,6 +138,56 @@ class VisualSignalRecordingPipeline:
             source_key=source_key,
             session_key=session_key,
         )
+
+        capture = getattr(self._analysis_pipeline, "capture_evaluation_context", None)
+        decision_context = (
+            capture()
+            if callable(capture)
+            else {
+                "evaluation_context_available": False,
+                "snapshot_id": None,
+                "audit": None,
+                "indicators": None,
+                "indicator_provenance": None,
+                "visual_provenance": None,
+                "configuration": None,
+            }
+        )
+        evaluation = self.accepted_evidence.capture(
+            resolved_created_at,
+            {
+                **decision_context,
+                "observed_at": resolved_created_at.isoformat(),
+                "observed_at_origin": (
+                    "provided_frame_or_caller_timestamp"
+                    if created_at is not None
+                    else "pipeline_clock_fallback"
+                ),
+                "timestamp_has_timezone": resolved_created_at.utcoffset() is not None,
+                "analysis_started_at": analysis_started_at.isoformat(),
+                "analysis_completed_at": self._clock().isoformat(),
+                "source": source,
+                "source_key": source_key,
+                "session_key": session_key,
+                "frame_id": frame_id,
+                "frame_timestamp": (
+                    created_at.isoformat() if created_at is not None else None
+                ),
+                "monotonic_timestamp": monotonic_timestamp,
+                "chart_region": dataclass_payload(chart_region),
+                "price_observation_region": dataclass_payload(price_observation_region),
+                "price_evidence": price_payload(
+                    getattr(
+                        self._analysis_pipeline,
+                        "last_visual_price_comparison_context",
+                        None,
+                    )
+                ),
+                "application_version": self._application_version,
+                "source_commit": None,
+            },
+        )
+        self.accepted_evidence.observe_exits(evaluation)
 
         evidence_associations: list[VisualEvidenceAssociation] | None = (
             [] if self._visual_evidence_recorder is not None else None
@@ -200,6 +262,7 @@ class VisualSignalRecordingPipeline:
             signal=signal,
             observed_at=resolved_created_at,
         )
+        gate_decided_at = self._clock()
 
         record = self._recorder.record(
             signal=signal,
@@ -209,12 +272,34 @@ class VisualSignalRecordingPipeline:
             candle_interval_started_at=(gate_decision.interval_key.started_at),
         )
 
-        if self._record_writer is not None:
+        if record.disposition is SignalRecordDisposition.ACTIONABLE_ACCEPTED:
+            evidence = self.accepted_evidence.accept(
+                evaluation,
+                record,
+                gate_decided_at,
+                memory_only=self._record_writer is None,
+            )
+            if self._record_writer is not None:
+                self.accepted_evidence.persist_acceptance(
+                    evidence.acceptance_id, self._record_writer.write_accepted
+                )
+        elif self._record_writer is not None:
             self._record_writer.write(
                 record,
             )
 
+        exit_writer = getattr(self._observation_recorder, "write_accepted_exit", None)
+        self.accepted_evidence.flush_exits(exit_writer)
+
         return record
+
+    def retry_accepted_evidence(self, acceptance_id: str) -> None:
+        """Retry an existing immutable event; never reevaluate or reenter the gate."""
+        if self._record_writer is None:
+            raise RuntimeError("No signal writer configured")
+        self.accepted_evidence.persist_acceptance(
+            acceptance_id, self._record_writer.write_accepted
+        )
 
     def _resolve_due_with_evidence(
         self,

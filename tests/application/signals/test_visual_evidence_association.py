@@ -290,6 +290,9 @@ class _SignalWriter:
     def write(self, record: SignalRecord) -> None:
         self.records.append(record)
 
+    def write_accepted(self, record, evidence) -> None:
+        self.write(record)
+
 
 class _StrategyWriter:
     def __init__(self) -> None:
@@ -300,6 +303,9 @@ class _StrategyWriter:
 
     def write(self, observation: object) -> None:
         self.observations.append(observation)
+
+    def write_accepted_exit(self, evidence) -> None:
+        pass
 
     def write_resolution(self, resolution: StrategyObservationResolution) -> None:
         self.resolutions.append(resolution)

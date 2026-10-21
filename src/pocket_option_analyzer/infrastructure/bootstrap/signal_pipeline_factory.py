@@ -203,6 +203,7 @@ class SignalPipelineFactory:
 
         return VisualSignalRecordingPipeline(
             analysis_pipeline=visual_strategy_signal_analysis_pipeline,
+            application_version=application_version,
             recorder=recorder,
             record_writer=writer,
             observation_recorder=StrategyObservationRecorder(

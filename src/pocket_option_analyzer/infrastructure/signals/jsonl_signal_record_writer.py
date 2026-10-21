@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from pocket_option_analyzer.application.signals.accepted_signal_evidence import (
+    AcceptedSignalEvidence,
+)
 from pocket_option_analyzer.domain.signals import (
     SignalDirection,
     SignalRecord,
@@ -129,6 +132,46 @@ class JsonlSignalRecordWriter:
         self._remember_record(
             record=record,
         )
+
+    def write_accepted(
+        self, record: SignalRecord, evidence: AcceptedSignalEvidence
+    ) -> None:
+        """One line contains both legacy signal fields and accepted evidence."""
+        if record.disposition is not SignalRecordDisposition.ACTIONABLE_ACCEPTED:
+            raise ValueError("Accepted evidence requires an accepted signal")
+        data = self._serializer.accepted_to_dict(record, evidence)
+        data["accepted_evidence"]["write_started_at"] = datetime.now(UTC).isoformat()
+        self._release_summary_if_interval_changed(record)
+        self._append_accepted_data(data)
+        self._remember_record(record)
+
+    def _append_accepted_data(self, data: dict[str, Any]) -> None:
+        """Keep an editable summary last even when acceptance logging is retried."""
+        offset = self._active_duplicate_summary_offset
+        summary = self._active_duplicate_summary
+        encoded = self._encode_data(data)
+        if (
+            offset is None
+            or summary is None
+            or not self._file_path.exists()
+            or self._file_path.stat().st_size + len(encoded) > self._max_bytes
+        ):
+            self._append_data(data)
+            return
+        expected_tail = self._encode_data(
+            self._serializer.to_duplicate_summary_dict(summary)
+        )
+        with self._file_path.open("r+b") as file:
+            file.seek(offset)
+            tail = file.read()
+            if tail != expected_tail:
+                raise OSError("Editable signal summary is not the expected file tail")
+            file.seek(offset)
+            combined = encoded + tail
+            if file.write(combined) != len(combined):
+                raise OSError("Incomplete accepted-signal write")
+            file.truncate()
+        self._active_duplicate_summary_offset = offset + len(encoded)
 
     def _should_skip_observed(
         self,

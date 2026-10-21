@@ -17,6 +17,9 @@ from pocket_option_analyzer.application.market import (
     VisualIndicatorSnapshotBuilder,
     VisualIndicatorSnapshotContext,
 )
+from pocket_option_analyzer.application.signals.accepted_signal_evidence import (
+    dataclass_payload,
+)
 from pocket_option_analyzer.application.signals.strategy_signal_generator import (
     StrategySignalGenerator,
 )
@@ -251,6 +254,66 @@ class VisualStrategySignalAnalysisPipeline:
             detection_diagnostics=data.market_analysis.detection_diagnostics,
             visual_price_comparison_context=(data.visual_price_comparison_context),
         )
+
+    def capture_evaluation_context(self) -> dict[str, object]:
+        """Copy the actual decision inputs, without evaluating strategy again."""
+        data = self._last_observation_data
+        if data is None:
+            return {
+                "evaluation_context_available": False,
+                "snapshot_id": None,
+                "audit": None,
+                "indicators": None,
+                "indicator_provenance": None,
+                "visual_provenance": None,
+                "configuration": dataclass_payload(self._profile),
+            }
+
+        def direction_audit(audit: DirectionConditionAudit) -> dict[str, object]:
+            return {
+                "conditions": {
+                    result.condition.value: {
+                        "passed": result.passed,
+                        "failure_reason": result.failure_reason,
+                    }
+                    for result in audit.conditions
+                },
+                "passed_count": audit.passed_count,
+                "total_count": audit.total_count,
+            }
+
+        return {
+            "evaluation_context_available": True,
+            "snapshot_id": (
+                data.timing.cached_key.started_at.isoformat()
+                if data.timing.cached_key is not None
+                else None
+            ),
+            "audit": {
+                "call": direction_audit(data.audit.call),
+                "put": direction_audit(data.audit.put),
+            },
+            "indicators": dataclass_payload(data.indicators),
+            "indicator_provenance": {
+                "cache": dataclass_payload(data.timing),
+                "snapshot_context": dataclass_payload(data.context),
+                "calculation_frame_id": None,
+                "calculated_at": None,
+                "origin": "cached_closed_candle_snapshot",
+            },
+            "visual_provenance": {
+                "origin": "current_frame_analysis",
+                "trend": data.market_analysis.trend.value,
+                "confirmation": {
+                    "call": data.audit.call.conditions[-1].passed,
+                    "put": data.audit.put.conditions[-1].passed,
+                },
+                "detection_diagnostics": dataclass_payload(
+                    data.market_analysis.detection_diagnostics
+                ),
+            },
+            "configuration": dataclass_payload(self._profile),
+        }
 
     def analyze(
         self,

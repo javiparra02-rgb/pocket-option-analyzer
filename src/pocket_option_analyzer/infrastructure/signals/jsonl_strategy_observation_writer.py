@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from pocket_option_analyzer.application.signals.accepted_signal_evidence import (
+    AcceptedSignalExitEvidence,
+)
 from pocket_option_analyzer.application.strategy import (
     CurrentVisualPriceComparison,
     CurrentVisualPriceComparisonContext,
@@ -25,6 +29,11 @@ class JsonlStrategyObservationWriter:
 
     def write(self, observation: StrategyObservation) -> None:
         self._append(self._to_dict(observation))
+
+    def write_accepted_exit(self, evidence: AcceptedSignalExitEvidence) -> None:
+        payload = evidence.to_dict()
+        payload["write_started_at"] = datetime.now(UTC).isoformat()
+        self._append(payload)
 
     def write_resolution(self, resolution: StrategyObservationResolution) -> None:
         self._append(self._resolution_to_dict(resolution))

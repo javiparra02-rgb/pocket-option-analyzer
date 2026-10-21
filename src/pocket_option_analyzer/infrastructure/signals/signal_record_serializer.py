@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from pocket_option_analyzer.application.signals.accepted_signal_evidence import (
+    AcceptedSignalEvidence,
+)
 from pocket_option_analyzer.domain.signals import (
     SignalRecord,
 )
@@ -47,6 +50,38 @@ class SignalRecordSerializer:
             "is_duplicate_suppressed": (record.is_duplicate_suppressed),
             "storage_format": "full",
         }
+
+    def accepted_to_dict(
+        self, record: SignalRecord, evidence: AcceptedSignalEvidence
+    ) -> dict[str, Any]:
+        payload = self.to_dict(record)
+        payload["accepted_evidence"] = evidence.to_dict()
+        self.read_accepted_evidence(payload)
+        return payload
+
+    @staticmethod
+    def read_accepted_evidence(payload: dict[str, Any]) -> dict[str, Any] | None:
+        """Legacy/other events have no evidence; unknown versions are explicit."""
+        evidence = payload.get("accepted_evidence")
+        if evidence is None:
+            return None
+        if (
+            not isinstance(evidence, dict)
+            or evidence.get("schema") != "accepted_signal_evidence"
+            or evidence.get("version") != 1
+        ):
+            raise ValueError("Unsupported accepted-signal evidence schema/version")
+        evaluation = evidence.get("evaluation", {})
+        if (
+            payload.get("disposition") != "actionable_accepted"
+            or payload.get("direction") != evidence.get("direction")
+            or payload.get("created_at") != evaluation.get("observed_at")
+            or payload.get("source") != evaluation.get("source")
+            or payload.get("candle_interval_started_at")
+            != evidence.get("gate_interval_started_at")
+        ):
+            raise ValueError("Accepted evidence does not match its signal")
+        return evidence
 
     def to_duplicate_summary_dict(
         self,

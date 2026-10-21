@@ -4,6 +4,9 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Protocol
 
+from pocket_option_analyzer.application.signals.accepted_signal_evidence import (
+    AcceptedSignalExitEvidence,
+)
 from pocket_option_analyzer.application.strategy.strategy_observation import (
     StrategyObservation,
 )
@@ -36,6 +39,8 @@ from .visual_price_movement_classifier import VisualPriceMovementClassifier
 
 class StrategyObservationWriter(Protocol):
     def write(self, observation: StrategyObservation) -> None: ...
+
+    def write_accepted_exit(self, evidence: AcceptedSignalExitEvidence) -> None: ...
 
     def write_resolution(self, resolution: StrategyObservationResolution) -> None: ...
 
@@ -94,6 +99,13 @@ class StrategyObservationRecorder:
         validation = self._reference_resolver.add(observation)
         if self._writer is not None and validation is not None:
             self._writer.write_reference_validation(validation)
+        return True
+
+    def write_accepted_exit(self, evidence: AcceptedSignalExitEvidence) -> bool:
+        """Separate acceptance-keyed telemetry, without legacy resolution/outcomes."""
+        if self._writer is None:
+            return False
+        self._writer.write_accepted_exit(evidence)
         return True
 
     def resolve_due(

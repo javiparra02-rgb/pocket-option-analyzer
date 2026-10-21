@@ -4,6 +4,8 @@ from typing import Protocol
 
 from pocket_option_analyzer.domain.signals import SignalRecord
 
+from .accepted_signal_evidence import AcceptedSignalEvidence
+
 
 class SignalRecordWriter(Protocol):
     """
@@ -20,3 +22,12 @@ class SignalRecordWriter(Protocol):
         """
         Persiste un registro de señal.
         """
+
+
+class AcceptedSignalRecordWriter(SignalRecordWriter, Protocol):
+    """Additive capability for writers of enriched visual acceptances."""
+
+    def write_accepted(
+        self, record: SignalRecord, evidence: AcceptedSignalEvidence
+    ) -> None:
+        """Persist the accepted signal and same-evaluation evidence together."""

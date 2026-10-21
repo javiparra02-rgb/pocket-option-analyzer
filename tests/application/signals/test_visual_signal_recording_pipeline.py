@@ -436,6 +436,9 @@ class FakeSignalRecordWriter:
     ) -> None:
         self.records.append(record)
 
+    def write_accepted(self, record, evidence) -> None:
+        self.write(record)
+
 
 def test_analyze_and_record_adds_visual_signal_to_history() -> None:
 
