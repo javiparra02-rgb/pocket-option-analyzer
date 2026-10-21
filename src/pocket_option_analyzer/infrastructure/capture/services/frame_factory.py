@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import UTC, datetime
 from time import monotonic_ns
+from typing import Any
 
 import numpy as np
 
@@ -36,6 +37,8 @@ class FrameFactory:
         chart_region: ChartRegion | None = None,
         price_observation_region: ChartRegion | None = None,
         source_key: str | None = None,
+        instrument_context_image: np.ndarray | None = None,
+        capture_metadata: dict[str, Any] | None = None,
     ) -> Frame:
         """
         Crea un nuevo Frame.
@@ -70,6 +73,8 @@ class FrameFactory:
             price_observation_region=price_observation_region,
             monotonic_timestamp_ns=monotonic_timestamp_ns,
             source_key=source_key,
+            instrument_context_image=instrument_context_image,
+            capture_metadata=capture_metadata,
         )
 
         self._next_frame_id += 1

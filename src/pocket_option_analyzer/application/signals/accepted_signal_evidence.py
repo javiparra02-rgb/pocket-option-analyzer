@@ -191,7 +191,10 @@ class AcceptedSignalEvidenceRecorder:
         if self.last_accepted is pending.evidence:
             self.last_accepted_persisted = True
 
-    def observe_exits(self, evaluation: EvaluationEvidence) -> None:
+    def observe_exits(
+        self, evaluation: EvaluationEvidence
+    ) -> tuple[AcceptedSignalExitEvidence, ...]:
+        selected: list[AcceptedSignalExitEvidence] = []
         for pending in self._pending.values():
             if pending.exit_evidence is not None:
                 continue
@@ -241,6 +244,8 @@ class AcceptedSignalEvidenceRecorder:
             )
             pending.exit_evidence = exit_evidence
             self.last_exit = exit_evidence
+            selected.append(exit_evidence)
+        return tuple(selected)
 
     def flush_exits(
         self, writer: Callable[[AcceptedSignalExitEvidence], bool] | None

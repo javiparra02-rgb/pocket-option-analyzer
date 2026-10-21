@@ -6,6 +6,10 @@ from pathlib import Path
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from pocket_option_analyzer.application.evidence.observational_evidence import (
+    ObservationalEvidenceConfig,
+)
+
 
 class Settings(BaseSettings):
     """
@@ -69,6 +73,10 @@ class Settings(BaseSettings):
     log_compression: str | None = "zip"
 
     visual_evidence_directory: Path | None = None
+
+    # Separate experiment. Supplying a budget alone never enables acquisition.
+    observational_evidence_enabled: bool = False
+    observational_evidence_config: ObservationalEvidenceConfig | None = None
 
     visual_identity_evidence_enabled: bool = False
 

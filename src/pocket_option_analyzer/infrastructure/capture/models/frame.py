@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 
@@ -22,6 +23,8 @@ class Frame:
     price_observation_region: ChartRegion | None = None
     monotonic_timestamp_ns: int | None = None
     source_key: str | None = None
+    instrument_context_image: np.ndarray | None = None
+    capture_metadata: dict[str, Any] | None = None
 
     @property
     def width(self) -> int:

@@ -5,6 +5,10 @@ from pathlib import Path
 from pocket_option_analyzer.application.evidence import (
     IdentityShadowEvidenceConfig,
 )
+from pocket_option_analyzer.application.evidence.observational_evidence import (
+    ObservationalEvidenceConfig,
+    ObservationalEvidenceRecorder,
+)
 from pocket_option_analyzer.application.market import (
     CurrentCandleIdentityConfig,
     CurrentCandleIdentityResolver,
@@ -35,6 +39,9 @@ from pocket_option_analyzer.domain.signals import SignalHistory
 from pocket_option_analyzer.domain.strategy import StrategyProfile
 from pocket_option_analyzer.infrastructure.evidence import (
     FilesystemVisualEvidenceRecorder,
+)
+from pocket_option_analyzer.infrastructure.evidence.observational_evidence_writer import (  # noqa: E501
+    ObservationalEvidenceWriter,
 )
 from pocket_option_analyzer.infrastructure.signals import (
     JsonlSignalRecordWriter,
@@ -133,6 +140,7 @@ class SignalPipelineFactory:
         visual_evidence_directory: Path | None = None,
         application_version: str | None = None,
         identity_evidence_config: IdentityShadowEvidenceConfig | None = None,
+        observational_evidence_config: ObservationalEvidenceConfig | None = None,
     ) -> VisualSignalRecordingPipeline:
         """
         Crea el pipeline visual completo de señales.
@@ -203,6 +211,14 @@ class SignalPipelineFactory:
 
         return VisualSignalRecordingPipeline(
             analysis_pipeline=visual_strategy_signal_analysis_pipeline,
+            observational_evidence=(
+                ObservationalEvidenceRecorder(
+                    observational_evidence_config,
+                    ObservationalEvidenceWriter(observational_evidence_config),
+                )
+                if observational_evidence_config is not None
+                else None
+            ),
             application_version=application_version,
             recorder=recorder,
             record_writer=writer,
@@ -232,6 +248,7 @@ class SignalPipelineFactory:
         visual_evidence_directory: Path | None = None,
         application_version: str | None = None,
         identity_evidence_config: IdentityShadowEvidenceConfig | None = None,
+        observational_evidence_config: ObservationalEvidenceConfig | None = None,
     ) -> AnalyzeCapturedFrameUseCase:
         """
         Crea el caso de uso completo para analizar frames capturados.
@@ -246,6 +263,7 @@ class SignalPipelineFactory:
             visual_evidence_directory=visual_evidence_directory,
             application_version=application_version,
             identity_evidence_config=identity_evidence_config,
+            observational_evidence_config=observational_evidence_config,
         )
 
         return AnalyzeCapturedFrameUseCase(
@@ -266,6 +284,7 @@ class SignalPipelineFactory:
         visual_evidence_directory: Path | None = None,
         application_version: str | None = None,
         identity_evidence_config: IdentityShadowEvidenceConfig | None = None,
+        observational_evidence_config: ObservationalEvidenceConfig | None = None,
     ) -> FrameAnalysisLoopService:
         """
         Crea el servicio completo de ciclo continuo.
@@ -289,6 +308,7 @@ class SignalPipelineFactory:
                 visual_evidence_directory=visual_evidence_directory,
                 application_version=application_version,
                 identity_evidence_config=identity_evidence_config,
+                observational_evidence_config=observational_evidence_config,
             )
         )
 
@@ -311,6 +331,7 @@ class SignalPipelineFactory:
         visual_evidence_directory: Path | None = None,
         application_version: str | None = None,
         identity_evidence_config: IdentityShadowEvidenceConfig | None = None,
+        observational_evidence_config: ObservationalEvidenceConfig | None = None,
     ) -> AnalysisRuntimeService:
         """
         Crea el runtime completo de análisis.
@@ -334,6 +355,7 @@ class SignalPipelineFactory:
             visual_evidence_directory=visual_evidence_directory,
             application_version=application_version,
             identity_evidence_config=identity_evidence_config,
+            observational_evidence_config=observational_evidence_config,
         )
 
         return AnalysisRuntimeService(

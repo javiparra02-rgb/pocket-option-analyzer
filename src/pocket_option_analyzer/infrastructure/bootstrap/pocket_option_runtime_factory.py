@@ -88,6 +88,13 @@ class PocketOptionRuntimeFactory:
         """
 
         resolved_settings = settings if settings is not None else get_settings()
+        originals_config = None
+        if resolved_settings.observational_evidence_enabled:
+            originals_config = resolved_settings.observational_evidence_config
+            if originals_config is None:
+                raise ValueError(
+                    "Observational evidence requires explicit directory and budgets"
+                )
 
         resolved_capture_service = (
             capture_service
@@ -96,6 +103,17 @@ class PocketOptionRuntimeFactory:
                 window_title=window_title,
                 chart_region=chart_region,
                 debug_roi_directory=debug_roi_directory,
+                observational_evidence_enabled=originals_config is not None,
+                instrument_context_region=(
+                    ChartRegion(*originals_config.context_region)
+                    if originals_config is not None and originals_config.context_region
+                    else None
+                ),
+                observational_frame_byte_limit=(
+                    originals_config.max_frame_bytes
+                    if originals_config is not None
+                    else None
+                ),
             )
         )
 
@@ -142,6 +160,7 @@ class PocketOptionRuntimeFactory:
             ),
             application_version=resolved_settings.app_version,
             identity_evidence_config=identity_evidence_config,
+            observational_evidence_config=originals_config,
         )
 
     @staticmethod
@@ -149,6 +168,9 @@ class PocketOptionRuntimeFactory:
         window_title: str = DEFAULT_WINDOW_TITLE,
         chart_region: ChartRegion | None = None,
         debug_roi_directory: Path | None = None,
+        observational_evidence_enabled: bool = False,
+        instrument_context_region: ChartRegion | None = None,
+        observational_frame_byte_limit: int | None = None,
     ) -> CaptureService:
         """
         Crea el servicio real de captura para Pocket Option.
@@ -195,6 +217,9 @@ class PocketOptionRuntimeFactory:
             ),
             dataset_capture=dataset_capture,
             window_title=window_title,
+            observational_evidence_enabled=observational_evidence_enabled,
+            instrument_context_region=instrument_context_region,
+            observational_frame_byte_limit=observational_frame_byte_limit,
             price_observation_region_extractor=(
                 PocketOptionPriceObservationRegionExtractor(
                     bottom_extension_ratio=0.0,

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import Any
 
 import numpy as np
 
@@ -13,6 +14,11 @@ from pocket_option_analyzer.application.evidence import (
     VisualEvidencePhase,
     VisualEvidenceRecorder,
     VisualFrameEvidence,
+)
+from pocket_option_analyzer.application.evidence.observational_evidence import (
+    ObservationalEvidenceRecorder,
+    OriginalFrame,
+    original_metadata,
 )
 from pocket_option_analyzer.application.signals.accepted_signal_evidence import (
     AcceptedSignalEvidenceRecorder,
@@ -69,6 +75,7 @@ class VisualSignalRecordingPipeline:
         identity_evidence_recorder: IdentityShadowEvidenceRecorder | None = None,
         clock: Callable[[], datetime] | None = None,
         application_version: str | None = None,
+        observational_evidence: ObservationalEvidenceRecorder | None = None,
     ) -> None:
         self._analysis_pipeline = analysis_pipeline
         self._recorder = recorder
@@ -80,6 +87,7 @@ class VisualSignalRecordingPipeline:
         self.accepted_evidence = AcceptedSignalEvidenceRecorder()
         self._clock = clock or (lambda: datetime.now(UTC))
         self._application_version = application_version
+        self.observational_evidence = observational_evidence
 
     def start_session(self, *, session_key: str) -> None:
         """Start session-scoped shadow state in the analysis pipeline."""
@@ -99,6 +107,7 @@ class VisualSignalRecordingPipeline:
         try:
             self._analysis_pipeline.stop_session()
         finally:
+            self._originals_call("stop_session")
             if self._identity_evidence_recorder is not None:
                 try:
                     self._identity_evidence_recorder.stop_identity_session()
@@ -117,6 +126,8 @@ class VisualSignalRecordingPipeline:
         monotonic_timestamp: float | None = None,
         source_key: str | None = None,
         session_key: str | None = None,
+        instrument_context_image: np.ndarray | None = None,
+        capture_metadata: dict[str, Any] | None = None,
     ) -> SignalRecord:
         """
         Analiza una imagen y registra la decisión del gate.
@@ -126,6 +137,27 @@ class VisualSignalRecordingPipeline:
             UTC,
         )
 
+        # Own pixels BEFORE analysis can mutate a borrowed numpy array.
+        original: OriginalFrame | None = (
+            self._originals_call(
+                "capture",
+                image,
+                price_observation_image,
+                instrument_context_image,
+                original_metadata(
+                    frame_id=frame_id,
+                    observed_at=resolved_created_at.isoformat(),
+                    source=source,
+                    source_key=source_key,
+                    session_key=session_key,
+                    chart_region=chart_region,
+                    price_region=price_observation_region,
+                    capture_metadata=capture_metadata,
+                ),
+            )
+            if self.observational_evidence is not None
+            else None
+        )
         analysis_started_at = self._clock()
         signal = self._analysis_pipeline.analyze(
             image=image,
@@ -187,7 +219,9 @@ class VisualSignalRecordingPipeline:
                 "source_commit": None,
             },
         )
-        self.accepted_evidence.observe_exits(evaluation)
+        original = self._originals_call("bind", original, evaluation)
+        selected_exits = self.accepted_evidence.observe_exits(evaluation)
+        self._originals_call("observed", evaluation, original, selected_exits)
 
         evidence_associations: list[VisualEvidenceAssociation] | None = (
             [] if self._visual_evidence_recorder is not None else None
@@ -279,9 +313,23 @@ class VisualSignalRecordingPipeline:
                 gate_decided_at,
                 memory_only=self._record_writer is None,
             )
+            self._originals_call("accepted", evidence, original)
             if self._record_writer is not None:
-                self.accepted_evidence.persist_acceptance(
-                    evidence.acceptance_id, self._record_writer.write_accepted
+                try:
+                    self.accepted_evidence.persist_acceptance(
+                        evidence.acceptance_id, self._record_writer.write_accepted
+                    )
+                except Exception:
+                    self._originals_call(
+                        "signal_status", evidence.acceptance_id, "WRITE_FAILED"
+                    )
+                    raise
+                self._originals_call(
+                    "signal_status", evidence.acceptance_id, "WRITE_CONFIRMED"
+                )
+            else:
+                self._originals_call(
+                    "signal_status", evidence.acceptance_id, "NOT_CONFIGURED"
                 )
         elif self._record_writer is not None:
             self._record_writer.write(
@@ -300,6 +348,18 @@ class VisualSignalRecordingPipeline:
         self.accepted_evidence.persist_acceptance(
             acceptance_id, self._record_writer.write_accepted
         )
+        self._originals_call("signal_status", acceptance_id, "WRITE_CONFIRMED")
+
+    def _originals_call(self, method: str, *args: Any) -> Any:
+        if self.observational_evidence is None:
+            return None
+        try:
+            return getattr(self.observational_evidence, method)(*args)
+        except Exception:
+            # Experimental telemetry must never alter the strategy/gate or hide
+            # the existing SQ-03 writer exception.
+            logger.exception("Experimental originals failed at %s", method)
+            return None
 
     def _resolve_due_with_evidence(
         self,

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from time import monotonic_ns
+from typing import Any
+
 import numpy as np
 
 from pocket_option_analyzer.infrastructure.capture.contracts import (
@@ -45,6 +49,9 @@ class CaptureService:
         window_title: str = "Pocket Option",
         price_observation_region_extractor: PriceObservationRegionExtractor
         | None = None,
+        observational_evidence_enabled: bool = False,
+        instrument_context_region: ChartRegion | None = None,
+        observational_frame_byte_limit: int | None = None,
     ) -> None:
         self._finder = finder
         self._reader = reader
@@ -57,6 +64,9 @@ class CaptureService:
         self._price_observation_region_extractor = (
             price_observation_region_extractor
         )
+        self._observational_evidence_enabled = observational_evidence_enabled
+        self._instrument_context_region = instrument_context_region
+        self._observational_frame_byte_limit = observational_frame_byte_limit
 
     def capture_once(
         self,
@@ -80,9 +90,28 @@ class CaptureService:
                 window.hwnd,
             )
 
+            capture_metadata: dict[str, Any] | None = None
+            if self._observational_evidence_enabled:
+                capture_metadata = {
+                    "call_started_at": datetime.now(UTC).isoformat(),
+                    "call_started_monotonic_ns": monotonic_ns(),
+                }
             image = self._capture.capture(
                 window,
             )
+            if capture_metadata is not None:
+                capture_metadata.update(
+                    {
+                        "call_finished_monotonic_ns": monotonic_ns(),
+                        "call_finished_at": datetime.now(UTC).isoformat(),
+                        "quote_effective_at": None,
+                        "semantics": "LOCAL_CAPTURE_CALL_BRACKET_NOT_QUOTE_TIME",
+                    }
+                )
+                capture_metadata["wall_clock_regressed"] = (
+                    capture_metadata["call_finished_at"]
+                    < capture_metadata["call_started_at"]
+                )
         except CaptureUnavailableError:
             return None
 
@@ -152,12 +181,62 @@ class CaptureService:
                 roi,
             )
 
+        experimental: dict[str, Any] = {}
+        if self._observational_evidence_enabled:
+            context_region = self._instrument_context_region
+            context_image = None
+            context_fits = context_region is not None and self._region_fits_image(
+                context_region, image
+            )
+            context_bytes = (
+                context_region.width
+                * context_region.height
+                * image.shape[2]
+                * image.itemsize
+                if context_region is not None
+                else 0
+            )
+            context_budget = (
+                self._observational_frame_byte_limit is not None
+                and roi.nbytes
+                + (
+                    price_observation_image.nbytes
+                    if price_observation_image is not None
+                    else 0
+                )
+                + context_bytes
+                <= self._observational_frame_byte_limit
+            )
+            if context_region is not None and context_fits and context_budget:
+                # Same acquisition, not a new screenshot or an inferred asset.
+                context_image = image[
+                    context_region.y : context_region.y + context_region.height,
+                    context_region.x : context_region.x + context_region.width,
+                ].copy(order="C")
+            if capture_metadata is not None:
+                capture_metadata["context_byte_budget_satisfied"] = context_budget
+                capture_metadata["instrument_identity"] = "UNKNOWN"
+                capture_metadata["context_region"] = (
+                    {
+                        "x": context_region.x,
+                        "y": context_region.y,
+                        "width": context_region.width,
+                        "height": context_region.height,
+                    }
+                    if context_region is not None and context_image is not None
+                    else None
+                )
+            experimental = {
+                "instrument_context_image": context_image,
+                "capture_metadata": capture_metadata,
+            }
         frame = self._frame_factory.create(
             image=roi,
             price_observation_image=price_observation_image,
             chart_region=region,
             price_observation_region=price_observation_region,
             source_key=f"win32_hwnd:{window.hwnd}",
+            **experimental,
         )
 
         self._frame_buffer.append(

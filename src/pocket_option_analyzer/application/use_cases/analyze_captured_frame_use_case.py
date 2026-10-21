@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 
@@ -82,6 +82,14 @@ class AnalyzeCapturedFrameUseCase:
             )
             else None
         )
+        experimental: dict[str, Any] = {}
+        if getattr(self._pipeline, "observational_evidence", None) is not None:
+            experimental = {
+                "instrument_context_image": getattr(
+                    frame, "instrument_context_image", None
+                ),
+                "capture_metadata": getattr(frame, "capture_metadata", None),
+            }
         return self._pipeline.analyze_and_record(
             image=frame.image,
             price_observation_image=getattr(
@@ -105,6 +113,7 @@ class AnalyzeCapturedFrameUseCase:
             monotonic_timestamp=monotonic_timestamp,
             source_key=source_key,
             session_key=identity_session_key,
+            **experimental,
         )
 
     @staticmethod
