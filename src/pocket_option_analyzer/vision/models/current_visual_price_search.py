@@ -186,6 +186,161 @@ class CurrentVisualPriceSearchWindow:
 
 
 @dataclass(frozen=True, slots=True)
+class CurrentVisualPriceLineLabelPair:
+    """Original proposal, before window deduplication; half-open geometry."""
+
+    pair_id: str
+    hypothesis: CurrentVisualPriceLineHypothesis
+    component: CurrentVisualPriceLabelComponent
+    window_id: str
+    window_start_x: int
+    pair_edge: int
+
+    def __post_init__(self) -> None:
+        if not self.pair_id or not self.window_id:
+            raise ValueError("Pair and window IDs are required.")
+        if self.window_start_x < 0 or self.pair_edge <= self.window_start_x:
+            raise ValueError("Invalid pair window.")
+        if not self.component.x < self.pair_edge <= self.component.end_x:
+            raise ValueError("Pair edge must belong to the proposed component.")
+
+    @property
+    def window_width(self) -> int:
+        return self.pair_edge - self.window_start_x
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentVisualPriceLabelAssociation:
+    """Prospective association: no qualification or confidence inputs."""
+
+    hypothesis_id: str
+    pairs: tuple[CurrentVisualPriceLineLabelPair, ...]
+    eligible_pair_ids: tuple[str, ...]
+    rejected_pair_ids: tuple[str, ...]
+    component_groups: tuple[tuple[str, ...], ...]
+    admissible_groups: tuple[tuple[str, ...], ...]
+    canonical_window: CurrentVisualPriceSearchWindow | None
+    max_line_gap_ratio: float
+
+    @property
+    def status(self) -> str:
+        if not self.admissible_groups:
+            return "unavailable"
+        return "available" if len(self.admissible_groups) == 1 else "ambiguous"
+
+    @property
+    def label_ingress_x(self) -> int | None:
+        if self.status != "available":
+            return None
+        selected = self.admissible_groups[0]
+        return min(p.component.x for p in self.pairs if p.pair_id in selected)
+
+    def __post_init__(self) -> None:
+        identifiers = {p.pair_id for p in self.pairs}
+        if len(identifiers) != len(self.pairs):
+            raise ValueError("Duplicate pair IDs.")
+        if any(p.hypothesis.hypothesis_id != self.hypothesis_id for p in self.pairs):
+            raise ValueError("Association mixes hypotheses.")
+        eligible, rejected = set(self.eligible_pair_ids), set(self.rejected_pair_ids)
+        if eligible & rejected or eligible | rejected != identifiers:
+            raise ValueError("Association decisions must partition the pairs.")
+        if any(
+            not group or not set(group) <= eligible for group in self.component_groups
+        ):
+            raise ValueError("Invalid component group.")
+        if any(
+            not group or not set(group) <= eligible for group in self.admissible_groups
+        ):
+            raise ValueError("Invalid admissible group.")
+        if any(group not in self.component_groups for group in self.admissible_groups):
+            raise ValueError("Invalid admissible group reference.")
+        if (self.canonical_window is not None) != (self.status == "available"):
+            raise ValueError("Only a unique association has a canonical window.")
+        if (
+            not isfinite(self.max_line_gap_ratio)
+            or not 0 <= self.max_line_gap_ratio <= 1
+        ):
+            raise ValueError("Invalid association gap ratio.")
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentVisualPriceLocalGuideTrace:
+    """Versioned GUIDE-only domain and deterministic half-open selected run."""
+
+    hypothesis_id: str
+    row_y: int
+    window_width: int
+    minimum_span: int
+    maximum_gap: int
+    zone_start_x: int
+    label_ingress_x: int
+    selected_start_x: int | None
+    selected_end_x: int | None
+    supported_pixels: int
+    internal_gaps: tuple[int, ...]
+    rejection_reasons: tuple[str, ...]
+    contract_version: str = "dynamic_guide_label_v1"
+
+    @property
+    def zone_width(self) -> int:
+        return self.minimum_span + self.maximum_gap
+
+    @property
+    def span_pixels(self) -> int | None:
+        if self.selected_start_x is None or self.selected_end_x is None:
+            return None
+        return self.selected_end_x - self.selected_start_x
+
+    @property
+    def continuity(self) -> float | None:
+        span = self.span_pixels
+        return self.supported_pixels / span if span is not None else None
+
+    @property
+    def terminal_gap(self) -> int | None:
+        if self.selected_end_x is None:
+            return None
+        return self.label_ingress_x - self.selected_end_x
+
+    @property
+    def qualified(self) -> bool:
+        return not self.rejection_reasons
+
+    @property
+    def span_score(self) -> float | None:
+        span = self.span_pixels
+        return span / self.zone_width if span is not None else None
+
+    def __post_init__(self) -> None:
+        if not self.hypothesis_id or min(self.window_width, self.minimum_span) < 1:
+            raise ValueError("Invalid GUIDE identity or length.")
+        if self.row_y < 0 or self.maximum_gap < 0:
+            raise ValueError("Invalid GUIDE row or gap.")
+        if self.label_ingress_x - self.zone_start_x != self.zone_width:
+            raise ValueError("GUIDE zone must be fixed prospectively.")
+        if (self.selected_start_x is None) != (self.selected_end_x is None):
+            raise ValueError("Incomplete selected run.")
+        if self.selected_start_x is not None and self.selected_end_x is not None:
+            if (
+                not 0
+                <= self.zone_start_x
+                <= self.selected_start_x
+                < self.selected_end_x
+                <= self.label_ingress_x
+            ):
+                raise ValueError("Selected run outside GUIDE zone.")
+            span = self.selected_end_x - self.selected_start_x
+            if not 1 <= self.supported_pixels <= span:
+                raise ValueError("Invalid supported pixel count.")
+            if any(g < 1 or g > self.maximum_gap for g in self.internal_gaps):
+                raise ValueError("Invalid internal gap.")
+            if sum(self.internal_gaps) != span - self.supported_pixels:
+                raise ValueError("Gap accounting is inconsistent.")
+        elif self.supported_pixels or self.internal_gaps or self.qualified:
+            raise ValueError("Absent run cannot have support or qualify.")
+
+
+@dataclass(frozen=True, slots=True)
 class CurrentVisualPriceSearchPlan:
     """Plan determinístico de ventanas o indisponibilidad fail-closed."""
 
@@ -197,6 +352,7 @@ class CurrentVisualPriceSearchPlan:
     label_components: tuple[CurrentVisualPriceLabelComponent, ...] = ()
     total_proposed_window_count: int = 0
     full_window_set_sha256: str | None = None
+    line_label_pairs: tuple[CurrentVisualPriceLineLabelPair, ...] = ()
 
     def __post_init__(self) -> None:
         if self.total_proposed_window_count < len(self.windows):
@@ -233,6 +389,7 @@ class CurrentVisualPriceSearchWindowEvaluationTrace:
     decision_diagnostic: str
     candidate_count: int
     semantic_candidate_ids: tuple[str, ...]
+    local_guides: tuple[CurrentVisualPriceLocalGuideTrace, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.window_id or not self.decision_diagnostic:
@@ -285,6 +442,9 @@ class CurrentVisualPriceSemanticSearchTrace:
     resolution_reason: CurrentVisualPriceSemanticResolutionReason
     selected_group_id: str | None = None
     full_window_set_sha256: str | None = None
+    qualification_contract: str | None = None
+    label_associations: tuple[CurrentVisualPriceLabelAssociation, ...] = ()
+    line_label_pairs: tuple[CurrentVisualPriceLineLabelPair, ...] = ()
 
     def __post_init__(self) -> None:
         if min(self.total_proposed_window_count, self.evaluated_window_count) < 0:

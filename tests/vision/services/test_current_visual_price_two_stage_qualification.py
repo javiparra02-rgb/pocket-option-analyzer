@@ -166,7 +166,8 @@ def test_sparse_label_patterns_support_different_glyph_geometry(
     for y in (47, 49, 51, 53):
         mask[y, label_columns] = 255
 
-    analysis = _analyze(mask)
+    # This test concerns the fixed-band support metric, not dynamic LABEL identity.
+    analysis = _analyze(mask, effective_chart_right_x=100)
 
     assert analysis.extraction.status is CurrentVisualPriceStatus.OK
     row = next(row for row in analysis.trace.row_evaluations if row.qualified)
@@ -265,13 +266,18 @@ def test_line_continuity_boundary_is_explicit() -> None:
     rejected = accepted.copy()
     rejected[50, 87] = 0
 
-    accepted_analysis = _analyze(accepted)
-    rejected_analysis = _analyze(rejected)
+    # Fixed-band metric includes the historical 20-pixel domain. Dynamic GUIDE
+    # has a distinct external-only domain and may not borrow body pixels.
+    accepted_analysis = _analyze(accepted, effective_chart_right_x=100)
+    rejected_analysis = _analyze(rejected, effective_chart_right_x=100)
 
     assert accepted_analysis.extraction.status is CurrentVisualPriceStatus.OK
     assert rejected_analysis.extraction.status is (
         CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
     )
+    assert next(
+        r for r in accepted_analysis.trace.row_evaluations if r.row_y == 50
+    ).line_run_continuity == pytest.approx(0.90)
 
 
 def test_line_start_offset_boundary_is_explicit() -> None:
@@ -337,10 +343,39 @@ def test_label_vertical_radius_boundary_is_explicit() -> None:
     outside[50, 80:95] = 255
     outside[[46, 54], 95:100] = 255
 
-    assert _analyze(inside).extraction.status is CurrentVisualPriceStatus.OK
-    assert _analyze(outside).extraction.status is (
+    # These isolated rows exercise the legacy support-radius metric, not a
+    # connected dynamic LABEL. Keep that metric's exact boundary explicit.
+    inside_analysis = _analyze(inside, effective_chart_right_x=100)
+    outside_analysis = _analyze(outside, effective_chart_right_x=100)
+    assert inside_analysis.extraction.status is CurrentVisualPriceStatus.OK
+    assert outside_analysis.extraction.status is (
         CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
     )
+    inside_support = next(
+        r.label_support_trace
+        for r in inside_analysis.trace.row_evaluations
+        if r.row_y == 50
+    )
+    outside_support = next(
+        r.label_support_trace
+        for r in outside_analysis.trace.row_evaluations
+        if r.row_y == 50
+    )
+    assert inside_support is not None and outside_support is not None
+    assert (inside_support.window_start_y, inside_support.window_end_y) == (47, 54)
+    assert inside_support.support_pixels == 10
+    assert inside_support.support_row_count == 2
+    assert inside_support.supported
+    assert outside_support.support_pixels == 0
+    assert not outside_support.supported
+
+    dynamic = _analyze(inside)
+    assert (
+        dynamic.extraction.status is CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
+    )
+    assert dynamic.trace.semantic_search is not None
+    assert dynamic.trace.semantic_search.line_label_pairs
+    assert not dynamic.trace.semantic_search.semantic_groups
 
 
 def test_label_support_row_ratio_requires_two_of_six_evaluated_rows() -> None:
@@ -365,7 +400,9 @@ def test_label_support_density_boundary_is_explicit() -> None:
     rejected[50, 80:95] = 255
     rejected[49, 99] = 255
 
-    configuration = {"min_label_support_row_ratio": 0.0}
+    # Deliberately sparse pixels test the legacy metric only; they do not certify
+    # a dynamic GUIDE--LABEL association.
+    configuration = {"min_label_support_row_ratio": 0.0, "effective_chart_right_x": 100}
     assert _analyze(accepted, **configuration).extraction.status is (
         CurrentVisualPriceStatus.OK
     )

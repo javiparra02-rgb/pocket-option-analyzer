@@ -8,7 +8,11 @@ from .current_visual_price_extraction import (
     CurrentVisualPriceExtraction,
     CurrentVisualPriceStatus,
 )
-from .current_visual_price_search import CurrentVisualPriceSemanticSearchTrace
+from .current_visual_price_search import (
+    CurrentVisualPriceLocalGuideTrace,
+    CurrentVisualPriceSemanticSearchTrace,
+)
+from .independent_visual_price import IndependentPriceTrace
 
 
 class CurrentVisualPriceRowRejectionReason(StrEnum):
@@ -18,6 +22,7 @@ class CurrentVisualPriceRowRejectionReason(StrEnum):
     LINE_CONTINUITY_TOO_LOW = "line_continuity_too_low"
     LINE_STARTS_TOO_LATE = "line_starts_too_late"
     LABEL_SUPPORT_MISSING = "label_support_missing"
+    LOCAL_GUIDE_UNAVAILABLE = "local_guide_unavailable"
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +101,7 @@ class CurrentVisualPriceRowEvaluationTrace:
     qualified: bool
     rejection_reasons: tuple[CurrentVisualPriceRowRejectionReason, ...]
     label_support_trace: CurrentVisualPriceLabelSupportTrace | None = None
+    local_guide: CurrentVisualPriceLocalGuideTrace | None = None
 
     def __post_init__(self) -> None:
         integers = (
@@ -246,6 +252,7 @@ class CurrentVisualPriceDetectionTrace:
     row_evaluations: tuple[CurrentVisualPriceRowEvaluationTrace, ...] = ()
     decision_diagnostic: str | None = None
     semantic_search: CurrentVisualPriceSemanticSearchTrace | None = None
+    independent_identity: IndependentPriceTrace | None = None
 
     def __post_init__(self) -> None:
         optional_dimensions = (
@@ -291,9 +298,13 @@ class CurrentVisualPriceDetectionTrace:
             if band_end - band_start != band_width:
                 raise ValueError("La geometría de la banda es inconsistente.")
         counts = self.rejection_counts
-        if self.image_height is not None and (
-            counts.rows_without_mask_pixels + counts.rows_with_mask_pixels
-            != self.image_height
+        if (
+            self.independent_identity is None
+            and self.image_height is not None
+            and (
+                counts.rows_without_mask_pixels + counts.rows_with_mask_pixels
+                != self.image_height
+            )
         ):
             raise ValueError("Los conteos de filas no cubren image_height.")
         if counts.candidate_groups - counts.rejected_by_group_height != len(

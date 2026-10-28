@@ -15,6 +15,9 @@ from pocket_option_analyzer.vision.models import (
     FinalCandleTrace,
     MarketAnalysis,
 )
+from pocket_option_analyzer.vision.models.independent_visual_price import (
+    ObservationGeometry,
+)
 from pocket_option_analyzer.vision.services.candle_analysis_pipeline import (
     CandleAnalysisPipeline,
 )
@@ -31,6 +34,10 @@ from pocket_option_analyzer.vision.services.trend_detector import (
     TrendDetector,
 )
 
+from .independent_current_visual_price_extractor import (
+    IndependentCurrentVisualPriceExtractor,
+    OfflinePriceEvaluation,
+)
 from .pocket_option_expiry_overlay_evidence_resolver import (
     PocketOptionExpiryOverlayEvidenceResolver,
 )
@@ -158,6 +165,25 @@ class MarketAnalysisPipeline:
             candle_detection_trace=candle_detection_trace,
             current_visual_price_detection_trace=(current_visual_price_detection_trace),
         )
+
+    @staticmethod
+    def analyze_offline_current_visual_price(
+        observation_image: np.ndarray,
+        observation_region: ChartRegion,
+        extractor: IndependentCurrentVisualPriceExtractor,
+    ) -> OfflinePriceEvaluation:
+        """Diagnostic only: does not run candles, signals, capture or outcomes.
+
+        The caller supplies the already available observation and its frame-local
+        rectangle. This rectangle establishes coordinates, NOT semantic coverage.
+        """
+        geometry = ObservationGeometry(
+            observation_region.x,
+            observation_region.y,
+            observation_region.width,
+            observation_region.height,
+        )
+        return extractor.evaluate_offline(observation_image, geometry)
 
     def _analyze_candles(
         self,

@@ -20,6 +20,9 @@ from pocket_option_analyzer.vision.models import (
     CurrentVisualPriceSemanticSearchMode,
     CurrentVisualPriceStatus,
 )
+from pocket_option_analyzer.vision.models.current_visual_price_search import (
+    CurrentVisualPriceLocalGuideTrace,
+)
 from pocket_option_analyzer.vision.services import (
     CurrentVisualPriceSearchWindowResolver,
     PocketOptionCurrentVisualPriceExtractor,
@@ -131,10 +134,12 @@ class _RecordingResolver:
 
 class _RecordingExtractor(PocketOptionCurrentVisualPriceExtractor):
     qualification_masks: list[np.ndarray]
+    qualification_guides: list[dict[int, CurrentVisualPriceLocalGuideTrace] | None]
 
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)  # type: ignore[arg-type]
         self.qualification_masks = []
+        self.qualification_guides = []
 
     def _search_candidates(
         self,
@@ -142,9 +147,14 @@ class _RecordingExtractor(PocketOptionCurrentVisualPriceExtractor):
         band_start: int,
         band_end: int,
         band_width: int,
-    ):
+        *,
+        local_guides: dict[int, CurrentVisualPriceLocalGuideTrace] | None = None,
+    ) -> extractor_module._CandidateSearch:
         self.qualification_masks.append(mask)
-        return super()._search_candidates(mask, band_start, band_end, band_width)
+        self.qualification_guides.append(local_guides)
+        return super()._search_candidates(
+            mask, band_start, band_end, band_width, local_guides=local_guides
+        )
 
 
 class _FragmentedLineResolver:
@@ -432,16 +442,37 @@ def test_exact_raster_support_deduplicates_fragmented_horizontal_line(
     analysis, _ = _analyze(mask, resolver=_FragmentedLineResolver(gap=gap))
 
     semantic = analysis.trace.semantic_search
-    assert analysis.extraction.status is CurrentVisualPriceStatus.OK
-    assert analysis.extraction.selected_y == height // 2
+    # This injected plan supplies windows/raster hypotheses, NOT accredited pairs.
+    # Deduplication must not manufacture the missing identity prerequisite.
+    assert (
+        analysis.extraction.status is CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
+    )
+    assert analysis.extraction.selected_y is None
     assert semantic is not None
     assert semantic.evaluated_window_count == 2
-    assert len(semantic.semantic_groups) == 1
-    assert semantic.semantic_groups[0].line_hypothesis_ids == (
+    assert semantic.line_label_pairs == ()
+    assert semantic.semantic_groups == ()
+    # Exercise the original exact-raster rule separately, after qualification.
+    candidates = tuple(
+        _semantic_candidate(
+            f"candidate_{i}",
+            row_ids=(height // 2,),
+            line_ids=(f"line_hypothesis_{i:03d}",),
+            window_start=w.start_x,
+            window_end=w.end_x,
+            label_id=f"label_{i}",
+        )
+        for i, w in enumerate(semantic.windows)
+    )
+    groups = PocketOptionCurrentVisualPriceExtractor._semantic_candidate_groups(
+        candidates
+    )
+    assert len(groups) == 1
+    assert groups[0].line_hypothesis_ids == (
         "line_hypothesis_000",
         "line_hypothesis_001",
     )
-    assert semantic.semantic_groups[0].representative_window_id == ("search_window_001")
+    assert len(groups[0].members) == 2
 
 
 def test_exact_multi_row_signature_merges_disjoint_provenance() -> None:
@@ -759,6 +790,15 @@ def test_resolver_and_all_qualifiers_reuse_the_same_mask_object() -> None:
     assert resolver.mask is not None
     assert len(extractor.qualification_masks) == 2
     assert all(item is resolver.mask for item in extractor.qualification_masks)
+    assert len(extractor.qualification_guides) == 2
+    assert all(guides is not None for guides in extractor.qualification_guides)
+    assert any(extractor.qualification_guides)
+    assert all(
+        row_y == guide.row_y
+        for guides in extractor.qualification_guides
+        if guides is not None
+        for row_y, guide in guides.items()
+    )
     assert builder.calls == 1
 
 
@@ -815,6 +855,7 @@ def test_dynamic_marker_near_top_has_no_safe_region_veto() -> None:
     ("edge", "line_start", "label_start"),
     [
         (10, 8, 9),
+        (40, 32, 38),
         (100, 80, 95),
     ],
 )
@@ -835,6 +876,88 @@ def test_semantic_edge_solver_handles_left_and_right_boundaries(
 
     analysis, _ = _analyze(mask)
 
+    if edge == 10:
+        # One external pixel cannot satisfy a local GUIDE. Preserve the proposal,
+        # do not enlarge its domain or borrow LABEL pixels to force a positive.
+        assert (
+            analysis.extraction.status
+            is CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
+        )
+        assert analysis.extraction.selected_y is None
+        assert analysis.trace.semantic_search is not None
+        assert analysis.trace.semantic_search.line_label_pairs
+        assert not any(row.qualified for row in analysis.trace.row_evaluations)
+        return
     assert analysis.extraction.status is CurrentVisualPriceStatus.OK
     assert analysis.trace.band_end == edge
     assert analysis.trace.band_start == edge - ceil(edge * 0.20)
+
+
+@pytest.mark.parametrize("edge", [100, 200])
+@pytest.mark.parametrize("lower_gap", [1, 2, 5])
+def test_label_association_does_not_bridge_beyond_removed_guide_band(
+    edge: int, lower_gap: int
+) -> None:
+    mask = np.zeros((200, 240), dtype=np.uint8)
+    y = 100
+    label_start = edge - edge // 20
+    _marker(
+        mask,
+        y=y,
+        line_start=edge - edge // 5,
+        label_start=label_start,
+        semantic_edge=edge,
+        radius=3,
+    )
+    mask[y + 1 : y + 4, label_start:edge] = 0
+    mask[y + lower_gap : y + lower_gap + 3, label_start:edge] = 255
+
+    analysis, _ = _analyze(mask)
+    trace = analysis.trace.semantic_search
+    assert trace is not None
+    assert trace.line_label_pairs  # Proposals are retained, not suppressed.
+    associations = tuple(
+        a
+        for a in trace.label_associations
+        if any(run.row_y == y for run in a.pairs[0].hypothesis.runs)
+    )
+    assert associations
+    if lower_gap == 1:
+        assert analysis.extraction.status is CurrentVisualPriceStatus.OK
+        assert analysis.extraction.selected_y == y
+        assert any(a.status == "available" for a in associations)
+    else:
+        assert analysis.extraction.status is (
+            CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
+        )
+        assert analysis.extraction.price is None
+        assert all(a.status == "unavailable" for a in associations)
+        assert not trace.semantic_groups
+
+
+def test_detached_label_fragments_do_not_make_a_real_marker_ambiguous() -> None:
+    mask = np.zeros((200, 240), dtype=np.uint8)
+    _marker(mask, y=70, line_start=80, label_start=95, semantic_edge=100, radius=3)
+    mask[71:74, 95:100] = 0
+    mask[75:78, 95:100] = 255
+    _marker(mask, y=140, line_start=160, label_start=190, semantic_edge=200, radius=3)
+
+    analysis, _ = _analyze(mask)
+    reverse, _ = _analyze(mask, resolver=_ReverseWindowResolver())
+
+    assert analysis.extraction.status is CurrentVisualPriceStatus.OK
+    assert analysis.extraction.selected_y == 140
+    assert analysis.extraction == reverse.extraction
+    trace = analysis.trace.semantic_search
+    assert trace is not None
+    assert len(trace.semantic_groups) == 1
+    assert any(
+        run.row_y == 70
+        for pair in trace.line_label_pairs
+        for run in pair.hypothesis.runs
+    )
+    assert all(
+        a.status == "unavailable"
+        for a in trace.label_associations
+        if any(run.row_y == 70 for run in a.pairs[0].hypothesis.runs)
+    )

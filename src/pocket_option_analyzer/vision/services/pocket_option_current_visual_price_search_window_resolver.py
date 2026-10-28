@@ -10,6 +10,7 @@ import numpy as np
 from pocket_option_analyzer.vision.models.current_visual_price_search import (
     CurrentVisualPriceLabelComponent,
     CurrentVisualPriceLineHypothesis,
+    CurrentVisualPriceLineLabelPair,
     CurrentVisualPriceLineRun,
     CurrentVisualPriceSearchConstraints,
     CurrentVisualPriceSearchPlan,
@@ -71,7 +72,20 @@ class PocketOptionCurrentVisualPriceSearchWindowResolver:
         mask: np.ndarray,
         constraints: CurrentVisualPriceSearchConstraints,
     ) -> CurrentVisualPriceSearchPlan:
+        return self.resolve_with_guide_support(
+            mask=mask, guide_mask=mask, constraints=constraints
+        )
+
+    def resolve_with_guide_support(
+        self,
+        *,
+        mask: np.ndarray,
+        guide_mask: np.ndarray,
+        constraints: CurrentVisualPriceSearchConstraints,
+    ) -> CurrentVisualPriceSearchPlan:
+        """Use separate GUIDE evidence; residual LABELs remain direct-only."""
         self._validate_mask(mask, constraints)
+        self._validate_mask(guide_mask, constraints)
         effective_constraints = CurrentVisualPriceSearchConstraints(
             image_width=constraints.image_width,
             image_height=constraints.image_height,
@@ -93,7 +107,7 @@ class PocketOptionCurrentVisualPriceSearchWindowResolver:
 
         runs = tuple(
             run
-            for run in self._global_runs(mask, effective_constraints)
+            for run in self._global_runs(guide_mask, effective_constraints)
             if self._could_be_line_run(run, effective_constraints)
         )
         hypotheses = tuple(
@@ -166,6 +180,20 @@ class PocketOptionCurrentVisualPriceSearchWindowResolver:
             )
 
         windows = self._deduplicate_windows(proposed)
+        window_by_bounds = {(w.start_x, w.end_x): w for w in windows}
+        hypothesis_by_id = {h.hypothesis_id: h for h in hypotheses}
+        component_by_id = {c.component_id: c for c in components}
+        pairs = tuple(
+            CurrentVisualPriceLineLabelPair(
+                pair_id=f"line_label_pair_{index:03d}",
+                hypothesis=hypothesis_by_id[item.line_hypothesis_id],
+                component=component_by_id[item.label_component_id],
+                window_id=window_by_bounds[item.start_x, item.end_x].window_id,
+                window_start_x=item.start_x,
+                pair_edge=item.end_x,
+            )
+            for index, item in enumerate(proposed)
+        )
         if len(windows) > effective_constraints.max_unique_windows:
             descriptors = tuple(
                 f"{window.start_x}:{window.end_x}:"
@@ -183,6 +211,7 @@ class PocketOptionCurrentVisualPriceSearchWindowResolver:
                 label_components=components,
                 total_proposed_window_count=len(windows),
                 full_window_set_sha256=digest,
+                line_label_pairs=pairs,
             )
         return CurrentVisualPriceSearchPlan(
             status=CurrentVisualPriceSearchPlanStatus.AVAILABLE,
@@ -192,6 +221,7 @@ class PocketOptionCurrentVisualPriceSearchWindowResolver:
             line_hypotheses=hypotheses,
             label_components=components,
             total_proposed_window_count=len(windows),
+            line_label_pairs=pairs,
         )
 
     @staticmethod

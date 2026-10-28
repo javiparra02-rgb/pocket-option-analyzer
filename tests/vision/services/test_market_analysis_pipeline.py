@@ -170,6 +170,38 @@ def test_analyze_returns_market_analysis() -> None:
     assert result.trend is TrendDirection.BULLISH
 
 
+def test_independent_offline_flag_does_not_change_regular_market_pipeline() -> None:
+    from pocket_option_analyzer.vision.services import (
+        independent_current_visual_price_extractor as offline,
+    )
+    from pocket_option_analyzer.vision.services.independent_price_config import (
+        IndependentPriceConfig,
+    )
+
+    class ForbiddenOcr:
+        def recognize(self, *args, **kwargs):
+            raise AssertionError("Ordinary pipeline must not invoke offline OCR")
+
+    def pipeline(extractor):
+        return MarketAnalysisPipeline(
+            candle_analysis_pipeline=FakeCandleAnalysisPipeline(),
+            series_builder=FakeSeriesBuilder(),
+            membership_resolver=FakeMembershipResolver(),
+            overlay_evidence_resolver=PocketOptionExpiryOverlayEvidenceResolver(),
+            trend_detector=FakeTrendDetector(),
+            current_visual_price_extractor=extractor,
+        )
+
+    image = np.zeros((100, 100, 3), dtype=np.uint8)
+    legacy = pipeline(PocketOptionCurrentVisualPriceExtractor()).analyze(image)
+    for enabled in (False, True):
+        wrapped = offline.IndependentCurrentVisualPriceExtractor(
+            recognizer=ForbiddenOcr(),
+            config=IndependentPriceConfig(enabled=enabled),
+        )
+        assert pipeline(wrapped).analyze(image) == legacy
+
+
 def test_market_analysis_preserves_detection_diagnostics() -> None:
 
     candle_pipeline = FakeCandleAnalysisPipeline()

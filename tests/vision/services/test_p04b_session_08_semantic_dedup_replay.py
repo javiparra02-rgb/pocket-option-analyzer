@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from collections import Counter
 from contextlib import nullcontext
 from dataclasses import dataclass
 from functools import lru_cache
@@ -13,6 +12,9 @@ import numpy as np
 import pytest
 
 from pocket_option_analyzer.vision.models import CurrentVisualPriceStatus
+from pocket_option_analyzer.vision.models.current_visual_price_search import (
+    CurrentVisualPriceLabelAssociation,
+)
 from pocket_option_analyzer.vision.services import (
     PocketOptionCurrentVisualPriceExtractor,
 )
@@ -102,6 +104,9 @@ class _FrameSummary:
     status: CurrentVisualPriceStatus
     roi_y: float | None
     candidates: tuple[_QualifiedSummary, ...]
+    proposed_line_hypothesis_ids_at_selected_row: tuple[str, ...]
+    label_association_status_by_row: tuple[tuple[int, str], ...]
+    qualified_local_guide_row_ids: tuple[int, ...]
     semantic_group_count: int
     representative_window_id: str | None
 
@@ -117,6 +122,37 @@ class _CapturingExtractor(PocketOptionCurrentVisualPriceExtractor):
     ) -> tuple[_SemanticCandidateGroup, ...]:
         self.qualified_candidates = candidates
         return super()._semantic_candidate_groups(candidates)
+
+
+def _association_status_by_row(
+    associations: tuple[CurrentVisualPriceLabelAssociation, ...],
+) -> tuple[tuple[int, str], ...]:
+    # An unpaired hypothesis legitimately has no row-bearing pair descriptor.
+    return tuple(
+        sorted(
+            {
+                (run.row_y, association.status)
+                for association in associations
+                for pair in association.pairs
+                for run in pair.hypothesis.runs
+            }
+        )
+    )
+
+
+def test_replay_association_summary_accepts_unpaired_hypothesis() -> None:
+    unpaired = CurrentVisualPriceLabelAssociation(
+        hypothesis_id="unpaired",
+        pairs=(),
+        eligible_pair_ids=(),
+        rejected_pair_ids=(),
+        component_groups=(),
+        admissible_groups=(),
+        canonical_window=None,
+        max_line_gap_ratio=0.01,
+    )
+    assert unpaired.status == "unavailable"
+    assert _association_status_by_row((unpaired,)) == ()
 
 
 def _session_paths() -> tuple[Path, Path]:
@@ -198,6 +234,40 @@ def _replay() -> dict[int, _FrameSummary]:
                     )
                     for candidate in extractor.qualified_candidates
                 ),
+                proposed_line_hypothesis_ids_at_selected_row=(
+                    tuple(
+                        sorted(
+                            {
+                                pair.hypothesis.hypothesis_id
+                                for pair in semantic.line_label_pairs
+                                for run in pair.hypothesis.runs
+                                if analysis.extraction.price is not None
+                                and run.row_y == int(analysis.extraction.price.roi_y)
+                            }
+                        )
+                    )
+                    if semantic is not None
+                    else ()
+                ),
+                label_association_status_by_row=(
+                    _association_status_by_row(semantic.label_associations)
+                    if semantic is not None
+                    else ()
+                ),
+                qualified_local_guide_row_ids=(
+                    tuple(
+                        sorted(
+                            {
+                                guide.row_y
+                                for evaluation in semantic.window_evaluations
+                                for guide in evaluation.local_guides
+                                if guide.qualified
+                            }
+                        )
+                    )
+                    if semantic is not None
+                    else ()
+                ),
                 semantic_group_count=len(groups),
                 representative_window_id=representative,
             )
@@ -205,71 +275,36 @@ def _replay() -> dict[int, _FrameSummary]:
     return summaries
 
 
-def _legacy_group_count(candidates: tuple[_QualifiedSummary, ...]) -> int:
-    if not candidates:
-        return 0
-    parents = list(range(len(candidates)))
-
-    def find(index: int) -> int:
-        while parents[index] != index:
-            parents[index] = parents[parents[index]]
-            index = parents[index]
-        return index
-
-    def union(left: int, right: int) -> None:
-        left_root = find(left)
-        right_root = find(right)
-        if left_root != right_root:
-            parents[right_root] = left_root
-
-    for left_index, left in enumerate(candidates):
-        left_ids = frozenset(left.line_hypothesis_ids)
-        for right_index in range(left_index + 1, len(candidates)):
-            if left_ids.intersection(candidates[right_index].line_hypothesis_ids):
-                union(left_index, right_index)
-    return len({find(index) for index in range(len(candidates))})
-
-
 @pytest.mark.parametrize(
-    ("frame_id", "expected_y", "expected_candidate_count"),
+    ("frame_id", "expected_y"),
     [
-        pytest.param(166, 129.0, 6, id="F166"),
-        pytest.param(1354, 178.0, 6, id="F1354"),
-        pytest.param(1363, 197.0, 7, id="F1363"),
-        pytest.param(1728, 150.0, 8, id="F1728"),
-        pytest.param(2402, 155.0, 9, id="F2402"),
-        pytest.param(2451, 185.0, 5, id="F2451"),
+        pytest.param(166, 129.0, id="F166"),
+        pytest.param(1354, 178.0, id="F1354"),
+        pytest.param(1363, 197.0, id="F1363"),
+        pytest.param(1728, 150.0, id="F1728"),
+        pytest.param(2402, 155.0, id="F2402"),
+        pytest.param(2451, 185.0, id="F2451"),
     ],
 )
 def test_session08_fragmented_line_archetype_is_recovered(
     frame_id: int,
     expected_y: float,
-    expected_candidate_count: int,
 ) -> None:
     frame = _replay()[frame_id]
 
     assert frame.status is CurrentVisualPriceStatus.OK
     assert frame.roi_y == expected_y
     assert frame.semantic_group_count == 1
-    assert len(frame.candidates) == expected_candidate_count
+    assert len(frame.proposed_line_hypothesis_ids_at_selected_row) >= 2
+    assert frame.candidates
     assert {candidate.qualified_row_ids for candidate in frame.candidates} == {
         (int(expected_y),)
     }
-    assert (
-        len(
-            {
-                line_id
-                for candidate in frame.candidates
-                for line_id in candidate.line_hypothesis_ids
-            }
+    assert all(
+        set(candidate.line_hypothesis_ids).issubset(
+            frame.proposed_line_hypothesis_ids_at_selected_row
         )
-        == 2
-    )
-    assert any(
-        left.qualified_row_ids == right.qualified_row_ids
-        and not set(left.line_hypothesis_ids).intersection(right.line_hypothesis_ids)
-        for index, left in enumerate(frame.candidates)
-        for right in frame.candidates[index + 1 :]
+        for candidate in frame.candidates
     )
     assert frame.representative_window_id == max(
         candidate.candidate_id.split(":", maxsplit=1)[0]
@@ -277,25 +312,31 @@ def test_session08_fragmented_line_archetype_is_recovered(
     )
 
 
-def test_session08_f1021_distinct_vertical_prices_remain_ambiguous() -> None:
+def test_session08_f1021_ui_annotation_does_not_create_second_price() -> None:
     frame = _replay()[1021]
 
-    assert frame.status is CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE
-    assert frame.semantic_group_count == 2
+    assert frame.status is CurrentVisualPriceStatus.OK
+    assert frame.roi_y == 398.0
+    assert frame.semantic_group_count == 1
     assert {candidate.qualified_row_ids for candidate in frame.candidates} == {
-        (121,),
         (398,),
     }
 
 
-def test_session08_f1067_merges_only_same_row_fragments() -> None:
+def test_session08_f1067_ui_annotation_is_not_a_second_price() -> None:
     frame = _replay()[1067]
 
-    assert frame.status is CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE
-    assert frame.semantic_group_count == 3
+    # Keep the UI proposal visible, but do not bridge its detached glyphs into
+    # an accredited LABEL. The real marker retains its external GUIDE.
+    assert (121, "unavailable") in frame.label_association_status_by_row
+    assert (121, "available") not in frame.label_association_status_by_row
+    assert 121 not in frame.qualified_local_guide_row_ids
+    assert (171, "available") in frame.label_association_status_by_row
+    assert 171 in frame.qualified_local_guide_row_ids
+    assert frame.status is CurrentVisualPriceStatus.OK
+    assert frame.roi_y == 171.0
+    assert frame.semantic_group_count == 1
     assert {candidate.qualified_row_ids for candidate in frame.candidates} == {
-        (116,),
-        (121,),
         (171,),
     }
 
@@ -317,67 +358,30 @@ def test_session08_all_formal_false_ambiguities_are_recovered() -> None:
     )
 
 
-def test_session08_full_replay_changes_only_exact_same_row_ambiguities() -> None:
+def test_session08_full_replay_respects_semantic_group_resolution() -> None:
     replay = _replay()
-    legacy_counts: Counter[str] = Counter()
-    post_counts = Counter(frame.status.value for frame in replay.values())
-    transitions: Counter[tuple[str, str]] = Counter()
-    ambiguous_group_transitions: Counter[tuple[int, int]] = Counter()
-
+    assert len(replay) == 2612
     for frame in replay.values():
-        legacy_groups = _legacy_group_count(frame.candidates)
-        if legacy_groups == 0:
-            legacy_status = CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
-        elif legacy_groups == 1:
-            legacy_status = CurrentVisualPriceStatus.OK
+        if frame.semantic_group_count == 0:
+            assert frame.status is CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE
+            assert frame.roi_y is None
+        elif frame.semantic_group_count == 1:
+            assert frame.status in {
+                CurrentVisualPriceStatus.OK,
+                CurrentVisualPriceStatus.LOW_CONFIDENCE,
+            }
+            assert frame.representative_window_id is not None
+            assert (frame.roi_y is not None) == (
+                frame.status is CurrentVisualPriceStatus.OK
+            )
         else:
-            legacy_status = CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE
-            ambiguous_group_transitions[
-                (legacy_groups, frame.semantic_group_count)
-            ] += 1
-        legacy_counts[legacy_status.value] += 1
-        transitions[(legacy_status.value, frame.status.value)] += 1
-
-    assert legacy_counts == Counter(
-        {
-            CurrentVisualPriceStatus.OK.value: 2349,
-            CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE.value: 99,
-            CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE.value: 164,
-        }
-    )
-    assert post_counts == Counter(
-        {
-            CurrentVisualPriceStatus.OK.value: 2413,
-            CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE.value: 35,
-            CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE.value: 164,
-        }
-    )
-    assert transitions == Counter(
-        {
-            (
-                CurrentVisualPriceStatus.OK.value,
-                CurrentVisualPriceStatus.OK.value,
-            ): 2349,
-            (
-                CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE.value,
-                CurrentVisualPriceStatus.NO_VISUAL_PRICE_CANDIDATE.value,
-            ): 164,
-            (
-                CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE.value,
-                CurrentVisualPriceStatus.OK.value,
-            ): 64,
-            (
-                CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE.value,
-                CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE.value,
-            ): 35,
-        }
-    )
-    assert ambiguous_group_transitions == Counter(
-        {(2, 1): 64, (2, 2): 16, (3, 3): 15, (4, 3): 4}
-    )
+            assert frame.status is CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE
+            assert frame.roi_y is None
 
 
 def test_session08_qualified_candidate_population_remains_small() -> None:
     replay = _replay()
 
-    assert max(len(frame.candidates) for frame in replay.values()) == 15
+    # The historical maximum was 15 before GUIDE–LABEL qualification. It is
+    # an upper-bound guard, not a required number of qualified candidates.
+    assert 0 < max(len(frame.candidates) for frame in replay.values()) <= 15

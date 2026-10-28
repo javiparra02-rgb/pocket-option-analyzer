@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import asdict
+from math import ceil
 from typing import Any
 
 from pocket_option_analyzer.application.evidence import VisualFrameEvidence
@@ -20,6 +22,11 @@ from pocket_option_analyzer.vision.models import (
     CurrentVisualPriceSemanticSearchTrace,
     FinalCandleTrace,
     MarketAnalysis,
+)
+from pocket_option_analyzer.vision.models.current_visual_price_search import (
+    CurrentVisualPriceLabelAssociation,
+    CurrentVisualPriceLineLabelPair,
+    CurrentVisualPriceLocalGuideTrace,
 )
 
 
@@ -444,6 +451,11 @@ class VisualEvidenceSerializer:
             return None
         counts = trace.rejection_counts
         return {
+            **(
+                {"independent_identity": asdict(trace.independent_identity)}
+                if trace.independent_identity is not None
+                else {}
+            ),
             "status": trace.status.value,
             "image_width": trace.image_width,
             "image_height": trace.image_height,
@@ -464,9 +476,7 @@ class VisualEvidenceSerializer:
                 "rows_with_mask_pixels": counts.rows_with_mask_pixels,
                 "rejected_by_coverage": counts.rejected_by_coverage,
                 "rejected_by_span": counts.rejected_by_span,
-                "rejected_by_right_edge_gap": (
-                    counts.rejected_by_right_edge_gap
-                ),
+                "rejected_by_right_edge_gap": (counts.rejected_by_right_edge_gap),
                 "qualifying_rows": counts.qualifying_rows,
                 "candidate_groups": counts.candidate_groups,
                 "rejected_by_group_height": counts.rejected_by_group_height,
@@ -499,6 +509,9 @@ class VisualEvidenceSerializer:
                     "line_evidence": row.line_evidence,
                     "label_support": row.label_support,
                     "qualified": row.qualified,
+                    "local_guide": VisualEvidenceSerializer._local_guide_to_dict(
+                        row.local_guide
+                    ),
                     "rejection_reasons": [
                         reason.value for reason in row.rejection_reasons
                     ],
@@ -547,6 +560,15 @@ class VisualEvidenceSerializer:
             return None
         return {
             "mode": trace.mode.value,
+            "qualification_contract": trace.qualification_contract,
+            "line_label_pairs": [
+                VisualEvidenceSerializer._line_label_pair_to_dict(pair)
+                for pair in trace.line_label_pairs
+            ],
+            "label_associations": [
+                VisualEvidenceSerializer._label_association_to_dict(association)
+                for association in trace.label_associations
+            ],
             "plan_status": trace.plan_status.value,
             "plan_reason": trace.plan_reason.value,
             "total_proposed_window_count": trace.total_proposed_window_count,
@@ -573,6 +595,10 @@ class VisualEvidenceSerializer:
                     "decision_diagnostic": evaluation.decision_diagnostic,
                     "candidate_count": evaluation.candidate_count,
                     "semantic_candidate_ids": list(evaluation.semantic_candidate_ids),
+                    "local_guides": [
+                        VisualEvidenceSerializer._local_guide_to_dict(guide)
+                        for guide in evaluation.local_guides
+                    ],
                 }
                 for evaluation in trace.window_evaluations
             ],
@@ -586,4 +612,98 @@ class VisualEvidenceSerializer:
                 }
                 for group in trace.semantic_groups
             ],
+        }
+
+    @staticmethod
+    def _local_guide_to_dict(
+        guide: CurrentVisualPriceLocalGuideTrace | None,
+    ) -> dict[str, Any] | None:
+        if guide is None:
+            return None
+        return {
+            "contract_version": guide.contract_version,
+            "hypothesis_id": guide.hypothesis_id,
+            "row_y": guide.row_y,
+            "window_width": guide.window_width,
+            "minimum_span": guide.minimum_span,
+            "maximum_gap": guide.maximum_gap,
+            "zone_width": guide.zone_width,
+            "zone_start_x": guide.zone_start_x,
+            "label_ingress_x": guide.label_ingress_x,
+            "selected_run_id": (
+                f"{guide.hypothesis_id}:row_{guide.row_y}:"
+                f"{guide.selected_start_x}:{guide.selected_end_x}"
+                if guide.selected_start_x is not None else None
+            ),
+            "selected_start_x": guide.selected_start_x,
+            "selected_end_x": guide.selected_end_x,
+            "supported_pixels": guide.supported_pixels,
+            "span_pixels": guide.span_pixels,
+            "terminal_gap": guide.terminal_gap,
+            "internal_gaps": list(guide.internal_gaps),
+            "continuity": guide.continuity,
+            "span_score": guide.span_score,
+            "qualified": guide.qualified,
+            "rejection_reasons": list(guide.rejection_reasons),
+        }
+
+    @staticmethod
+    def _line_label_pair_to_dict(pair: CurrentVisualPriceLineLabelPair) -> dict[str, Any]:
+        component = pair.component
+        return {
+            "pair_id": pair.pair_id,
+            "line_hypothesis_id": pair.hypothesis.hypothesis_id,
+            "component_id": component.component_id,
+            "window_id": pair.window_id,
+            "window_start_x": pair.window_start_x,
+            "pair_edge": pair.pair_edge,
+            "window_width": pair.window_width,
+            "component": {
+                "x": component.x, "y": component.y,
+                "width": component.width, "height": component.height,
+                "area": component.area,
+            },
+            "runs": [
+                {"row_y": r.row_y, "start_x": r.start_x, "end_x": r.end_x}
+                for r in pair.hypothesis.runs
+            ],
+        }
+
+    @staticmethod
+    def _label_association_to_dict(a: CurrentVisualPriceLabelAssociation) -> dict[str, Any]:
+        pairs = {p.pair_id: p for p in a.pairs}
+        return {
+            "hypothesis_id": a.hypothesis_id,
+            "status": a.status,
+            "input_pair_ids": list(pairs),
+            "pair_decisions": [
+                {
+                    "pair_id": p.pair_id,
+                    "horizontal_distance": p.component.x - max(r.end_x for r in p.hypothesis.runs),
+                    "maximum_gap": ceil(p.window_width * a.max_line_gap_ratio),
+                    "eligible": p.pair_id in a.eligible_pair_ids,
+                    "reason": "endpoint_reached" if p.pair_id in a.eligible_pair_ids else "component_beyond_endpoint_gap",
+                }
+                for p in a.pairs
+            ],
+            "groups": [
+                {
+                    "group_id": f"{a.hypothesis_id}:label_group_{index:03d}",
+                    "pair_ids": list(group),
+                    "component_ids": sorted({pairs[i].component.component_id for i in group}),
+                    "envelope": {
+                        "start_x": min(pairs[i].component.x for i in group),
+                        "end_x": max(pairs[i].component.end_x for i in group),
+                        "start_y": min(pairs[i].component.y for i in group),
+                        "end_y": max(pairs[i].component.end_y for i in group),
+                    },
+                    "admissible": group in a.admissible_groups,
+                    "reason": "covers_line_band" if group in a.admissible_groups else "does_not_cover_line_band",
+                }
+                for index, group in enumerate(a.component_groups)
+            ],
+            "label_ingress_x": a.label_ingress_x,
+            "canonical_window_id": a.canonical_window.window_id if a.canonical_window else None,
+            "canonical_edge": a.canonical_window.end_x if a.canonical_window else None,
+            "canonical_window_width": a.canonical_window.width if a.canonical_window else None,
         }

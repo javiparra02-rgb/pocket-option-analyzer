@@ -296,25 +296,29 @@ def test_equal_candidates_are_ambiguous() -> None:
 def test_distinct_semantic_prices_are_ambiguous_despite_score_difference() -> None:
     frame = image()
     marker(frame, 40)
-    line(frame, 60, start=80, end=94)
-    frame[59, 99] = CURRENT_PRICE_BLUE
-    frame[61, 99] = CURRENT_PRICE_BLUE
-    result = PocketOptionCurrentVisualPriceExtractor().extract(frame)
+    marker(frame, 60)
+    frame[60, 86] = 0  # Still a qualified attached GUIDE, with less support.
+    analysis = PocketOptionCurrentVisualPriceExtractor().extract_with_trace(frame)
+    result = analysis.extraction
     assert result.status is CurrentVisualPriceStatus.AMBIGUOUS_VISUAL_PRICE
     assert result.selected_y is None
+    assert result.candidate_count == 2
+    assert len({c.score for c in analysis.trace.candidates}) == 2
 
 
 def test_valid_marker_can_be_low_confidence_with_strict_threshold() -> None:
     frame = image()
-    line(frame, 50, start=80, end=94)
-    frame[49, 99] = CURRENT_PRICE_BLUE
-    frame[51, 99] = CURRENT_PRICE_BLUE
+    marker(frame, 50)
+    frame[50, 86] = 0
 
-    result = PocketOptionCurrentVisualPriceExtractor(
-        min_confidence=0.90,
-    ).extract(frame)
+    analysis = PocketOptionCurrentVisualPriceExtractor(
+        min_confidence=0.999,
+    ).extract_with_trace(frame)
+    result = analysis.extraction
     assert result.status is CurrentVisualPriceStatus.LOW_CONFIDENCE
-    assert result.confidence is not None and result.confidence < 0.90
+    assert result.confidence is not None and result.confidence < 0.999
+    assert result.candidate_count == 1
+    assert analysis.trace.semantic_search.semantic_groups
 
 
 def test_diagnostics_coordinates_and_exact_normalization() -> None:

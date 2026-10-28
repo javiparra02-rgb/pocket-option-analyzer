@@ -91,3 +91,6 @@ package-dir = { "" = "src" }
 where = [
     "src"
 ]
+
+[tool.setuptools.package-data]
+"pocket_option_analyzer.infrastructure.vision" = ["*.ps1"]

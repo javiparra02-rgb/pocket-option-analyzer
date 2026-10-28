@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import ceil, isfinite
 from typing import Protocol
 
@@ -32,6 +32,12 @@ from pocket_option_analyzer.vision.models import (
     CurrentVisualPriceStatus,
 )
 from pocket_option_analyzer.vision.preprocessing import FrameValidator
+from pocket_option_analyzer.vision.models.current_visual_price_search import (
+    CurrentVisualPriceLabelAssociation,
+    CurrentVisualPriceLabelComponent,
+    CurrentVisualPriceLineHypothesis,
+    CurrentVisualPriceLocalGuideTrace,
+)
 
 from .current_visual_price_search_window_resolver import (
     CurrentVisualPriceSearchWindowResolver,
@@ -358,6 +364,7 @@ class PocketOptionCurrentVisualPriceExtractor:
         search = self._search_candidates(mask, band_start, band_end, band_width)
         semantic_trace = CurrentVisualPriceSemanticSearchTrace(
             mode=CurrentVisualPriceSemanticSearchMode.FIXED_OVERRIDE,
+            qualification_contract="fixed_override_legacy_v1",
             plan_status=CurrentVisualPriceSearchPlanStatus.AVAILABLE,
             plan_reason=CurrentVisualPriceSearchPlanReason.FIXED_OVERRIDE,
             total_proposed_window_count=1,
@@ -400,6 +407,140 @@ class PocketOptionCurrentVisualPriceExtractor:
             semantic_ambiguity=False,
         )
 
+    @staticmethod
+    def _associate_labels(
+        plan: CurrentVisualPriceSearchPlan,
+    ) -> tuple[CurrentVisualPriceLabelAssociation, ...]:
+        associations = []
+        for hypothesis in sorted(plan.line_hypotheses, key=lambda h: h.hypothesis_id):
+            pairs = tuple(sorted(
+                (p for p in plan.line_label_pairs
+                 if p.hypothesis.hypothesis_id == hypothesis.hypothesis_id),
+                key=lambda p: p.pair_id,
+            ))
+            right = max(run.end_x for run in hypothesis.runs)
+            top = min(run.row_y for run in hypothesis.runs)
+            bottom = max(run.row_y for run in hypothesis.runs) + 1
+            eligible = tuple(
+                p for p in pairs
+                if p.component.x <= right + ceil(
+                    p.window_width * plan.constraints.max_line_gap_ratio
+                )
+            )
+            connected = _DisjointSet(len(eligible))
+            for i, left in enumerate(eligible):
+                for j in range(i + 1, len(eligible)):
+                    if PocketOptionCurrentVisualPriceExtractor._labels_connect(
+                        left.component, eligible[j].component, top, bottom,
+                    ):
+                        connected.union(i, j)
+            groups: dict[int, list[int]] = {}
+            for index in range(len(eligible)):
+                groups.setdefault(connected.find(index), []).append(index)
+            admissible = tuple(
+                tuple(eligible[index].pair_id for index in group)
+                for group in groups.values()
+                if min(eligible[i].component.y for i in group) <= top
+                and max(eligible[i].component.end_y for i in group) >= bottom
+            )
+            canonical = None
+            if len(admissible) == 1:
+                selected = tuple(p for p in eligible if p.pair_id in admissible[0])
+                edge = max(p.pair_edge for p in selected)
+                canonical_ids = {p.window_id for p in selected if p.pair_edge == edge}
+                canonical_windows = tuple(w for w in plan.windows if w.window_id in canonical_ids)
+                if len(canonical_windows) != 1:
+                    raise ValueError("Ambiguous canonical associated window.")
+                canonical = canonical_windows[0]
+            eligible_ids = tuple(p.pair_id for p in eligible)
+            associations.append(CurrentVisualPriceLabelAssociation(
+                hypothesis_id=hypothesis.hypothesis_id,
+                pairs=pairs,
+                eligible_pair_ids=eligible_ids,
+                rejected_pair_ids=tuple(p.pair_id for p in pairs if p.pair_id not in eligible_ids),
+                component_groups=tuple(
+                    tuple(eligible[i].pair_id for i in group)
+                    for group in groups.values()
+                ),
+                admissible_groups=admissible,
+                canonical_window=canonical,
+                max_line_gap_ratio=plan.constraints.max_line_gap_ratio,
+            ))
+        return tuple(associations)
+
+    @staticmethod
+    def _labels_connect(
+        left: CurrentVisualPriceLabelComponent,
+        right: CurrentVisualPriceLabelComponent,
+        top: int,
+        bottom: int,
+    ) -> bool:
+        if max(left.x, right.x) >= min(left.end_x, right.end_x):
+            return False
+        if max(left.y, right.y) < min(left.end_y, right.end_y):
+            return True
+        upper, lower = sorted((left, right), key=lambda c: c.y)
+        # Only bridge a gap contained in the removed line band. Mere overlap
+        # would invent LABEL connectivity beyond that band (e.g. UI glyphs).
+        return top <= upper.end_y < lower.y <= bottom
+
+    def _local_guide(
+        self,
+        mask: np.ndarray,
+        hypothesis: CurrentVisualPriceLineHypothesis,
+        association: CurrentVisualPriceLabelAssociation,
+        row_y: int,
+    ) -> CurrentVisualPriceLocalGuideTrace:
+        window = association.canonical_window
+        ingress = association.label_ingress_x
+        assert window is not None and ingress is not None
+        minimum = max(1, ceil(window.width * self._min_line_run_ratio))
+        gap = ceil(window.width * self._max_line_gap_ratio)
+        start = ingress - minimum - gap
+        selected = None
+        gaps: tuple[int, ...] = ()
+        reasons = []
+        if start < 0 or ingress > mask.shape[1]:
+            reasons.append("guide_domain_outside_roi")
+        else:
+            xs = np.flatnonzero(mask[row_y, start:ingress]) + start
+            if xs.size:
+                runs = self._supported_runs(self._continuous_runs(xs), gap)
+                admissible = tuple(
+                    run for run in runs
+                    if ingress - run.end - 1 <= gap
+                    and any(
+                        source.row_y == row_y
+                        and max(run.start, source.start_x) < min(run.end + 1, source.end_x)
+                        for source in hypothesis.runs
+                    )
+                )
+                if admissible:
+                    selected = max(admissible, key=lambda r: (r.end, r.span_pixels, -r.start))
+                    selected_xs = xs[(xs >= selected.start) & (xs <= selected.end)]
+                    gaps = tuple(int(d) - 1 for d in np.diff(selected_xs) if d > 1)
+            if selected is None:
+                reasons.append("no_spatially_admissible_guide_run")
+            else:
+                if selected.span_pixels < minimum:
+                    reasons.append("local_guide_too_short")
+                if selected.continuity < self._min_line_continuity_ratio:
+                    reasons.append("guide_continuity_too_low")
+        return CurrentVisualPriceLocalGuideTrace(
+            hypothesis_id=hypothesis.hypothesis_id,
+            row_y=row_y,
+            window_width=window.width,
+            minimum_span=minimum,
+            maximum_gap=gap,
+            zone_start_x=start,
+            label_ingress_x=ingress,
+            selected_start_x=selected.start if selected is not None else None,
+            selected_end_x=selected.end + 1 if selected is not None else None,
+            supported_pixels=selected.masked_pixels if selected is not None else 0,
+            internal_gaps=gaps,
+            rejection_reasons=tuple(reasons),
+        )
+
     def _extract_dynamic(
         self,
         *,
@@ -410,10 +551,14 @@ class PocketOptionCurrentVisualPriceExtractor:
         masked_pixel_count: int,
         safe_top: int,
         safe_bottom: int,
+        guide_mask: np.ndarray | None = None,
+        qualification_contract: str = "dynamic_guide_label_v1",
     ) -> CurrentVisualPriceAnalysis:
         if plan.status is CurrentVisualPriceSearchPlanStatus.UNAVAILABLE:
             semantic_trace = CurrentVisualPriceSemanticSearchTrace(
                 mode=CurrentVisualPriceSemanticSearchMode.DYNAMIC,
+                qualification_contract=qualification_contract,
+                line_label_pairs=plan.line_label_pairs,
                 plan_status=plan.status,
                 plan_reason=plan.reason,
                 total_proposed_window_count=plan.total_proposed_window_count,
@@ -459,14 +604,34 @@ class PocketOptionCurrentVisualPriceExtractor:
             )
 
         searches: dict[str, _CandidateSearch] = {}
+        associations = self._associate_labels(plan)
         qualified: list[_QualifiedSemanticCandidate] = []
         evaluations: list[CurrentVisualPriceSearchWindowEvaluationTrace] = []
         for window in plan.windows:
+            guides: dict[int, CurrentVisualPriceLocalGuideTrace] = {}
+            for association in associations:
+                if association.canonical_window != window:
+                    continue
+                hypothesis = association.pairs[0].hypothesis
+                for row_y in sorted({run.row_y for run in hypothesis.runs}):
+                    guide = self._local_guide(
+                        mask if guide_mask is None else guide_mask,
+                        hypothesis, association, row_y,
+                    )
+                    if qualification_contract != "dynamic_guide_label_v1":
+                        guide = replace(guide, contract_version=qualification_contract)
+                    previous = guides.get(row_y)
+                    if previous is not None and previous.selected_start_x is not None:
+                        if guide.selected_start_x is not None:
+                            raise ValueError("Multiple GUIDE domains on one window row.")
+                        continue
+                    guides[row_y] = guide
             search = self._search_candidates(
                 mask,
                 window.start_x,
                 window.end_x,
                 window.width,
+                local_guides=guides,
             )
             searches[window.window_id] = search
             ids: list[str] = []
@@ -499,6 +664,7 @@ class PocketOptionCurrentVisualPriceExtractor:
                     decision_diagnostic=search.decision_diagnostic,
                     candidate_count=len(ids),
                     semantic_candidate_ids=tuple(ids),
+                    local_guides=tuple(guides[y] for y in sorted(guides)),
                 )
             )
 
@@ -512,6 +678,9 @@ class PocketOptionCurrentVisualPriceExtractor:
             representative_search = searches[representative_window.window_id]
             semantic_trace = CurrentVisualPriceSemanticSearchTrace(
                 mode=CurrentVisualPriceSemanticSearchMode.DYNAMIC,
+                qualification_contract=qualification_contract,
+                label_associations=associations,
+                line_label_pairs=plan.line_label_pairs,
                 plan_status=plan.status,
                 plan_reason=plan.reason,
                 total_proposed_window_count=plan.total_proposed_window_count,
@@ -574,6 +743,9 @@ class PocketOptionCurrentVisualPriceExtractor:
         if len(groups) > 1:
             semantic_trace = CurrentVisualPriceSemanticSearchTrace(
                 mode=CurrentVisualPriceSemanticSearchMode.DYNAMIC,
+                qualification_contract=qualification_contract,
+                label_associations=associations,
+                line_label_pairs=plan.line_label_pairs,
                 plan_status=plan.status,
                 plan_reason=plan.reason,
                 total_proposed_window_count=plan.total_proposed_window_count,
@@ -607,6 +779,9 @@ class PocketOptionCurrentVisualPriceExtractor:
 
         semantic_trace = CurrentVisualPriceSemanticSearchTrace(
             mode=CurrentVisualPriceSemanticSearchMode.DYNAMIC,
+            qualification_contract=qualification_contract,
+            label_associations=associations,
+            line_label_pairs=plan.line_label_pairs,
             plan_status=plan.status,
             plan_reason=plan.reason,
             total_proposed_window_count=plan.total_proposed_window_count,
@@ -994,6 +1169,8 @@ class PocketOptionCurrentVisualPriceExtractor:
         band_start: int,
         band_end: int,
         band_width: int,
+        *,
+        local_guides: dict[int, CurrentVisualPriceLocalGuideTrace] | None = None,
     ) -> _CandidateSearch:
         band = mask[:, band_start:band_end] != 0
         row_metrics: list[_RowMetrics] = []
@@ -1046,6 +1223,12 @@ class PocketOptionCurrentVisualPriceExtractor:
             if line_run.start > maximum_line_start_offset:
                 line_rejections.append(
                     CurrentVisualPriceRowRejectionReason.LINE_STARTS_TOO_LATE
+                )
+            if local_guides is not None:
+                guide = local_guides.get(y)
+                line_rejections = (
+                    [] if guide is not None and guide.qualified
+                    else [CurrentVisualPriceRowRejectionReason.LOCAL_GUIDE_UNAVAILABLE]
                 )
             row_metrics.append(
                 _RowMetrics(
@@ -1120,6 +1303,10 @@ class PocketOptionCurrentVisualPriceExtractor:
                     qualified=qualified,
                     rejection_reasons=tuple(rejection_reasons),
                     label_support_trace=label_trace,
+                    local_guide=(
+                        local_guides.get(metrics.y)
+                        if local_guides is not None else None
+                    ),
                 )
             )
 
@@ -1162,13 +1349,21 @@ class PocketOptionCurrentVisualPriceExtractor:
             right_edge_gap = min(row[0].right_edge_gap for row in group)
             line_span_score = float(
                 np.average(
-                    [row[0].line_run_span_ratio for row in group],
+                    [
+                        local_guides[row[0].y].span_score
+                        if local_guides is not None else row[0].line_run_span_ratio
+                        for row in group
+                    ],
                     weights=weights,
                 )
             )
             line_continuity_score = float(
                 np.average(
-                    [row[0].line_run.continuity for row in group],
+                    [
+                        local_guides[row[0].y].continuity
+                        if local_guides is not None else row[0].line_run.continuity
+                        for row in group
+                    ],
                     weights=weights,
                 )
             )

@@ -71,6 +71,9 @@ from pocket_option_analyzer.vision.models import (
 from pocket_option_analyzer.vision.models.candle_detection_trace import (
     CandleWidthDecisionReason,
 )
+from pocket_option_analyzer.vision.models.current_visual_price_search import (
+    CurrentVisualPriceLocalGuideTrace,
+)
 
 FIXED_NOW = datetime(2026, 8, 17, 20, 0, tzinfo=UTC)
 FRAME_TIMESTAMP = datetime(2026, 8, 17, 19, 12, 34, 567890, tzinfo=UTC)
@@ -1021,6 +1024,9 @@ def test_current_visual_price_trace_persists_additive_semantic_search(
     ]["semantic_search"]
     assert persisted == {
         "mode": "dynamic",
+        "qualification_contract": None,
+        "line_label_pairs": [],
+        "label_associations": [],
         "plan_status": "unavailable",
         "plan_reason": "no_mask_pixels",
         "total_proposed_window_count": 0,
@@ -1032,6 +1038,46 @@ def test_current_visual_price_trace_persists_additive_semantic_search(
         "windows": [],
         "window_evaluations": [],
         "semantic_groups": [],
+    }
+
+
+def test_current_visual_price_local_guide_serialization_is_explicit() -> None:
+    guide = CurrentVisualPriceLocalGuideTrace(
+        hypothesis_id="line_0",
+        row_y=10,
+        window_width=20,
+        minimum_span=10,
+        maximum_gap=1,
+        zone_start_x=69,
+        label_ingress_x=80,
+        selected_start_x=69,
+        selected_end_x=80,
+        supported_pixels=11,
+        internal_gaps=(),
+        rejection_reasons=(),
+    )
+
+    assert VisualEvidenceSerializer._local_guide_to_dict(guide) == {
+        "contract_version": "dynamic_guide_label_v1",
+        "hypothesis_id": "line_0",
+        "row_y": 10,
+        "window_width": 20,
+        "minimum_span": 10,
+        "maximum_gap": 1,
+        "zone_width": 11,
+        "zone_start_x": 69,
+        "label_ingress_x": 80,
+        "selected_run_id": "line_0:row_10:69:80",
+        "selected_start_x": 69,
+        "selected_end_x": 80,
+        "supported_pixels": 11,
+        "span_pixels": 11,
+        "terminal_gap": 0,
+        "internal_gaps": [],
+        "continuity": 1.0,
+        "span_score": 1.0,
+        "qualified": True,
+        "rejection_reasons": [],
     }
 
 
@@ -1118,6 +1164,117 @@ def test_restart_reuses_frame_and_manifest_idempotently(tmp_path: Path) -> None:
 
     assert calls == 0
     assert len(_manifest(directory)) == 1
+
+
+def _independent_offline_evidence() -> VisualFrameEvidence:
+    from pocket_option_analyzer.vision.models.independent_visual_price import (
+        ObservationGeometry,
+    )
+    from pocket_option_analyzer.vision.services import (
+        independent_current_visual_price_extractor as offline,
+    )
+    from pocket_option_analyzer.vision.services.independent_price_config import (
+        IndependentPriceConfig,
+    )
+
+    pixels = _image()
+    output = (
+        offline.IndependentCurrentVisualPriceExtractor(
+            config=IndependentPriceConfig(enabled=True)
+        )
+        .evaluate_offline(
+            pixels,
+            ObservationGeometry(10, 20, 64, 48),
+        )
+        .analysis
+    )
+    evidence = _evidence(price_trace_override=output.trace)
+    return replace(
+        evidence,
+        current_visual_price=output.extraction,
+        market_analysis=replace(
+            evidence.market_analysis, current_visual_price=output.extraction
+        ),
+    )
+
+
+def test_independent_trace_persists_idempotently_without_variable_metadata(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "offline"
+    evidence = _independent_offline_evidence()
+    store = _store(directory)
+    store.record_frame(evidence, (_entry(),))
+    before = {
+        p.relative_to(directory): p.read_bytes()
+        for p in directory.rglob("*")
+        if p.is_file()
+    }
+    _store(directory).record_frame(_independent_offline_evidence(), (_entry(),))
+    after = {
+        p.relative_to(directory): p.read_bytes()
+        for p in directory.rglob("*")
+        if p.is_file()
+    }
+    assert before == after
+    serialized = VisualEvidenceSerializer.analysis_to_dict(evidence)
+    identity = serialized["current_visual_price_detection_trace"][
+        "independent_identity"
+    ]
+    assert identity["contract_version"] == "independent_h1_h2_r3d_v1"
+    assert identity["absence_certified"] is False
+    assert identity["context"]["reasons"] == ("OCR_UNAVAILABLE",)
+    text = json.dumps(serialized)
+    assert "h1_seconds" not in text and "h2_seconds" not in text
+
+
+def test_new_identity_cannot_overwrite_existing_historical_evidence(
+    tmp_path: Path,
+) -> None:
+    directory = tmp_path / "historical"
+    store = _store(directory)
+    historical = _evidence()
+    assert (
+        "independent_identity"
+        not in VisualEvidenceSerializer.analysis_to_dict(historical)[
+            "current_visual_price_detection_trace"
+        ]
+    )
+    store.record_frame(historical, (_entry(),))
+    before = {
+        p.relative_to(directory): p.read_bytes()
+        for p in directory.rglob("*")
+        if p.is_file()
+    }
+    with pytest.raises(ValueError, match="Conflicting evidence"):
+        store.record_frame(_independent_offline_evidence(), (_entry(),))
+    after = {
+        p.relative_to(directory): p.read_bytes()
+        for p in directory.rglob("*")
+        if p.is_file()
+    }
+    failure_log = Path("failures.jsonl")
+    assert before[failure_log] == b""
+    assert {path: data for path, data in before.items() if path != failure_log} == {
+        path: data for path, data in after.items() if path != failure_log
+    }
+    failures = after[failure_log].decode("utf-8").splitlines()
+    assert len(failures) == 1
+    failure = json.loads(failures[0])
+    assert failure["stage"] == "publish_frame"
+    assert failure["exception_type"] == "ValueError"
+    assert failure["frame_id"] == historical.frame_id
+    assert "Conflicting evidence" in failure["message"]
+    assert "traceback" not in failure
+
+
+def test_legacy_serialization_matches_pre_r4_golden() -> None:
+    # Hash computed from the preserved pre-R4 serializer and this same fixture.
+    payload = VisualEvidenceSerializer.analysis_to_dict(_evidence())
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    assert hashlib.sha256(encoded).hexdigest() == (
+        "48ce55a3b1b504d4a8c687d663102000d576aaa5e82e5525d1bbf79cd0a2de51"
+    )
 
 
 def test_conflicting_frame_pixels_fail_without_overwrite(tmp_path: Path) -> None:
