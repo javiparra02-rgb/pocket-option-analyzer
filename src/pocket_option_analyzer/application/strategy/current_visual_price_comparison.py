@@ -1,9 +1,17 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from math import isfinite
 from numbers import Real
+
+from .visual_scale_signature import (
+    EvidenceScope,
+    MeasurementValidity,
+    MeasurementValidityResult,
+    VisualPriceCompatibility,
+    VisualScaleRelationEvidence,
+)
 
 
 class CurrentVisualPriceComparisonStatus(StrEnum):
@@ -31,11 +39,16 @@ class CurrentVisualPriceComparisonDiagnostic(StrEnum):
     EXIT_ANCHORS_INCOHERENT = "exit_anchors_incoherent"
     REFERENCES_NOT_COMPARABLE = "references_not_comparable"
     SOURCES_NOT_COMPARABLE = "sources_not_comparable"
+    INVALID_INPUT = "invalid_input"
 
 
 @dataclass(frozen=True, slots=True)
 class CurrentVisualPriceComparison:
-    """Auditable canonical price evidence from entry and expiry frames."""
+    """AVAILABLE/delta retain legacy GEOMETRIC DIAGNOSTIC semantics.
+
+    Only accredited_delta/has_accredited_comparison describe usable comparison.
+    Deserialized or manually built legacy results are unverified by default.
+    """
 
     status: CurrentVisualPriceComparisonStatus
     diagnostic: CurrentVisualPriceComparisonDiagnostic
@@ -46,8 +59,84 @@ class CurrentVisualPriceComparison:
     exit_price_y_in_chart_roi: float | None = None
     entry_anchor_span_px: float | None = None
     exit_anchor_span_px: float | None = None
+    entry_validity: MeasurementValidityResult = field(
+        default_factory=MeasurementValidityResult, kw_only=True,
+    )
+    exit_validity: MeasurementValidityResult = field(
+        default_factory=MeasurementValidityResult, kw_only=True,
+    )
+    compatibility: VisualPriceCompatibility = field(
+        default=VisualPriceCompatibility.UNDETERMINED, kw_only=True,
+    )
+    compatibility_reasons: tuple[str, ...] = field(
+        default=("RELATIONAL_EVIDENCE_MISSING",), kw_only=True,
+    )
+    evidence_scope: EvidenceScope = field(default=EvidenceScope.PRODUCTION, kw_only=True)
+    relation_evidence: VisualScaleRelationEvidence | None = field(
+        default=None, kw_only=True,
+    )
+    verification_references: tuple[str, ...] = field(default=(), kw_only=True)
+    accredited_delta: float | None = field(default=None, kw_only=True)
+
+    @property
+    def has_accredited_comparison(self) -> bool:
+        return (
+            self.evidence_scope is EvidenceScope.PRODUCTION
+            and self.compatibility is VisualPriceCompatibility.COMPATIBLE
+            and self.entry_validity.state is MeasurementValidity.VALID
+            and self.exit_validity.state is MeasurementValidity.VALID
+            and self.accredited_delta is not None
+        )
 
     def __post_init__(self) -> None:
+        if (
+            not isinstance(self.entry_validity, MeasurementValidityResult)
+            or not isinstance(self.exit_validity, MeasurementValidityResult)
+            or not isinstance(self.compatibility, VisualPriceCompatibility)
+            or not isinstance(self.evidence_scope, EvidenceScope)
+        ):
+            raise ValueError("Invalid explicit comparison contract")
+        for values in (self.compatibility_reasons, self.verification_references):
+            if type(values) is not tuple or any(type(v) is not str for v in values):
+                raise ValueError("Explicit comparison diagnostics must be immutable")
+        if self.relation_evidence is not None and not isinstance(
+            self.relation_evidence, VisualScaleRelationEvidence,
+        ):
+            raise ValueError("Unsupported relational evidence schema")
+        if self.compatibility is VisualPriceCompatibility.INCOMPATIBLE and (
+            not self.compatibility_reasons or not self.verification_references
+            or self.relation_evidence is None
+            or self.relation_evidence.scope is not self.evidence_scope
+            or (self.evidence_scope is EvidenceScope.PRODUCTION
+                and self.relation_evidence.provenance == "TEST_ONLY")
+        ):
+            raise ValueError("Incompatibility requires applicable contradiction evidence")
+        if self.compatibility is VisualPriceCompatibility.COMPATIBLE and (
+            self.compatibility_reasons
+            or self.entry_validity.state is not MeasurementValidity.VALID
+            or self.exit_validity.state is not MeasurementValidity.VALID
+            or not self.verification_references
+            or not isinstance(self.relation_evidence, VisualScaleRelationEvidence)
+            or self.relation_evidence.scope is not self.evidence_scope
+            or (self.evidence_scope is EvidenceScope.PRODUCTION
+                and self.relation_evidence.provenance == "TEST_ONLY")
+        ):
+            raise ValueError("Compatibility requires applicable relational evidence")
+        if self.accredited_delta is not None:
+            if (
+                not self.has_accredited_comparison
+                or not self.verification_references
+                or self.relation_evidence is None
+                or isinstance(self.accredited_delta, bool)
+                or not isinstance(self.accredited_delta, Real)
+                or not isfinite(self.accredited_delta)
+                or self.entry_anchored_value is None
+                or self.exit_anchored_value is None
+                or self.accredited_delta != (
+                    self.exit_anchored_value - self.entry_anchored_value
+                )
+            ):
+                raise ValueError("Accredited delta requires verified production evidence")
         numeric_evidence = (
             ("entry_anchored_value", self.entry_anchored_value),
             ("exit_anchored_value", self.exit_anchored_value),

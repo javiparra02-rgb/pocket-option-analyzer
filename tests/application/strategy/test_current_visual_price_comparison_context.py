@@ -1,4 +1,5 @@
-from dataclasses import FrozenInstanceError, fields
+from dataclasses import FrozenInstanceError, fields, replace
+from datetime import UTC, datetime
 from typing import get_type_hints
 
 import pytest
@@ -88,9 +89,62 @@ def test_context_is_immutable_and_contains_no_comparison_result() -> None:
         "chart_region",
         "price_observation_region",
         "reference_result",
+        "frame_id",
+        "frame_timestamp",
+        "timestamp_origin",
+        "monotonic_timestamp",
+        "source_key",
+        "session_key",
+        "execution_id",
+        "analysis_source",
+        "scale_signature",
+        "evaluation_id",
     }
     with pytest.raises(FrozenInstanceError):
         context.chart_region = None  # type: ignore[misc]
+
+
+def test_i1_context_keeps_positional_constructor_and_unknown_metadata() -> None:
+    reference = _reference_result()
+    context = CurrentVisualPriceComparisonContext(None, None, None, reference)
+
+    assert context.reference_result is reference
+    for name in (
+        "frame_id", "frame_timestamp", "timestamp_origin", "monotonic_timestamp",
+        "source_key", "session_key", "execution_id", "analysis_source", "evaluation_id",
+    ):
+        assert getattr(context, name) is None
+
+
+def test_i1_metadata_is_preserved_without_changing_legacy_equality() -> None:
+    context = CurrentVisualPriceComparisonContext(None, None, None, _reference_result())
+    instant = datetime(2026, 1, 1, tzinfo=UTC)
+    traced = replace(
+        context,
+        frame_id=7,
+        frame_timestamp=instant,
+        timestamp_origin="provided_frame_or_caller_timestamp",
+        monotonic_timestamp=12.5,
+        source_key="synthetic-source",
+        session_key="synthetic-session",
+        execution_id="synthetic-execution",
+        analysis_source="synthetic-analysis-route",
+        evaluation_id="synthetic-execution:1",
+    )
+
+    assert traced.frame_id == 7
+    assert traced.frame_timestamp is instant
+    assert traced.monotonic_timestamp == 12.5
+    assert traced.session_key == "synthetic-session"
+    assert traced.source_key == "synthetic-source"
+    assert traced.execution_id == "synthetic-execution"
+    assert traced.analysis_source == "synthetic-analysis-route"
+    assert traced.evaluation_id == "synthetic-execution:1"
+    assert traced.reference_result is context.reference_result
+    # Metadata is not an additional comparability or acceptance rule in I1.
+    assert traced == context
+    with pytest.raises(FrozenInstanceError):
+        traced.frame_id = 8  # type: ignore[misc]
 
 
 @pytest.mark.parametrize(

@@ -12,6 +12,8 @@ class VisualPriceMovementClassificationDiagnostic(StrEnum):
     CLASSIFIED = "classified"
     COMPARISON_UNAVAILABLE = "comparison_unavailable"
     EPSILON_NOT_CALIBRATED = "epsilon_not_calibrated"
+    COMPARABILITY_NOT_VERIFIED = "comparability_not_verified"
+    NOISE_CALIBRATION_UNVERIFIED = "noise_calibration_unverified"
 
 
 @dataclass(frozen=True, slots=True)

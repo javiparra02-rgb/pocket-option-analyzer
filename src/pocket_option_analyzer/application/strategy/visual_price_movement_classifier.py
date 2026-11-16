@@ -39,7 +39,10 @@ class VisualPriceMovementClassifier:
         self,
         comparison: CurrentVisualPriceComparison,
     ) -> VisualPriceMovementClassification:
-        if comparison.status is CurrentVisualPriceComparisonStatus.UNAVAILABLE:
+        if (
+            comparison.status is CurrentVisualPriceComparisonStatus.UNAVAILABLE
+            and not comparison.has_accredited_comparison
+        ):
             return VisualPriceMovementClassification(
                 movement=PriceMovement.UNRESOLVED,
                 epsilon=None,
@@ -59,26 +62,17 @@ class VisualPriceMovementClassifier:
                 ),
             )
 
-        delta = comparison.delta
-        entry_span = comparison.entry_anchor_span_px
-        exit_span = comparison.exit_anchor_span_px
-        assert delta is not None
-        assert entry_span is not None
-        assert exit_span is not None
-        epsilon = (
-            self._pixel_tolerance / entry_span
-            + self._pixel_tolerance / exit_span
+        # A configured number is not a verified noise policy. I2 supplies no
+        # production noise certifier; keep the constructor for old consumers,
+        # but never classify diagnostic or TEST_ONLY geometry as real movement.
+        diagnostic = (
+            VisualPriceMovementClassificationDiagnostic.COMPARABILITY_NOT_VERIFIED
+            if not comparison.has_accredited_comparison
+            else VisualPriceMovementClassificationDiagnostic.NOISE_CALIBRATION_UNVERIFIED
         )
-        if abs(delta) <= epsilon:
-            movement = PriceMovement.FLAT
-        elif delta > epsilon:
-            movement = PriceMovement.UP
-        else:
-            movement = PriceMovement.DOWN
-
         return VisualPriceMovementClassification(
-            movement=movement,
-            epsilon=epsilon,
+            movement=PriceMovement.UNRESOLVED,
+            epsilon=None,
             pixel_tolerance=self._pixel_tolerance,
-            diagnostic=VisualPriceMovementClassificationDiagnostic.CLASSIFIED,
+            diagnostic=diagnostic,
         )

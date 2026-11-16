@@ -166,34 +166,25 @@ def test_classifier_rejects_invalid_configuration(
 
 
 @pytest.mark.parametrize(
-    ("delta", "expected"),
-    (
-        (0.021, PriceMovement.UP),
-        (-0.021, PriceMovement.DOWN),
-        (0.019, PriceMovement.FLAT),
-        (-0.019, PriceMovement.FLAT),
-        (0.02, PriceMovement.FLAT),
-        (-0.02, PriceMovement.FLAT),
-    ),
+    "delta", (0.021, -0.021, 0.019, -0.019, 0.02, -0.02),
 )
-def test_classifier_applies_inclusive_epsilon(
+def test_i2_legacy_delta_and_configured_number_do_not_certify_movement(
     delta: float,
-    expected: PriceMovement,
 ) -> None:
     classification = VisualPriceMovementClassifier(1.0).classify(
         _available_comparison(delta),
     )
 
-    assert classification.movement is expected
-    assert classification.epsilon == pytest.approx(0.02)
+    assert classification.movement is PriceMovement.UNRESOLVED
+    assert classification.epsilon is None
     assert classification.pixel_tolerance == 1.0
     assert (
         classification.diagnostic
-        is VisualPriceMovementClassificationDiagnostic.CLASSIFIED
+        is VisualPriceMovementClassificationDiagnostic.COMPARABILITY_NOT_VERIFIED
     )
 
 
-def test_classifier_handles_values_immediately_outside_epsilon() -> None:
+def test_i2_values_outside_old_epsilon_are_still_unverified() -> None:
     epsilon = 0.02
     positive = nextafter(epsilon, inf)
     negative = nextafter(-epsilon, -inf)
@@ -201,23 +192,24 @@ def test_classifier_handles_values_immediately_outside_epsilon() -> None:
 
     assert (
         classifier.classify(_available_comparison(positive)).movement
-        is PriceMovement.UP
+        is PriceMovement.UNRESOLVED
     )
     assert (
         classifier.classify(_available_comparison(negative)).movement
-        is PriceMovement.DOWN
+        is PriceMovement.UNRESOLVED
     )
 
 
-def test_classifier_adapts_epsilon_to_different_anchor_spans() -> None:
+def test_i2_different_spans_do_not_establish_a_noise_policy() -> None:
     classification = VisualPriceMovementClassifier(1.5).classify(
         _available_comparison(0.0, entry_span=100.0, exit_span=300.0),
     )
 
-    assert classification.epsilon == pytest.approx(0.02)
+    assert classification.epsilon is None
+    assert classification.movement is PriceMovement.UNRESOLVED
 
 
-def test_same_pixel_tolerance_produces_different_scaled_epsilons() -> None:
+def test_i2_span_scaling_does_not_approve_a_tolerance() -> None:
     classifier = VisualPriceMovementClassifier(1.0)
 
     narrow = classifier.classify(
@@ -227,20 +219,20 @@ def test_same_pixel_tolerance_produces_different_scaled_epsilons() -> None:
         _available_comparison(0.0, entry_span=400.0, exit_span=400.0),
     )
 
-    assert narrow.epsilon == pytest.approx(0.02)
-    assert wide.epsilon == pytest.approx(0.005)
-    assert narrow.epsilon > wide.epsilon
+    assert narrow.epsilon is None
+    assert wide.epsilon is None
+    assert narrow.movement is wide.movement is PriceMovement.UNRESOLVED
 
 
-def test_explicit_zero_tolerance_uses_exact_classification() -> None:
+def test_i2_zero_tolerance_is_not_an_accredited_policy() -> None:
     classifier = VisualPriceMovementClassifier(0.0)
 
     flat = classifier.classify(_available_comparison(0.0))
     up = classifier.classify(_available_comparison(0.000001))
     down = classifier.classify(_available_comparison(-0.000001))
 
-    assert flat.movement is PriceMovement.FLAT
-    assert up.movement is PriceMovement.UP
-    assert down.movement is PriceMovement.DOWN
-    assert flat.epsilon == 0.0
+    assert flat.movement is PriceMovement.UNRESOLVED
+    assert up.movement is PriceMovement.UNRESOLVED
+    assert down.movement is PriceMovement.UNRESOLVED
+    assert flat.epsilon is None
     assert flat.pixel_tolerance == 0.0
